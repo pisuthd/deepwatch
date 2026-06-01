@@ -17,21 +17,20 @@ export default function LandingHeader() {
             borderBottom: '1px solid var(--color-border-subtle)',
         }}>
             <div className="max-w-6xl mx-auto flex items-center justify-between">
-                {/* Logo */}
-                <Link href="/" className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center shadow-[0_0_20px_var(--color-glow-green)]">
+                {/* Logo - Scroll to top */}
+                <a href="#" className="flex items-center gap-3 cursor-pointer">
+                    <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center">
                         <Timer size={20} className="text-[#0F1117]" strokeWidth={2} />
                     </div>
                     <span className={`text-lg font-black tracking-widest font-brand ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
                         DeepWatch
                     </span>
-                </Link>
+                </a>
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
-                    <a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a>
+                    <a href="#what-is-deepbook-predict" className="text-gray-400 hover:text-white transition-colors">What is DeepBook Predict</a>
                     <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors">How It Works</a>
-                    <a href="#powered-by" className="text-gray-400 hover:text-white transition-colors">Powered By</a>
                 </nav>
 
                 {/* CTA Button */}
@@ -62,9 +61,8 @@ export default function LandingHeader() {
                     className="md:hidden mt-4 pt-4 border-t border-white/10"
                 >
                     <nav className="flex flex-col gap-4">
-                        <a href="#features" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Features</a>
+                        <a href="#what-is-deepbook-predict" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">What is DeepBook Predict</a>
                         <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">How It Works</a>
-                        <a href="#powered-by" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Powered By</a>
                         <Link
                             href="/app"
                             onClick={() => setIsMenuOpen(false)}
