@@ -141,3 +141,44 @@ body {
     background-position: 200% center;
   }
 }
+
+/* dApp Kit theming - Match DeepWatch design */
+mysten-dapp-kit-connect-button,
+mysten-dapp-kit-connect-modal {
+  --primary: #00E68A;
+  --primary-foreground: #000000; 
+  --border: #2A2D3E;
+  --radius: 10px;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+}
+
+mysten-dapp-kit-connect-modal {
+  --background: #161922;
+  --popover: #161922;
+  --popover-foreground: #F1F5F9;
+  --muted: #1C1F2E;
+  --muted-foreground: #64748B;
+  --accent: #00E68A;
+  --accent-foreground: #000000;
+  --secondary: #1C1F2E;
+  --secondary-foreground: #F1F5F9;
+  --ring: #00E68A;
+}
+
+/* Light theme support */
+:root[data-theme="light"] mysten-dapp-kit-connect-button,
+:root[data-theme="light"] mysten-dapp-kit-connect-modal {
+  --background: #FFFFFF;
+  --foreground: #0F172A;
+  --border: #E2E8F0;
+  --muted: #F1F5F9;
+  --muted-foreground: #94A3B8;
+  --accent: #00E68A;
+  --accent-foreground: #000000;
+  --secondary: #F1F5F9;
+  --secondary-foreground: #0F172A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F172A;
+}

@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 export default function HeroSection() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-24 pb-16 px-6">
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-4 md:pt-24 pb-4 md:pb-16 px-6">
       <div className="relative z-10 max-w-6xl mx-auto w-full">
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           
@@ -18,7 +18,7 @@ export default function HeroSection() {
               initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black mb-4 lg:mb-6 leading-tight"
+              className="text-4xl md:text-5xl lg:text-6xl font-black mb-4 lg:mb-6 leading-tight"
             >
               <span className="text-white">Fast-Track to </span>
               <span className="bg-gradient-to-r from-accent-primary to-blue-400 bg-clip-text text-transparent">

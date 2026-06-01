@@ -9,9 +9,9 @@ export default function HowItWorksSection() {
   const steps = [
     {
       step: '01',
-      title: 'One Unified View',
+      title: 'Discover Markets',
       description:
-        'Collect signals from Polymarket and Kalshi via Tatum APIs to inform your next trade on DeepBook Predict.',
+        'Browse DeepBook Predict markets expiring < 4 hours, and manage your DeepBook account in one place.',
     },
     {
       step: '02',

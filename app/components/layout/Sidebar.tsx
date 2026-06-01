@@ -42,17 +42,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
           </div>
         </Link>
       </div>
-
-      {/* Home Link */}
-      <div className="px-4 mb-4">
-        <Link
-          href="/"
-          className={`flex items-center gap-3.5 w-full px-3.5 py-2.5 rounded-xl text-[15px] font-semibold transition-all hover:bg-[var(--color-sidebar-hover)]`}
-        >
-          <Home size={20} strokeWidth={1.8} className={textGradientClass} />
-          <span className={textGradientClass}>Landing</span>
-        </Link>
-      </div>
+ 
 
       {/* Nav categories */}
       <nav className="flex-1 px-4 space-y-6 overflow-y-auto">
