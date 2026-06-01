@@ -19,7 +19,7 @@ const orbitron = Orbitron({
 });
 
 export const metadata: Metadata = {
-  title: "DeepWatch - The intelligence layer for DeepBook Predict markets settling within 4 hours",
+  title: "DeepWatch - The intelligence layer for DeepBook Predict",
   description: "AI-powered prediction platform",
 };
 

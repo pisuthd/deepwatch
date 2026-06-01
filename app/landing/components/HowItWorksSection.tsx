@@ -9,20 +9,23 @@ export default function HowItWorksSection() {
   const steps = [
     {
       step: '01',
-      title: 'Select Market',
-      description: 'Browse live BTC prediction markets filtered by expiry time. Choose from <2h, <4h, or <6h windows.',
+      title: 'One Unified View',
+      description:
+        'Collect signals from Polymarket and Kalshi via Tatum APIs to inform your next trade on DeepBook Predict.',
     },
     {
       step: '02',
-      title: 'Analyze Signals',
-      description: 'View aggregated probability from multiple sources including DeepBook Predict, Polymarket, and Kalshi.',
+      title: 'Read Insights',
+      description:
+        'Skip SVI technical market data. Read human-readable insights generated and shared on Walrus.',
     },
     {
       step: '03',
       title: 'Trade Instantly',
-      description: 'One-click links to mint positions directly on DeepBook Predict. No friction, just action.',
+      description:
+        'One-click links to mint positions directly on DeepBook Predict. No friction, just action.',
     },
-  ];
+  ]
 
   return (
     <section id="how-it-works" className="py-24 px-6">
@@ -34,10 +37,10 @@ export default function HowItWorksSection() {
           className="text-center mb-16"
         >
           <h2 className={`text-4xl font-bold mb-4 ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
-            How It Works
+            How DeepWatch Works
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Get actionable insights in seconds, not minutes
+            <span className="text-accent-primary font-semibold">DeepBook Predict</span> provides powerful market infrastructure, but traders often need additional context before taking a position.
           </p>
         </motion.div>
 
