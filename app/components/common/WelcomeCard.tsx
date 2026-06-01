@@ -6,10 +6,10 @@ import { useTheme } from '../../context/ThemeContext';
 import type { PageId } from '../../types/navigation';
 
 interface WelcomeCardProps {
-  onNavigate: (pageId: PageId) => void;
+
 }
 
-export default function WelcomeCard({ onNavigate }: WelcomeCardProps) {
+export default function WelcomeCard({  }: WelcomeCardProps) {
   const { isDark } = useTheme();
 
   return (
@@ -56,13 +56,13 @@ export default function WelcomeCard({ onNavigate }: WelcomeCardProps) {
           </p>
 
           <button
-            onClick={() => onNavigate('chat')}
+           // onClick={() => onNavigate('chat')}
             className={`inline-flex items-center gap-2 font-medium text-sm transition-colors text-accent-primary hover:text-accent-primary/80`}
           >
             Start Chat
           </button>
           <button
-            onClick={() => onNavigate('overview')}
+            // onClick={() => onNavigate('overview')}
             className={`ml-4 inline-flex items-center gap-2 font-medium text-sm transition-colors text-accent-primary hover:text-accent-primary/80`}
           >
             View Overview

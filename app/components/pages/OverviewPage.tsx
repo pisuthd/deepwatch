@@ -6,15 +6,14 @@ import WelcomeCard from '../common/WelcomeCard';
 import PageWrapper from '../common/PageWrapper';
 import type { PageId } from '../../types/navigation';
 
-interface OverviewPageProps {
-  onNavigate: (pageId: PageId) => void;
+interface OverviewPageProps { 
 }
 
-export default function OverviewPage({ onNavigate }: OverviewPageProps) {
+export default function OverviewPage({  }: OverviewPageProps) {
   return (
     <PageWrapper title="Overview">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <WelcomeCard onNavigate={onNavigate} />
+        <WelcomeCard />
         <StatCard
           title="Powered by"
           value="AI Models"

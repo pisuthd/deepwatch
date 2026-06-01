@@ -1,4 +1,4 @@
-import AccountOverviewPage from '../../components/pages/AccountOverviewPage';
+import AccountOverviewPage from '../../components/pages/OverviewPage';
 
 export default function Page() {
   return <AccountOverviewPage />;
