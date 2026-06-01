@@ -1,7 +1,17 @@
 'use client';
 
-import { Search, ChevronRight } from 'lucide-react';
-import { ConnectButton } from '@mysten/dapp-kit-react/ui';
+import { Search, ChevronRight } from 'lucide-react';  
+import dynamic from 'next/dynamic'
+
+const ConnectButton = dynamic(
+  () =>
+    import('@mysten/dapp-kit-react/ui').then(
+      mod => mod.ConnectButton
+    ),
+  {
+    ssr: false,
+  }
+)
 import { routeMeta, type PageId } from '../../types/navigation';
 import { useWallet } from '../../hooks/useWallet';
 

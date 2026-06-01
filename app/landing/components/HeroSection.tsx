@@ -35,7 +35,7 @@ export default function HeroSection() {
               transition={{ duration: 0.5, delay: 0.2 }}
               className="text-base sm:text-lg text-gray-400 mb-6 lg:mb-8 max-w-lg mx-auto lg:mx-0 leading-relaxed"
             > 
-             Get started with DeepBook Predict more simply with AI-curated insights from Polymarket and Kalshi via Tatum APIs, while every market insight is shared on Walrus.
+             Get started with DeepBook Predict more simply with AI-curated insights from Polymarket, Kalshi and more via Tatum APIs, while every insight is shared on Walrus.
             </motion.p>
 
             {/* CTA Buttons */}

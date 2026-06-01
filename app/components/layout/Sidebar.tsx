@@ -2,11 +2,18 @@
 
 import Link from 'next/link';
 import {
-  MessageSquare,
+  TrendingUp,
+  Plus,
+  Clock,
   LayoutDashboard,
+  Wallet,
+  Coins,
   Settings,
   Timer,
-  Home
+  List,
+  RefreshCcw,
+  ChartCandlestick,
+  Archive
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { categories, type PageId } from '../../types/navigation';
@@ -16,10 +23,17 @@ interface SidebarProps {
   onNavigate: (pageId: PageId) => void;
 }
 
-const iconMap: Record<string, typeof MessageSquare> = {
-  MessageSquare,
+const iconMap: Record<string, typeof TrendingUp> = {
+  TrendingUp,
+  Plus,
+  Clock,
   LayoutDashboard,
-  Settings,
+  Wallet,
+  Coins,
+  List,
+  RefreshCcw,
+  ChartCandlestick,
+  Archive
 };
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
@@ -42,7 +56,6 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
           </div>
         </Link>
       </div>
- 
 
       {/* Nav categories */}
       <nav className="flex-1 px-4 space-y-6 overflow-y-auto">
@@ -55,7 +68,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             </div>
             <div className="space-y-1">
               {category.items.map(({ icon, label, pageId }) => {
-                const Icon = iconMap[icon] || MessageSquare;
+                const Icon = iconMap[icon] || LayoutDashboard;
                 const isActive = activePage === pageId;
                 return (
                   <button
