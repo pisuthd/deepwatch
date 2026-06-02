@@ -15,7 +15,8 @@ import {
   ChartCandlestick,
   Archive,
   Sparkles,
-  Sparkle
+  Sparkle,
+  Goal
 } from 'lucide-react';
 import { categories, type PageId } from '../../types/navigation';
 
@@ -36,7 +37,8 @@ const iconMap: Record<string, typeof TrendingUp> = {
   ChartCandlestick,
   Archive,
   Sparkles,
-  Sparkle
+  Sparkle,
+  Goal
 };
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {

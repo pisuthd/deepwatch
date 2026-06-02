@@ -1,7 +1,6 @@
 'use client';
 
-import LandingHeader from './components/LandingHeader';
-import LandingBackground from './components/LandingBackground';
+import LandingHeader from './components/LandingHeader'; 
 import HeroSection from './components/HeroSection';
 import WhatIsDeepBookPredictSection from './components/WhatIsDeepBookPredictSection';
 import HowItWorksSection from './components/HowItWorksSection';
@@ -13,11 +12,10 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[var(--color-bg-base)]">
       <LandingHeader />
       <HeroSection />
-      <LandingBackground />
       <WhatIsDeepBookPredictSection />
       <HowItWorksSection />
-      <CTASection />
-      <LandingFooter />
+      <CTASection /> 
+      <LandingFooter/>
     </div>
   );
 }
