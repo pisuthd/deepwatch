@@ -8,7 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
 import { usePredict } from '../../../hooks/usePredict';
 import { getCoinIcon } from '../../../lib/coinIcons';
-import { formatDetailedExpiry, formatPrice } from './utils';
+import Countdown from '../../common/Countdown';
+import { formatPrice } from './utils';
 
 const ConnectButton = dynamic(
   () => import('@mysten/dapp-kit-react/ui').then((mod) => mod.ConnectButton),
@@ -53,7 +54,6 @@ export default function BinaryTradeModal({
   const [downQuote, setDownQuote] = useState<{ cost: number; redeem: number; premium: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
 
   // Reset state when modal opens
   useEffect(() => {
@@ -66,13 +66,6 @@ export default function BinaryTradeModal({
       setSubmitting(false);
     }
   }, [open, initialDirection]);
-
-  // 1s ticker for countdown
-  useEffect(() => {
-    if (!open) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [open]);
 
   // Quote polling
   const quoteKey = `${open}|${market.oracleId}|${market.expiryMs}|${strike}|${amount}`;
@@ -135,7 +128,6 @@ export default function BinaryTradeModal({
   };
 
   const question = `Will ${market.asset} be ${direction === 'up' ? 'above' : 'below'} ${formatPrice(strike)}?`;
-  const expiryLabel = market.expiryMs ? `Expires in ${formatDetailedExpiry(market.expiryMs, now)}` : '';
 
   return (
     <AnimatePresence>
@@ -177,9 +169,9 @@ export default function BinaryTradeModal({
                       <h2 className="text-base font-bold leading-tight" style={{ color: textPrimary }}>
                         {question}
                       </h2>
-                      {expiryLabel && (
+                      {market.expiryMs > 0 && (
                         <p className="text-xs mt-1" style={{ color: textSecondary }}>
-                          {expiryLabel}
+                          Expires in <Countdown expiryMs={market.expiryMs} />
                         </p>
                       )}
                     </div>

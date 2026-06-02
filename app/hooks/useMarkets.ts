@@ -127,29 +127,29 @@ function calcOdds(forward: number, spot: number, svi: SVIParams, expiryMs: numbe
 
 // ─── API Fetchers ────────────────────────────────────────────────────────────
 
-async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, { signal })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-export async function listMarkets(): Promise<Market[]> {
-  const oracles = await fetchJSON<Oracle[]>(`${SERVER}/predicts/${PREDICT_ID}/oracles`)
+export async function listMarkets(signal?: AbortSignal): Promise<Market[]> {
+  const oracles = await fetchJSON<Oracle[]>(`${SERVER}/predicts/${PREDICT_ID}/oracles`, signal)
 
-  // Only fetch oracle state for active/pending markets (settled don't have live data)
+  // Settled markets are excluded entirely — they don't need live data and
+  // are not surfaced in the UI.
   const marketsNeedingState = oracles.filter(o => o.status === 'active' || o.status === 'pending')
-  const settledMarkets = oracles.filter(o => o.status === 'settled')
 
   const activeMarketList = await Promise.all(
     marketsNeedingState.map(async (oracle) => {
       try {
-        const state = await fetchJSON<OracleState>(`${SERVER}/oracles/${oracle.oracle_id}/state`)
-        
+        const state = await fetchJSON<OracleState>(`${SERVER}/oracles/${oracle.oracle_id}/state`, signal)
+
         // For now, hardcode to BTC since all current markets are BTC
         // TODO: Fetch asset from API or metadata
         const asset = 'BTC'
         const minStrikeUSD = oracle.min_strike / PRICE_SCALE
-        
+
         const market: Market = {
           oracle_id: oracle.oracle_id,
           name: asset,
@@ -171,36 +171,14 @@ export async function listMarkets(): Promise<Market[]> {
     })
   )
 
-  // Add settled markets with settlement price
-  const settledMarketList = settledMarkets.map((oracle) => {
-    const asset = oracle.underlying_asset || 'BTC'
-    const settlementPrice = oracle.settlement_price ? oracle.settlement_price / PRICE_SCALE : 0
-    return {
-      oracle_id: oracle.oracle_id,
-      name: asset,
-      asset: asset,
-      expiryMs: oracle.expiry,
-      spot: settlementPrice,  // Use settlement price as spot for settled markets
-      forward: settlementPrice,
-      svi: null,
-      odds: null,
-      status: oracle.status as 'settled',
-      minStrike: oracle.min_strike / PRICE_SCALE,
-      tickSize: oracle.tick_size / PRICE_SCALE,
-      settlementPrice,
-      settledAt: oracle.settled_at,
-    }
-  }).sort((a, b) => b.expiryMs - a.expiryMs)
-
-  // Sort: active/pending by expiry (soonest first), settled by expiry (soonest first = most recent)
-  const activePending = activeMarketList.filter((m): m is Market => m !== null).sort((a, b) => a.expiryMs - b.expiryMs)
-  const allMarkets = [...activePending, ...settledMarketList]
-  return allMarkets
+  return activeMarketList
+    .filter((m): m is Market => m !== null)
+    .sort((a, b) => a.expiryMs - b.expiryMs)
 }
 
-export async function fetchVault(): Promise<VaultSummary | null> {
+export async function fetchVault(signal?: AbortSignal): Promise<VaultSummary | null> {
   try {
-    return await fetchJSON<VaultSummary>(`${SERVER}/predicts/${PREDICT_ID}/vault/summary`)
+    return await fetchJSON<VaultSummary>(`${SERVER}/predicts/${PREDICT_ID}/vault/summary`, signal)
   } catch {
     return null
   }
@@ -214,23 +192,32 @@ export function useMarkets(refreshInterval = 30_000) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const [marketsData, vaultData] = await Promise.all([listMarkets(), fetchVault()])
+      const [marketsData, vaultData] = await Promise.all([
+        listMarkets(signal),
+        fetchVault(signal),
+      ])
+      if (signal?.aborted) return
       setMarkets(marketsData)
       setVault(vaultData)
       setError(null)
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || signal?.aborted) return
       setError(err instanceof Error ? err.message : 'Failed to load markets')
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    load()
-    const interval = setInterval(load, refreshInterval)
-    return () => clearInterval(interval)
+    const ctrl = new AbortController()
+    load(ctrl.signal)
+    const interval = setInterval(() => load(ctrl.signal), refreshInterval)
+    return () => {
+      ctrl.abort()
+      clearInterval(interval)
+    }
   }, [load, refreshInterval])
 
   return { markets, vault, loading, error, refetch: load }

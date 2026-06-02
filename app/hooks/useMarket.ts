@@ -1,6 +1,6 @@
 /**
  * useMarket - Get single market details
- * 
+ *
  * Mirrors the walkthrough script: fetch-single-oracle.js
  */
 
@@ -150,18 +150,18 @@ function calcRangeOdds(forward: number, svi: SVIParams, expiryMs: number, minStr
 
 // ─── API Fetchers ────────────────────────────────────────────────────────────
 
-async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, { signal })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-export async function getMarket(oracleId: string): Promise<MarketDetail | null> {
+export async function getMarket(oracleId: string, signal?: AbortSignal): Promise<MarketDetail | null> {
   try {
-    const state = await fetchJSON<OracleState>(`${SERVER}/oracles/${oracleId}/state`)
-    const oracles = await fetchJSON<Oracle[]>(`${SERVER}/predicts/${PREDICT_ID}/oracles`)
+    const state = await fetchJSON<OracleState>(`${SERVER}/oracles/${oracleId}/state`, signal)
+    const oracles = await fetchJSON<Oracle[]>(`${SERVER}/predicts/${PREDICT_ID}/oracles`, signal)
     const oracle = oracles.find(o => o.oracle_id === oracleId)
-    
+
     if (!oracle || !state.latest_price || !state.latest_svi) return null
 
     const forward = state.latest_price.forward
@@ -209,33 +209,41 @@ export function useMarket(oracleId: string | null, refreshInterval = 30_000) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!oracleId) {
-      setMarket(null)
-      setLoading(false)
+      if (!signal?.aborted) {
+        setMarket(null)
+        setLoading(false)
+      }
       return
     }
 
     try {
-      const data = await getMarket(oracleId)
+      const data = await getMarket(oracleId, signal)
+      if (signal?.aborted) return
       if (data) {
         setMarket(data)
         setError(null)
       } else {
         setError('Market not found')
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || signal?.aborted) return
       setError(err instanceof Error ? err.message : 'Failed to load market')
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
   }, [oracleId])
 
   useEffect(() => {
-    load()
+    const ctrl = new AbortController()
+    load(ctrl.signal)
     if (!oracleId) return
-    const interval = setInterval(load, refreshInterval)
-    return () => clearInterval(interval)
+    const interval = setInterval(() => load(ctrl.signal), refreshInterval)
+    return () => {
+      ctrl.abort()
+      clearInterval(interval)
+    }
   }, [load, oracleId, refreshInterval])
 
   return { market, loading, error, refetch: load }

@@ -15,9 +15,9 @@ export const categories: NavCategory[] = [
   {
     title: 'Trade',
     items: [
-      { icon: 'Goal', label: 'Predict', pageId: 'predict' },
       { icon: 'RefreshCcw', label: 'Spot', pageId: 'spot' },
       { icon: 'ChartCandlestick', label: 'Margin', pageId: 'margin' },
+      { icon: 'Goal', label: 'Predict', pageId: 'predict' }
     ],
   },
   {

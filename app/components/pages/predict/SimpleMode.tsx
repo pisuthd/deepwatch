@@ -8,11 +8,11 @@ import { useMarkets } from '../../../hooks/useMarkets';
 import { useMarket } from '../../../hooks/useMarket';
 import { calculateStrikeProbabilities } from '../../../hooks/useSVI';
 import { getCoinIcon } from '../../../lib/coinIcons';
+import Countdown from '../../common/Countdown';
 import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import {
   DISPLAY_TICK_USD,
-  formatDetailedExpiry,
   formatExpiryDate,
   formatPrice,
   generateStrikes,
@@ -31,7 +31,6 @@ export default function PredictSimpleMode() {
     strike: number;
     direction: 'up' | 'down';
   }>({ open: false, strike: 0, direction: 'up' });
-  const [now, setNow] = useState(() => Date.now());
 
   // Live markets list
   const { markets, loading: marketsLoading } = useMarkets(30_000);
@@ -55,12 +54,6 @@ export default function PredictSimpleMode() {
     currentOracleId,
     30_000
   );
-
-  // 1s ticker for countdown
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   // Derived values
   const spotUsd = marketDetail ? marketDetail.spot / 1e9 : 0;
@@ -166,7 +159,7 @@ export default function PredictSimpleMode() {
                   className="text-xs px-2 py-1 rounded shrink-0 font-mono"
                   style={{ background: 'rgba(40, 44, 60, 0.5)', color: textSecondary }}
                 >
-                  {formatDetailedExpiry(expiryMs, now)}
+                  <Countdown expiryMs={expiryMs} />
                 </span>
               </div>
 

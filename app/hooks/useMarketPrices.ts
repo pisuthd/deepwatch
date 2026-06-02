@@ -40,20 +40,22 @@ interface RawPriceEvent {
   onchain_timestamp: number
 }
 
-async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, { signal })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
 export async function getMarketPrices(
   oracleId: string,
-  limit = 60
+  limit = 60,
+  signal?: AbortSignal
 ): Promise<PriceHistory | null> {
   try {
 
     const raw = await fetchJSON<RawPriceEvent[]>(
-      `${SERVER}/oracles/${oracleId}/prices?limit=${limit}`
+      `${SERVER}/oracles/${oracleId}/prices?limit=${limit}`,
+      signal
     )
 
     if (!raw || !Array.isArray(raw)) return null
@@ -68,11 +70,11 @@ export async function getMarketPrices(
       }))
       .sort((a, b) => a.time - b.time)
 
-    const latestPrice = prices.length > 0 
-      ? prices[prices.length - 1].price 
+    const latestPrice = prices.length > 0
+      ? prices[prices.length - 1].price
       : 0
-    const latestSpot = prices.length > 0 
-      ? prices[prices.length - 1].spot 
+    const latestSpot = prices.length > 0
+      ? prices[prices.length - 1].spot
       : 0
 
     return {
@@ -91,40 +93,48 @@ export async function getMarketPrices(
 export function useMarketPrices(
   oracleId: string | null,
   limit = 60,
-  refreshInterval = 5_000  // Refresh more frequently for live data
+  refreshInterval = 15_000  // 15s — chart data is slow-changing
 ) {
   const [history, setHistory] = useState<PriceHistory | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!oracleId) {
-      setHistory(null)
-      setLoading(false)
+      if (!signal?.aborted) {
+        setHistory(null)
+        setLoading(false)
+      }
       return
     }
 
     try {
-      const data = await getMarketPrices(oracleId, limit)
+      const data = await getMarketPrices(oracleId, limit, signal)
+      if (signal?.aborted) return
       if (data) {
         setHistory(data)
         setError(null)
       } else {
         setError('Failed to fetch price history')
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || signal?.aborted) return
       setError(err instanceof Error ? err.message : 'Failed to load prices')
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
   }, [oracleId, limit])
 
   useEffect(() => {
-    load()
+    const ctrl = new AbortController()
+    load(ctrl.signal)
     if (!oracleId) return
-    
-    const interval = setInterval(load, refreshInterval)
-    return () => clearInterval(interval)
+
+    const interval = setInterval(() => load(ctrl.signal), refreshInterval)
+    return () => {
+      ctrl.abort()
+      clearInterval(interval)
+    }
   }, [load, oracleId, refreshInterval])
 
   return { history, loading, error, refetch: load }
