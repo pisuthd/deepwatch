@@ -1,11 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Clock, BarChart3, Database, Archive, Link2, Shield } from 'lucide-react';
-import { useTheme } from '../../context/ThemeContext';
+import { Clock, BarChart3, Database, Archive, Link2, Shield } from 'lucide-react'; 
 
-export default function FeaturesSection() {
-  const { isDark } = useTheme();
+export default function FeaturesSection() { 
 
   const features = [
     {
@@ -49,7 +47,7 @@ export default function FeaturesSection() {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <h2 className={`text-4xl font-bold mb-4 ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
+          <h2 className={`text-4xl font-bold mb-4 ${true ? 'text-gradient-white' : 'text-gradient-light'}`}>
             Core Features
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
@@ -65,9 +63,9 @@ export default function FeaturesSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
-              className={`relative rounded-2xl p-6 group ${isDark ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
+              className={`relative rounded-2xl p-6 group ${true ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
               style={{
-                background: isDark ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                background: true ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(20px)',
               }}
             >

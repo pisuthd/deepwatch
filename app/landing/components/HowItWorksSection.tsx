@@ -1,10 +1,8 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { useTheme } from '../../context/ThemeContext';
+import { motion } from 'framer-motion'; 
 
-export default function HowItWorksSection() {
-  const { isDark } = useTheme();
+export default function HowItWorksSection() { 
 
   const steps = [
     {
@@ -36,7 +34,7 @@ export default function HowItWorksSection() {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <h2 className={`text-4xl font-bold mb-4 ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
+          <h2 className={`text-4xl font-bold mb-4 ${true ? 'text-gradient-white' : 'text-gradient-light'}`}>
             How DeepWatch Works
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
@@ -52,9 +50,9 @@ export default function HowItWorksSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.2 }}
-              className={`relative rounded-2xl p-8 ${isDark ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
+              className={`relative rounded-2xl p-8 ${true ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
               style={{
-                background: isDark ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                background: true ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(20px)',
               }}
             >

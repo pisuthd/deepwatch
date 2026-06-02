@@ -1,11 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import Link from 'next/link';
-import { useTheme } from '../../context/ThemeContext';
+import Link from 'next/link'; 
 
-export default function CTASection() {
-  const { isDark } = useTheme();
+export default function CTASection() { 
 
   return (
     <section className="py-24 px-6">
@@ -13,9 +11,9 @@ export default function CTASection() {
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className={`max-w-xl mx-auto rounded-2xl p-8 text-center ${isDark ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
+        className={`max-w-xl mx-auto rounded-2xl p-8 text-center ${true ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
         style={{
-          background: isDark ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+          background: true ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
           backdropFilter: 'blur(20px)',
         }}
       >

@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { TrendingUp, ArrowRight, Clock, Database, BarChart3 } from 'lucide-react';
+import {   ArrowRight  } from 'lucide-react';
 import Link from 'next/link';
 import HeroVisualCards from './HeroVisualCards';
 

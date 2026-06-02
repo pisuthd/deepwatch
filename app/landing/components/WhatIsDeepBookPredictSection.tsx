@@ -1,11 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ExternalLink } from 'lucide-react';
-import { useTheme } from '../../context/ThemeContext';
+import { ExternalLink } from 'lucide-react'; 
 
-export default function WhatIsDeepBookPredictSection() {
-  const { isDark } = useTheme();
+export default function WhatIsDeepBookPredictSection() { 
 
   return (
     <section id="what-is-deepbook-predict" className="py-24 px-6">
@@ -17,7 +15,7 @@ export default function WhatIsDeepBookPredictSection() {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <h2 className={`text-4xl font-bold mb-4 ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
+          <h2 className={`text-4xl font-bold mb-4 ${true ? 'text-gradient-white' : 'text-gradient-light'}`}>
             What is DeepBook Predict?
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
@@ -30,9 +28,9 @@ export default function WhatIsDeepBookPredictSection() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className={`max-w-xl mx-auto rounded-2xl p-8 ${isDark ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
+          className={`max-w-xl mx-auto rounded-2xl p-8 ${true ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
           style={{
-            background: isDark ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+            background: true ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
             backdropFilter: 'blur(20px)',
           }}
         >

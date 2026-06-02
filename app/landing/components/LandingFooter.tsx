@@ -1,10 +1,8 @@
 'use client';
 
-import { TowerControl } from 'lucide-react';
-import { useTheme } from '../../context/ThemeContext';
+import { TowerControl } from 'lucide-react'; 
 
-export default function LandingFooter() {
-  const { isDark } = useTheme();
+export default function LandingFooter() { 
 
   return (
     <footer className="py-8 px-6 border-t border-[var(--color-border-subtle)]">
@@ -13,7 +11,7 @@ export default function LandingFooter() {
           <div className="w-8 h-8 rounded-lg bg-accent-primary flex items-center justify-center">
             <TowerControl size={16} className="text-black" />
           </div>
-          <span className={`font-brand text-sm tracking-widest ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
+          <span className={`font-brand text-sm tracking-widest ${true ? 'text-gradient-white' : 'text-gradient-light'}`}>
             DeepWatch
           </span>
         </div>

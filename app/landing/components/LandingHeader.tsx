@@ -3,11 +3,9 @@
 import { motion } from 'framer-motion';
 import { TowerControl, Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import Link from 'next/link';
-import { useTheme } from '../../context/ThemeContext';
+import Link from 'next/link'; 
 
-export default function LandingHeader() {
-    const { isDark } = useTheme();
+export default function LandingHeader() { 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     return (
@@ -22,7 +20,7 @@ export default function LandingHeader() {
                     <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center">
                         <TowerControl size={20} className="text-[#0F1117]" strokeWidth={2} />
                     </div>
-                    <span className={`text-lg font-black tracking-widest font-brand ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
+                    <span className={`text-lg font-black tracking-widest font-brand text-gradient-white`}>
                         DeepWatch
                     </span>
                 </a>
