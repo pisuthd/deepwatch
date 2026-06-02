@@ -1,4 +1,4 @@
-export type PageId = 'markets' | 'add-insight' | 'recent-insights' | 'account-overview' | 'positions' | 'buy-dbusdc' | 'settings';
+export type PageId = 'predict' | 'spot' | 'margin' | 'account-overview' | 'positions' | 'buy-dbusdc' | 'add-insight' | 'recent-insights' | 'settings';
 
 export interface NavItem {
   icon: string;
@@ -15,27 +15,29 @@ export const categories: NavCategory[] = [
   {
     title: 'Trade',
     items: [
-      { icon: 'ChartCandlestick', label: 'Markets', pageId: 'markets' },
-      { icon: 'Plus', label: 'Add Insight', pageId: 'add-insight' },
-      { icon: 'Archive', label: 'Recent Insights', pageId: 'recent-insights' },
+      { icon: 'Goal', label: 'Predict', pageId: 'predict' },
+      { icon: 'RefreshCcw', label: 'Spot', pageId: 'spot' },
+      { icon: 'ChartCandlestick', label: 'Margin', pageId: 'margin' },
     ],
   },
   {
     title: 'Account',
     items: [
-      { icon: 'LayoutDashboard', label: 'Overview', pageId: 'account-overview' },
-      { icon: 'List', label: 'Positions', pageId: 'positions' },
-      { icon: 'RefreshCcw', label: 'Buy DBUSDC', pageId: 'buy-dbusdc' },
+      { icon: 'LayoutDashboard', label: 'Overview', pageId: 'account-overview' }, 
+      { icon: 'Sparkle', label: 'Find Insight', pageId: 'add-insight' },
+      { icon: 'Sparkles', label: 'Recent Insights', pageId: 'recent-insights' },
     ],
   },
 ];
 
 export const routeMeta: Record<PageId, { category: string; label: string }> = {
-  'markets': { category: 'Trade', label: 'Markets' },
-  'add-insight': { category: 'Trade', label: 'Add Insight' },
-  'recent-insights': { category: 'Trade', label: 'Recent Insights' },
+  'predict': { category: 'Trade', label: 'Predict' },
+  'spot': { category: 'Trade', label: 'Spot' },
+  'margin': { category: 'Trade', label: 'Margin' },
   'account-overview': { category: 'Account', label: 'Overview' },
   'positions': { category: 'Account', label: 'Positions' },
   'buy-dbusdc': { category: 'Account', label: 'Buy DBUSDC' },
+  'add-insight': { category: 'Account', label: 'Add Insight' },
+  'recent-insights': { category: 'Account', label: 'Recent Insights' },
   'settings': { category: 'Settings', label: 'Settings' },
 };
