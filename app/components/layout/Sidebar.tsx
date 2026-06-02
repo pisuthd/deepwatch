@@ -9,7 +9,7 @@ import {
   Wallet,
   Coins,
   Settings,
-  Timer,
+  TowerControl,
   List,
   RefreshCcw,
   ChartCandlestick,
@@ -47,7 +47,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
       <div className="px-6 pt-6 pb-8">
         <Link href="/" className="flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-accent-primary flex items-center justify-center shrink-0 shadow-[0_0_20px_var(--color-glow-green)]">
-            <Timer size={24} className="text-[#0F1117]" strokeWidth={2} />
+            <TowerControl size={24} className="text-[#0F1117]" strokeWidth={2} />
           </div>
           <div>
             <div className={`text-lg font-black tracking-widest leading-tight font-brand ${textGradientClass}`}>
