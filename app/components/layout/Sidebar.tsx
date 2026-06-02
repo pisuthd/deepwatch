@@ -13,7 +13,9 @@ import {
   List,
   RefreshCcw,
   ChartCandlestick,
-  Archive
+  Archive,
+  Sparkles,
+  Sparkle
 } from 'lucide-react';
 import { categories, type PageId } from '../../types/navigation';
 
@@ -32,7 +34,9 @@ const iconMap: Record<string, typeof TrendingUp> = {
   List,
   RefreshCcw,
   ChartCandlestick,
-  Archive
+  Archive,
+  Sparkles,
+  Sparkle
 };
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {

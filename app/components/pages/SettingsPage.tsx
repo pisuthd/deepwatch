@@ -3,12 +3,10 @@
 import { useState } from 'react';
 import PageWrapper from '../common/PageWrapper';
 import GlassButton from '../common/GlassButton';
-import { useTheme } from '../../context/ThemeContext';
-
+ 
 type Tab = 'general' | 'appearance' | 'about';
 
-export default function SettingsPage() {
-  const { isDark } = useTheme();
+export default function SettingsPage() { 
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
   const tabs: { id: Tab; label: string }[] = [
@@ -28,12 +26,12 @@ export default function SettingsPage() {
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
               activeTab === tab.id
                 ? 'bg-accent-primary-dim text-accent-primary'
-                : isDark
+                : true
                   ? 'text-gray-400 hover:bg-white/5'
                   : 'text-gray-600 hover:bg-gray-100'
             }`}
             style={{
-              background: activeTab === tab.id ? undefined : isDark ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+              background: activeTab === tab.id ? undefined : true ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
             }}
@@ -87,7 +85,7 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center py-3 border-b border-white/10">
                 <p className="text-white font-medium">Theme</p>
-                <span className="text-gray-400">{isDark ? 'Dark' : 'Light'}</span>
+                <span className="text-gray-400">{true ? 'Dark' : 'Light'}</span>
               </div>
               <div className="flex justify-between items-center py-3 border-b border-white/10">
                 <div>
