@@ -22,7 +22,7 @@ export default function TradeWrapper({ children, trailing }: TradeWrapperProps) 
     <div className="relative h-full">
       {children(mode)}
 
-      <div className="absolute bottom-4 left-4 z-50 w-fit flex items-center gap-2">
+      <div className="absolute bottom-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
         <div className="relative flex items-center gap-0 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] overflow-hidden">
           {OPTIONS.map((opt) => (
             <button
@@ -42,7 +42,11 @@ export default function TradeWrapper({ children, trailing }: TradeWrapperProps) 
             }}
           />
         </div>
-        {trailing}
+        {trailing && (
+          <div className="flex items-center gap-2">
+            {trailing}
+          </div>
+        )}
       </div>
     </div>
   );

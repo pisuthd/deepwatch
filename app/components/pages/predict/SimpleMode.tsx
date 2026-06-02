@@ -11,6 +11,7 @@ import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
 import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
+import { useSetCurrentMarket } from './CurrentMarketContext';
 import {
   DISPLAY_TICK_USD,
   formatExpiryDate,
@@ -54,6 +55,15 @@ export default function PredictSimpleMode() {
     currentOracleId,
     30_000
   );
+
+  // Publish current market to the popover/page context
+  const setCurrentMarket = useSetCurrentMarket();
+  useEffect(() => {
+    setCurrentMarket({
+      oracleId: currentMarket?.oracle_id ?? null,
+      asset: currentMarket?.asset ?? null,
+    });
+  }, [currentMarket?.oracle_id, currentMarket?.asset, setCurrentMarket]);
 
   // Derived values
   const spotUsd = marketDetail ? marketDetail.spot / 1e9 : 0;

@@ -18,6 +18,7 @@ import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import PriceChart from './PriceChart';
 import StrikeGrid from './StrikeGrid';
+import { useSetCurrentMarket } from './CurrentMarketContext';
 import {
   formatExpiryDate,
   formatPrice,
@@ -57,6 +58,15 @@ export default function PredictAdvancedMode() {
   const currentMarket = activeMarkets[selectedIdx] ?? null;
   const currentOracleId = currentMarket?.oracle_id ?? null;
   const { market, loading: marketLoading } = useMarket(currentOracleId, 30_000);
+
+  // Publish current market to the popover/page context
+  const setCurrentMarket = useSetCurrentMarket();
+  useEffect(() => {
+    setCurrentMarket({
+      oracleId: currentMarket?.oracle_id ?? null,
+      asset: currentMarket?.asset ?? null,
+    });
+  }, [currentMarket?.oracle_id, currentMarket?.asset, setCurrentMarket]);
 
   // Close market dropdown on outside click
   useEffect(() => {
