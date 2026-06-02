@@ -11,9 +11,10 @@ const OPTIONS: { value: TradeMode; label: string }[] = [
 
 interface TradeWrapperProps {
   children: (mode: TradeMode) => ReactNode;
+  trailing?: ReactNode;
 }
 
-export default function TradeWrapper({ children }: TradeWrapperProps) {
+export default function TradeWrapper({ children, trailing }: TradeWrapperProps) {
   const [mode, setMode] = useState<TradeMode>('simple');
   const activeIndex = OPTIONS.findIndex((o) => o.value === mode);
 
@@ -21,7 +22,7 @@ export default function TradeWrapper({ children }: TradeWrapperProps) {
     <div className="relative h-full">
       {children(mode)}
 
-      <div className="absolute bottom-4 left-4 z-50 w-fit">
+      <div className="absolute bottom-4 left-4 z-50 w-fit flex items-center gap-2">
         <div className="relative flex items-center gap-0 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] overflow-hidden">
           {OPTIONS.map((opt) => (
             <button
@@ -41,6 +42,7 @@ export default function TradeWrapper({ children }: TradeWrapperProps) {
             }}
           />
         </div>
+        {trailing}
       </div>
     </div>
   );

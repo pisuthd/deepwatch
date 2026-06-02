@@ -7,8 +7,8 @@ import { bcs } from '@mysten/sui/bcs'
 const SERVER = 'https://predict-server.testnet.mystenlabs.com'
 const TESTNET_RPC = 'https://fullnode.testnet.sui.io'
 
-export const PRICE_SCALE = 1_000_000_000n
-export const DUSDC_SCALE = 1_000_000n
+export const PRICE_SCALE = BigInt('1000000000')
+export const DUSDC_SCALE = BigInt('1000000')
 
 export interface ManagerData {
   manager_id: string
@@ -40,7 +40,7 @@ export interface Position {
   unrealized_pnl: string
   underlying_asset: string
   first_minted_at?: number
-  status?: string
+  status?: 'active' | 'redeemable' | 'lost' | 'awaiting_settlement'
 }
 
 export interface AskBounds {
@@ -76,11 +76,20 @@ async function suiRpcCall(method: string, params: any): Promise<any> {
   return response.json()
 }
 
+// Convert human DUSDC string ("1.234567") to u6 bigint (1234567n) without
+// losing precision past 2 dp. Integer math via string split.
+function toDusdcUnits(amount: string): bigint {
+  const [whole, frac = ''] = (amount || '').split('.')
+  const fracPadded = (frac + '000000').slice(0, 6)
+  return BigInt(whole || '0') * DUSDC_SCALE + BigInt(fracPadded || '0')
+}
+
 interface UsePredictReturn {
   manager: ManagerData | null
   summary: ManagerSummary | null
   positions: Position[]
   mintPrice: { up: number; down: number } | null
+  walletDusdcBalance: bigint
   loading: boolean
   error: string | null
   createManager: (signAndExecute: any) => Promise<void>
@@ -88,6 +97,7 @@ interface UsePredictReturn {
   withdraw: (signAndExecute: any, amount: string) => Promise<void>
   mint: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', amount: number) => Promise<void>
   mintRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, amount: number) => Promise<void>
+  redeem: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', quantity: number, settled: boolean) => Promise<void>
   fetchMintPrice: (oracleId: string, strike: number) => void
   refreshData: () => Promise<void>
   getTradeQuote: (oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', quantity: number) => Promise<TradeQuote | null>
@@ -101,6 +111,7 @@ export function usePredict(): UsePredictReturn {
   const [summary, setSummary] = useState<ManagerSummary | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [mintPrice, setMintPrice] = useState<{ up: number; down: number } | null>(null)
+  const [walletDusdc, setWalletDusdc] = useState<bigint>(BigInt(0))
   // const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -110,6 +121,19 @@ export function usePredict(): UsePredictReturn {
   // Fetch manager and summary
   const refreshData = useCallback(async () => {
     if (!account) return
+
+    // Wallet DUSDC balance — sum across all DUSDC coin objects.
+    try {
+      const coinsResult = await suiRpcCall('suix_getCoins', [account.address, DUSDC_TYPE])
+      const coins = coinsResult.result?.data ?? []
+      const total = coins.reduce(
+        (acc: bigint, c: any) => acc + BigInt(c.balance ?? '0'),
+        BigInt(0)
+      )
+      setWalletDusdc(total)
+    } catch (e) {
+      console.error('Failed to fetch wallet DUSDC:', e)
+    }
 
     try {
       const res = await fetch(`${SERVER}/managers`)
@@ -189,7 +213,7 @@ export function usePredict(): UsePredictReturn {
 
       const { Transaction } = await import('@mysten/sui/transactions')
       const coins = coinsResult.result.data
-      const depositAmount = BigInt(Math.round(parseFloat(amount) * 100) / 100 * Number(DUSDC_SCALE))
+      const depositAmount = toDusdcUnits(amount)
 
       const tx = new Transaction()
       const primaryCoin = tx.object(coins[0].coinObjectId)
@@ -222,7 +246,7 @@ export function usePredict(): UsePredictReturn {
     setError(null)
     try {
       const { Transaction } = await import('@mysten/sui/transactions')
-      const withdrawAmount = BigInt(Math.round(parseFloat(amount) * 100) / 100 * Number(DUSDC_SCALE))
+      const withdrawAmount = toDusdcUnits(amount)
 
       const tx = new Transaction()
       tx.moveCall({
@@ -260,7 +284,7 @@ export function usePredict(): UsePredictReturn {
       const CLOCK = '0x6'
 
       const tx = new Transaction()
-      const strikeScaled = BigInt(Math.round(strike) * 1e9)
+      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
       const qty = BigInt(Math.round(amount * 1e6))
 
       const keyFn = direction === 'up' ? 'up' : 'down'
@@ -336,7 +360,7 @@ export function usePredict(): UsePredictReturn {
 
       const tx = new Transaction()
       tx.setSender(senderAddr)
-      const strikeScaled = BigInt(Math.round(strike) * 1_000_000_000)
+      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
       const qty = BigInt(Math.round(quantity * 1e6))
 
       const keyFn = direction === 'up' ? 'up' : 'down'
@@ -409,8 +433,8 @@ export function usePredict(): UsePredictReturn {
       const CLOCK = '0x6'
 
       const tx = new Transaction()
-      const lowerScaled = BigInt(Math.round(lower) * 1e9)
-      const higherScaled = BigInt(Math.round(higher) * 1e9)
+      const lowerScaled = BigInt(Math.round(lower)) * PRICE_SCALE
+      const higherScaled = BigInt(Math.round(higher)) * PRICE_SCALE
       const qty = BigInt(Math.round(amount * 1e6))
 
       // Create range key
@@ -426,6 +450,66 @@ export function usePredict(): UsePredictReturn {
 
       tx.moveCall({
         target: `${PREDICT_PACKAGE}::predict::mint_range`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [
+          tx.object(PREDICT_OBJECT_ID),
+          tx.object(manager.manager_id),
+          tx.object(oracleId),
+          key,
+          tx.pure.u64(qty),
+          tx.object(CLOCK),
+        ],
+      })
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
+  }
+
+  // Redeem a directional position back into the manager.
+  // Mirrors predict_workshop/redeemPosition.ts.
+  //   - settled=false → predict::redeem (oracle still live)
+  //   - settled=true  → predict::redeem_permissionless
+  const redeem = async (
+    signAndExecute: any,
+    oracleId: string,
+    expiryMs: number,
+    strike: number,        // dollars (human units)
+    direction: 'up' | 'down',
+    quantity: number,      // dollars face value (human units)
+    settled: boolean,
+  ) => {
+    if (!account || !manager) return
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const PREDICT_OBJECT_ID = '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a'
+      const CLOCK = '0x6'
+      const target = settled ? 'redeem_permissionless' : 'redeem'
+
+      const tx = new Transaction()
+      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
+      const qty = BigInt(Math.round(quantity * 1e6))
+
+      const key = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::market_key::${direction}`,
+        arguments: [
+          tx.pure.id(oracleId),
+          tx.pure.u64(expiryMs),
+          tx.pure.u64(strikeScaled),
+        ],
+      })
+
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::${target}`,
         typeArguments: [DUSDC_TYPE],
         arguments: [
           tx.object(PREDICT_OBJECT_ID),
@@ -470,8 +554,8 @@ export function usePredict(): UsePredictReturn {
 
       const tx = new Transaction()
       tx.setSender(senderAddr)
-      const lowerScaled = BigInt(Math.round(lower) * 1_000_000_000)
-      const higherScaled = BigInt(Math.round(higher) * 1_000_000_000)
+      const lowerScaled = BigInt(Math.round(lower)) * PRICE_SCALE
+      const higherScaled = BigInt(Math.round(higher)) * PRICE_SCALE
       const qty = BigInt(Math.round(quantity * 1e6))
 
       // Create range key
@@ -527,6 +611,7 @@ export function usePredict(): UsePredictReturn {
     summary,
     positions,
     mintPrice,
+    walletDusdcBalance: walletDusdc,
     loading: false,
     error,
     createManager,
@@ -534,6 +619,7 @@ export function usePredict(): UsePredictReturn {
     withdraw,
     mint,
     mintRange,
+    redeem,
     fetchMintPrice,
     refreshData,
     getTradeQuote,

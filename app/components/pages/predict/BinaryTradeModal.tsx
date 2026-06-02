@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
+import Link from 'next/link';
 import { X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
-import { usePredict } from '../../../hooks/usePredict';
+import { usePredict, DUSDC_SCALE } from '../../../hooks/usePredict';
 import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
 import { formatPrice } from './utils';
@@ -46,7 +47,7 @@ export default function BinaryTradeModal({
 }: BinaryTradeModalProps) {
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
-  const { mint, getTradeQuote, manager } = usePredict();
+  const { mint, getTradeQuote, manager, summary } = usePredict();
 
   const [direction, setDirection] = useState<'up' | 'down'>(initialDirection);
   const [amount, setAmount] = useState('1');
@@ -105,6 +106,11 @@ export default function BinaryTradeModal({
   const payoutIfWin = costPer > 0 ? (1 + (1 - costPer - premiumPer)) * roundedAmount : 0;
   const profitIfWin = payoutIfWin - roundedAmount;
   const hasQuote = activeQuote !== null;
+
+  // Predict-Manager trading balance (DBUSDC)
+  const balanceDusdc = summary ? Number(summary.trading_balance) / Number(DUSDC_SCALE) : 0;
+  const needsDeposit = !!manager && balanceDusdc <= 0;
+  const insufficient = !!manager && roundedAmount > balanceDusdc;
 
   const handleSubmit = async () => {
     if (!account || !dAppKit?.signAndExecuteTransaction || roundedAmount < 0.01) return;
@@ -256,7 +262,7 @@ export default function BinaryTradeModal({
                       className="flex-1 px-3 py-2.5 bg-transparent text-sm font-mono text-white outline-none"
                     />
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5 mt-2">
+                  <div className="grid grid-cols-5 gap-1.5 mt-2">
                     {PRESETS.map((p) => {
                       const isActive = roundedAmount === p;
                       return (
@@ -274,7 +280,27 @@ export default function BinaryTradeModal({
                         </button>
                       );
                     })}
+                    <button
+                      onClick={() => setAmount(balanceDusdc > 0 ? balanceDusdc.toFixed(6).replace(/\.?0+$/, '') : '0')}
+                      disabled={balanceDusdc <= 0}
+                      className="py-1.5 rounded-md text-xs font-mono font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        color: textSecondary,
+                      }}
+                    >
+                      MAX
+                    </button>
                   </div>
+                  {!!manager && (
+                    <div className="flex items-center justify-between mt-2 text-[10px]" style={{ color: textSecondary }}>
+                      <span>Available</span>
+                      <span className="font-mono" style={{ color: textPrimary }}>
+                        ${balanceDusdc.toFixed(2)} DBUSDC
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Payout details */}
@@ -328,22 +354,46 @@ export default function BinaryTradeModal({
                     </p>
                   </div>
                 ) : !manager ? (
-                  <div
-                    className="text-center py-3 rounded-lg text-xs"
-                    style={{ background: 'rgba(255, 255, 255, 0.04)', color: textSecondary }}
+                  <Link
+                    href="/overview"
+                    onClick={onClose}
+                    className="block text-center py-3 rounded-lg text-xs font-semibold transition-colors hover:bg-white/[0.06]"
+                    style={{
+                      background: 'rgba(62, 196, 192, 0.12)',
+                      border: '1px solid rgba(62, 196, 192, 0.35)',
+                      color: cyan,
+                    }}
                   >
-                    Create a manager to start trading
+                    Create your Predict account at Overview →
+                  </Link>
+                ) : needsDeposit ? (
+                  <div className="flex flex-col gap-2">
+                    <Link
+                      href="/overview"
+                      onClick={onClose}
+                      className="block text-center py-3 rounded-lg text-xs font-semibold transition-colors hover:bg-white/[0.06]"
+                      style={{
+                        background: 'rgba(62, 196, 192, 0.12)',
+                        border: '1px solid rgba(62, 196, 192, 0.35)',
+                        color: cyan,
+                      }}
+                    >
+                      Deposit DBUSDC at Overview →
+                    </Link>
+                    <p className="text-[11px] text-center" style={{ color: textSecondary }}>
+                      Your Predict account has no balance. Deposit DBUSDC to start betting.
+                    </p>
                   </div>
                 ) : (
                   <button
                     onClick={handleSubmit}
-                    disabled={submitting || roundedAmount < 0.01 || !hasQuote}
+                    disabled={submitting || roundedAmount < 0.01 || !hasQuote || insufficient}
                     className="w-full py-3 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
                     style={{
-                      background: hasQuote && roundedAmount >= 0.01 ? green : 'rgba(255, 255, 255, 0.08)',
-                      color: hasQuote && roundedAmount >= 0.01 ? '#000' : textSecondary,
+                      background: hasQuote && roundedAmount >= 0.01 && !insufficient ? green : 'rgba(255, 255, 255, 0.08)',
+                      color: hasQuote && roundedAmount >= 0.01 && !insufficient ? '#000' : textSecondary,
                       opacity: submitting ? 0.6 : 1,
-                      cursor: submitting || !hasQuote ? 'not-allowed' : 'pointer',
+                      cursor: submitting || !hasQuote || insufficient ? 'not-allowed' : 'pointer',
                     }}
                   >
                     {submitting && <Loader2 size={14} className="animate-spin" />}
@@ -351,7 +401,9 @@ export default function BinaryTradeModal({
                       ? 'Submitting…'
                       : !hasQuote
                         ? 'Fetching quote…'
-                        : `Place ${direction === 'up' ? '▲ UP' : '▼ DOWN'} bet`}
+                        : insufficient
+                          ? 'Insufficient balance'
+                          : `Place ${direction === 'up' ? '▲ UP' : '▼ DOWN'} bet`}
                   </button>
                 )}
               </div>

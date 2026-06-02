@@ -8,7 +8,13 @@ import { formatDetailedExpiry } from '../pages/predict/utils';
  * Used anywhere a countdown needs to update each second without
  * forcing the parent tree to re-render.
  */
-export default function Countdown({ expiryMs }: { expiryMs: number }) {
+export default function Countdown({
+  expiryMs,
+  expiredLabel = 'soon',
+}: {
+  expiryMs: number;
+  expiredLabel?: string;
+}) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -18,5 +24,6 @@ export default function Countdown({ expiryMs }: { expiryMs: number }) {
   }, [expiryMs]);
 
   if (expiryMs <= 0) return <span>—</span>;
-  return <span>{formatDetailedExpiry(expiryMs, now)}</span>;
+  const text = formatDetailedExpiry(expiryMs, now);
+  return <span>{text === 'soon' ? expiredLabel : text}</span>;
 }
