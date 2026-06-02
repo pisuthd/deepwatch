@@ -1,7 +1,8 @@
 'use client';
 
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ChevronDown, Check } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import {  useRef, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 
 const ConnectButton = dynamic(
@@ -23,6 +24,14 @@ interface TopBarProps {
 export default function TopBar({ activePage }: TopBarProps) {
   const { isConnected, disconnect } = useWallet();
   const { network, setNetwork } = useNetwork();
+  const [isNetworkOpen, setIsNetworkOpen] = useState(false);
+  const networkRef = useRef<HTMLDivElement>(null);
+
+  const networkOptions = [
+    { value: 'mainnet' as const, label: 'Mainnet', dotClass: 'bg-[var(--color-accent-primary)]' },
+    { value: 'testnet' as const, label: 'Testnet', dotClass: 'bg-amber-400' },
+  ];
+  const currentNetwork = networkOptions.find((n) => n.value === network) ?? networkOptions[0];
 
   const meta = routeMeta[activePage] || { category: 'DeepWatch', label: 'Overview' };
   const breadcrumbItems = [
@@ -31,7 +40,7 @@ export default function TopBar({ activePage }: TopBarProps) {
   ];
 
   return (
-    <div className="flex items-center h-12 px-5 bg-[var(--color-topbar-bg)] backdrop-blur-md border-b border-[var(--color-border-subtle)] shrink-0">
+    <div className="flex items-center h-12 px-5 bg-[var(--color-topbar-bg)] backdrop-blur-md border-b border-[var(--color-border-subtle)] shrink-0 relative z-50">
       <div className="flex items-center gap-1.5 text-sm">
         {breadcrumbItems.map((item, i) => (
           <span key={`${item.pageId}-${i}`} className="flex items-center gap-1.5">
@@ -45,14 +54,39 @@ export default function TopBar({ activePage }: TopBarProps) {
 
       <div className="flex-1" />
 
-      <div className="relative flex items-center gap-0 rounded-lg mr-3 bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] overflow-hidden">
-        <button onClick={() => setNetwork('mainnet')} className="relative z-10 px-6 py-2 text-xs font-semibold transition-all">
-          <span className={network === 'mainnet' ? 'text-black' : 'text-gray-400'}>Mainnet</span>
+      <div ref={networkRef} className="relative mr-3 z-50">
+        <button
+          onClick={() => setIsNetworkOpen((o) => !o)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] hover:bg-[var(--color-sidebar-hover)] transition-colors"
+        >
+          <span className={`w-2 h-2 rounded-full ${currentNetwork.dotClass}`} />
+          <span className="text-xs font-semibold text-[var(--color-text-primary)]">{currentNetwork.label}</span>
+          <ChevronDown
+            size={12}
+            className={`text-[var(--color-text-muted)] transition-transform ${isNetworkOpen ? 'rotate-180' : ''}`}
+          />
         </button>
-        <button onClick={() => setNetwork('testnet')} className="relative z-10 px-6 py-2 text-xs font-semibold transition-all">
-          <span className={network === 'testnet' ? 'text-black' : 'text-gray-400'}>Testnet</span>
-        </button>
-        <div className="absolute top-0 h-full rounded-lg transition-all duration-200" style={{ width: '50%', background: '#00E68A', transform: network === 'testnet' ? 'translateX(100%)' : 'translateX(0)' }} />
+
+        {isNetworkOpen && (
+          <div className="absolute top-full right-0 mt-2 w-44 py-1 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] z-50 overflow-hidden shadow-lg shadow-black/20">
+            {networkOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => { 
+                  setNetwork(opt.value);
+                  setIsNetworkOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-sidebar-hover)] transition-colors"
+              >
+                <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotClass}`} />
+                <span className="text-xs font-medium text-[var(--color-text-primary)] flex-1">{opt.label}</span>
+                {opt.value === network && (
+                  <Check size={12} className="text-[var(--color-accent-primary)]" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {isConnected ? (
