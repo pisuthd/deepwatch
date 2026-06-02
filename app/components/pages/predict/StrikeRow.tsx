@@ -1,6 +1,5 @@
 'use client';
 
-import { useTheme } from '../../../context/ThemeContext';
 import GlassButton from './GlassButton';
 
 interface StrikeRowProps {
@@ -12,12 +11,9 @@ interface StrikeRowProps {
 }
 
 export default function StrikeRow({ price, upOdds, downOdds, onUp, onDown }: StrikeRowProps) {
-  const { isDark } = useTheme();
-  const textPrimary = isDark ? '#ffffff' : '#111827';
-
   return (
-    <div className="w-full flex items-center justify-between rounded-xl px-3 py-2 transition-all hover:bg-white/5" style={{ background: 'transparent' }}>
-      <span className="text-base font-semibold" style={{ color: textPrimary }}>
+    <div className="w-full flex items-center justify-between rounded-xl px-3 py-2 transition-all hover:bg-white/5">
+      <span className="text-base font-semibold text-white">
         ${price.toLocaleString()}
       </span>
       <div className="flex gap-1.5">

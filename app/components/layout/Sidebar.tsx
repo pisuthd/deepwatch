@@ -13,13 +13,8 @@ import {
   List,
   RefreshCcw,
   ChartCandlestick,
-  Archive,
-  Target,
-  Goal,
-  Sparkles,
-  Sparkle
+  Archive
 } from 'lucide-react';
-import { useTheme } from '../../context/ThemeContext';
 import { categories, type PageId } from '../../types/navigation';
 
 interface SidebarProps {
@@ -37,18 +32,10 @@ const iconMap: Record<string, typeof TrendingUp> = {
   List,
   RefreshCcw,
   ChartCandlestick,
-  Archive,
-  Target,
-  Goal,
-  Sparkles,
-  Sparkle
+  Archive
 };
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
-  const { isDark } = useTheme();
-
-  const textGradientClass = isDark ? 'text-gradient-white' : 'text-gradient-light';
-
   return (
     <aside className="w-[240px] bg-[var(--color-bg-surface)] border-r border-[var(--color-border-subtle)] flex flex-col shrink-0">
       {/* Brand */}
@@ -58,7 +45,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             <TowerControl size={24} className="text-[#0F1117]" strokeWidth={2} />
           </div>
           <div>
-            <div className={`text-lg font-black tracking-widest leading-tight font-brand ${textGradientClass}`}>
+            <div className="text-lg font-black tracking-widest leading-tight font-brand text-gradient-white">
               DeepWatch
             </div>
           </div>
@@ -70,7 +57,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         {categories.map((category) => (
           <div key={category.title}>
             <div className="px-3 mb-2">
-              <span className={`text-[11px] font-bold uppercase tracking-[0.2em] font-brand ${textGradientClass}`}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] font-brand text-gradient-white">
                 {category.title}
               </span>
             </div>
@@ -88,7 +75,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                       }`}
                   >
                     <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} className={isActive ? 'text-accent-primary' : ''} />
-                    <span className={isActive ? 'text-accent-primary' : textGradientClass}>{label}</span>
+                    <span className={isActive ? 'text-accent-primary' : 'text-gradient-white'}>{label}</span>
                   </button>
                 );
               })}
@@ -107,7 +94,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             }`}
         >
           <Settings size={20} strokeWidth={activePage === 'settings' ? 2.2 : 1.8} className={activePage === 'settings' ? 'text-accent-primary' : ''} />
-          <span className={activePage === 'settings' ? 'text-accent-primary' : textGradientClass}>Settings</span>
+          <span className={activePage === 'settings' ? 'text-accent-primary' : 'text-gradient-white'}>Settings</span>
         </button>
       </div>
     </aside>
