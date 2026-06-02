@@ -23,7 +23,7 @@ export default function AccountOverviewPopover({ onClose }: AccountOverviewPopov
 
   return (
     <div
-      className="absolute bottom-full mb-2 left-0 z-40 w-[460px] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10"
+      className="absolute bottom-full mb-2 right-0 z-40 w-[460px] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10"
       style={{
         background: 'rgba(26, 29, 46, 0.95)',
         backdropFilter: 'blur(20px)',

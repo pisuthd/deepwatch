@@ -116,7 +116,7 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
 
   return (
     <div
-      className="absolute bottom-full mb-2 left-0 z-40 w-[760px] max-h-[70vh] overflow-hidden rounded-2xl border border-white/10 flex flex-col"
+      className="absolute bottom-full mb-2 right-0 z-40 w-[760px] max-h-[70vh] overflow-hidden rounded-2xl border border-white/10 flex flex-col"
       style={{
         background: 'rgba(26, 29, 46, 0.95)',
         backdropFilter: 'blur(20px)',
