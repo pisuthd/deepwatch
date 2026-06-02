@@ -1,57 +1,139 @@
 'use client';
 
-import { ArrowDownUp } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useSpotPools, type SpotPool } from '../../../hooks/useSpotPools';
+import { useCurrentPool, useSetCurrentPool } from './CurrentPoolContext';
 import GlassCard from '../../common/GlassCard';
+import SwapCard from './SwapCard';
 
-const green = '#00E68A';
-const red = '#ef4444';
+const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 
+function formatPrice(n: number | undefined): string {
+  if (!n || !Number.isFinite(n)) return '—';
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
 export default function SpotSimpleMode() {
+  const { pools, loading } = useSpotPools();
+  const { poolKey: currentPoolKey, baseAsset, quoteAsset } = useCurrentPool();
+  const setCurrentPool = useSetCurrentPool();
+
+  // Default-select the first active pool when nothing is chosen
+  useEffect(() => {
+    if (!currentPoolKey && pools.length > 0) {
+      const p = pools[0];
+      setCurrentPool({
+        poolKey: p.poolName,
+        baseAsset: p.baseAsset,
+        quoteAsset: p.quoteAsset,
+        baseAssetId: p.baseAssetId,
+        quoteAssetId: p.quoteAssetId,
+        baseAssetDecimals: p.baseAssetDecimals,
+        quoteAssetDecimals: p.quoteAssetDecimals,
+      });
+    }
+  }, [currentPoolKey, pools, setCurrentPool]);
+
+  const currentPool: SpotPool | undefined = useMemo(
+    () => pools.find((p) => p.poolName === currentPoolKey),
+    [pools, currentPoolKey],
+  );
+
+  if (loading && pools.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-3 text-sm" style={{ color: textSecondary }}>
+          <Loader2 size={20} className="animate-spin" style={{ color: cyan }} />
+          Loading pools…
+        </div>
+      </div>
+    );
+  }
+
+  if (pools.length === 0) {
+    return (
+      <div className="max-w-md mx-auto">
+        <GlassCard>
+          <div className="text-center py-8">
+            <h2 className="text-lg font-bold mb-2" style={{ color: textPrimary }}>
+              No active pools
+            </h2>
+            <p className="text-sm" style={{ color: textSecondary }}>
+              The indexer is reporting no active pools on the current network.
+            </p>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-md mx-auto space-y-3">
+      {/* Pair selector header */}
       <GlassCard>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs" style={{ color: textSecondary }}>BTC / USDC</span>
-          <ArrowDownUp size={14} style={{ color: textSecondary }} />
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {pools.map((p) => {
+            const isActive = p.poolName === currentPoolKey;
+            return (
+              <button
+                key={p.poolName}
+                onClick={() =>
+                  setCurrentPool({
+                    poolKey: p.poolName,
+                    baseAsset: p.baseAsset,
+                    quoteAsset: p.quoteAsset,
+                    baseAssetId: p.baseAssetId,
+                    quoteAssetId: p.quoteAssetId,
+                    baseAssetDecimals: p.baseAssetDecimals,
+                    quoteAssetDecimals: p.quoteAssetDecimals,
+                  })
+                }
+                className="shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors"
+                style={{
+                  background: isActive
+                    ? 'rgba(62, 196, 192, 0.15)'
+                    : 'rgba(255, 255, 255, 0.04)',
+                  border: `1px solid ${
+                    isActive ? 'rgba(62, 196, 192, 0.4)' : 'rgba(255, 255, 255, 0.08)'
+                  }`,
+                  color: isActive ? cyan : textSecondary,
+                }}
+              >
+                {p.baseAsset}/{p.quoteAsset}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold" style={{ color: green }}>$71,400.00</span>
-          <span className="text-xs" style={{ color: textSecondary }}>+2.34%</span>
-        </div>
+        {currentPool && (
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-bold font-mono" style={{ color: textPrimary }}>
+              ${formatPrice(currentPool.lastPrice)}
+            </span>
+            {currentPool.change24h !== undefined && (
+              <span
+                className="text-xs font-mono"
+                style={{ color: currentPool.change24h >= 0 ? '#00E68A' : '#ef4444' }}
+              >
+                {currentPool.change24h >= 0 ? '+' : ''}
+                {currentPool.change24h.toFixed(2)}%
+              </span>
+            )}
+          </div>
+        )}
       </GlassCard>
 
-      <GlassCard>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs" style={{ color: textSecondary }}>Amount (USDC)</label>
-            <input
-              type="text"
-              placeholder="0.00"
-              className="w-full mt-1 px-3 py-2.5 rounded-lg bg-black/30 border border-white/10 text-sm font-semibold text-white outline-none focus:border-white/30"
-            />
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span style={{ color: textSecondary }}>Total</span>
-            <span style={{ color: textPrimary }}>$0.00</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <button
-              className="py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
-              style={{ background: green, color: '#000' }}
-            >
-              Buy
-            </button>
-            <button
-              className="py-2.5 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
-              style={{ background: red, color: '#fff' }}
-            >
-              Sell
-            </button>
-          </div>
-        </div>
-      </GlassCard>
+      {/* Swap card */}
+      {currentPoolKey && baseAsset && quoteAsset && (
+        <GlassCard>
+          <SwapCard poolKey={currentPoolKey} baseAsset={baseAsset} quoteAsset={quoteAsset} />
+        </GlassCard>
+      )}
     </div>
   );
 }

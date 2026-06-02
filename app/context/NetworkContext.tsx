@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 export type Network = 'mainnet' | 'testnet';
 
@@ -13,19 +13,22 @@ const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'deepwatch-network';
 
-export function NetworkProvider({ children }: { children: ReactNode }) {
-  const [network, setNetworkState] = useState<Network>('mainnet');
+function readInitialNetwork(): Network {
+  if (typeof window === 'undefined') return 'mainnet';
+  const stored = window.localStorage.getItem(STORAGE_KEY);
+  return stored === 'mainnet' || stored === 'testnet' ? stored : 'mainnet';
+}
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'mainnet' || stored === 'testnet') {
-      setNetworkState(stored);
-    }
-  }, []);
+export function NetworkProvider({ children }: { children: ReactNode }) {
+  // Read localStorage synchronously so hooks that depend on `network`
+  // (indexer URLs, RPC, coin types) don't fetch the wrong one on first render.
+  const [network, setNetworkState] = useState<Network>(readInitialNetwork);
 
   const setNetwork = (newNetwork: Network) => {
     setNetworkState(newNetwork);
-    localStorage.setItem(STORAGE_KEY, newNetwork);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_KEY, newNetwork);
+    }
   };
 
   return (

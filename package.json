@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mysten/dapp-kit-react": "^2.0.3",
+    "@mysten/deepbook-v3": "^1.4.1",
     "@mysten/sui": "^2.17.0",
     "framer-motion": "^12.40.0",
     "lightweight-charts": "^5.0.8",

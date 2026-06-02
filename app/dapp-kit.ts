@@ -1,13 +1,11 @@
 import { createDAppKit } from '@mysten/dapp-kit-react';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
-
-const GRPC_URLS = {
-	testnet: 'https://fullnode.testnet.sui.io:443',
-};
+import { NETWORKS } from './lib/networkConfig';
 
 export const dAppKit = createDAppKit({
-	networks: ['testnet'],
-	createClient: (network) => new SuiGrpcClient({ network, baseUrl: GRPC_URLS[network] }),
+	networks: ['testnet', 'mainnet'],
+	createClient: (network) =>
+		new SuiGrpcClient({ network, baseUrl: NETWORKS[network].fullnodeGrpc }),
 });
 
 // Register types for hook type inference

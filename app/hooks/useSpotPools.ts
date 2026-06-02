@@ -1,14 +1,12 @@
 /**
  * useSpotPools - Fetch and manage DeepBookV3 Spot pools
- * 
- * Fetches real-time data from DeepBookV3 Indexer on testnet.
+ *
+ * Fetches real-time data from the DeepBookV3 Indexer for the active network
+ * (driven by `useNetwork()`). Indexer URL comes from `useNetworkConfig()`.
  */
 
 import { useState, useEffect, useCallback } from 'react'
-
-// ─── Config ──────────────────────────────────────────────────────────────────
-
-const INDEXER_URL = 'https://deepbook-indexer.testnet.mystenlabs.com'
+import { useNetworkConfig } from './useNetworkConfig'
 
 // Asset decimals for conversion
 // const ASSET_SCALARS: Record<string, number> = {
@@ -111,37 +109,32 @@ interface OrderBookResponse {
   asks: [string, string][]
 }
 
-// Fetch pools from indexer
-async function fetchPools(): Promise<PoolResponse[]> {
-  const response = await fetch(`${INDEXER_URL}/get_pools`)
+async function fetchPools(indexerUrl: string): Promise<PoolResponse[]> {
+  const response = await fetch(`${indexerUrl}/get_pools`)
   if (!response.ok) throw new Error('Failed to fetch pools')
   return response.json()
 }
 
-// Fetch ticker data from indexer
-async function fetchTicker(): Promise<TickerResponse> {
-  const response = await fetch(`${INDEXER_URL}/ticker`)
+async function fetchTicker(indexerUrl: string): Promise<TickerResponse> {
+  const response = await fetch(`${indexerUrl}/ticker`)
   if (!response.ok) throw new Error('Failed to fetch ticker')
   return response.json()
 }
 
-// Fetch summary data from indexer
-async function fetchSummary(): Promise<SummaryItem[]> {
-  const response = await fetch(`${INDEXER_URL}/summary`)
+async function fetchSummary(indexerUrl: string): Promise<SummaryItem[]> {
+  const response = await fetch(`${indexerUrl}/summary`)
   if (!response.ok) throw new Error('Failed to fetch summary')
   return response.json()
 }
 
-// Fetch order book from indexer
-async function fetchOrderBook(poolName: string, depth = 20): Promise<OrderBookResponse> {
-  const response = await fetch(`${INDEXER_URL}/orderbook/${poolName}?level=2&depth=${depth}`)
+async function fetchOrderBook(indexerUrl: string, poolName: string, depth = 20): Promise<OrderBookResponse> {
+  const response = await fetch(`${indexerUrl}/orderbook/${poolName}?level=2&depth=${depth}`)
   if (!response.ok) throw new Error('Failed to fetch order book')
   return response.json()
 }
 
-// Fetch OHLCV data from indexer
-async function fetchOHLCV(poolName: string, interval = '1h', limit = 100): Promise<OHLCVData> {
-  const response = await fetch(`${INDEXER_URL}/ohclv/${poolName}?interval=${interval}&limit=${limit}`)
+async function fetchOHLCV(indexerUrl: string, poolName: string, interval = '1h', limit = 100): Promise<OHLCVData> {
+  const response = await fetch(`${indexerUrl}/ohclv/${poolName}?interval=${interval}&limit=${limit}`)
   if (!response.ok) throw new Error('Failed to fetch OHLCV data')
   return response.json()
 }
@@ -164,6 +157,8 @@ export interface OHLCVData {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useSpotPools(refreshInterval = 5_000) {
+  const cfg = useNetworkConfig();
+  const indexerUrl = cfg.deepbookIndexer;
   const [pools, setPools] = useState<SpotPool[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -172,9 +167,9 @@ export function useSpotPools(refreshInterval = 5_000) {
     try {
       // Fetch pools, ticker data, and summary data in parallel
       const [poolsData, tickerData, summaryData] = await Promise.all([
-        fetchPools(),
-        fetchTicker(),
-        fetchSummary()
+        fetchPools(indexerUrl),
+        fetchTicker(indexerUrl),
+        fetchSummary(indexerUrl)
       ])
 
       // Create a map of summary data keyed by trading_pairs (BASE_QUOTE format)
@@ -234,7 +229,7 @@ export function useSpotPools(refreshInterval = 5_000) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [indexerUrl])
 
   useEffect(() => {
     load()
@@ -245,7 +240,7 @@ export function useSpotPools(refreshInterval = 5_000) {
   // Get order book for a specific pool
   const getOrderBook = useCallback(async (poolName: string): Promise<OrderBook | null> => {
     try {
-      const data = await fetchOrderBook(poolName, 20)
+      const data = await fetchOrderBook(indexerUrl, poolName, 20)
 
       // Parse bids and asks
       let bidTotal = 0
@@ -284,7 +279,7 @@ export function useSpotPools(refreshInterval = 5_000) {
       console.error('Error fetching order book:', err)
       return null
     }
-  }, [])
+  }, [indexerUrl])
 
   // Get pool by name
   const getPoolByName = useCallback((poolName: string) => {
@@ -299,7 +294,7 @@ export function useSpotPools(refreshInterval = 5_000) {
   // Get OHLCV data for a specific pool
   const getOHLCV = useCallback(async (poolName: string, interval = '1h', limit = 100): Promise<OHLCVCandle[]> => {
     try {
-      const data = await fetchOHLCV(poolName, interval, limit)
+      const data = await fetchOHLCV(indexerUrl, poolName, interval, limit)
       // Convert array format to objects
       return data.candles.map(([time, open, high, low, close, volume]) => ({
         time,
@@ -313,7 +308,7 @@ export function useSpotPools(refreshInterval = 5_000) {
       console.error('Error fetching OHLCV data:', err)
       return []
     }
-  }, [])
+  }, [indexerUrl])
 
   return {
     pools,
@@ -324,6 +319,6 @@ export function useSpotPools(refreshInterval = 5_000) {
     getOHLCV,
     getPoolByName,
     getPoolByAssets,
-    INDEXER_URL
+    INDEXER_URL: indexerUrl,
   }
 }

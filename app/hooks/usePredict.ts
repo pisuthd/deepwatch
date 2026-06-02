@@ -3,9 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useCurrentAccount, useCurrentClient } from '@mysten/dapp-kit-react'
 import { bcs } from '@mysten/sui/bcs'
-
-const SERVER = 'https://predict-server.testnet.mystenlabs.com'
-const TESTNET_RPC = 'https://fullnode.testnet.sui.io'
+import { useNetworkConfig } from './useNetworkConfig'
 
 export const PRICE_SCALE = BigInt('1000000000')
 export const DUSDC_SCALE = BigInt('1000000')
@@ -61,9 +59,9 @@ export interface RangeQuote {
   payout: number  // Payout if the range wins (in DUSDC)
 }
 
-// Helper to call Sui RPC
-async function suiRpcCall(method: string, params: any): Promise<any> {
-  const response = await fetch(TESTNET_RPC, {
+// Helper to call Sui RPC. `rpcUrl` should be a JSON-RPC endpoint (port optional).
+async function suiRpcCall(rpcUrl: string, method: string, params: any): Promise<any> {
+  const response = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -107,6 +105,10 @@ interface UsePredictReturn {
 export function usePredict(): UsePredictReturn {
   const account = useCurrentAccount()
   const client = useCurrentClient()
+  const cfg = useNetworkConfig();
+  // JSON-RPC endpoint: strip the gRPC ":443" port suffix if present.
+  const RPC = cfg.fullnodeGrpc.replace(/:443$/, '');
+  const SERVER = cfg.predictServer; // null on mainnet — handled below
   const [manager, setManager] = useState<ManagerData | null>(null)
   const [summary, setSummary] = useState<ManagerSummary | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
@@ -122,9 +124,20 @@ export function usePredict(): UsePredictReturn {
   const refreshData = useCallback(async () => {
     if (!account) return
 
+    // Predict is testnet-only; on mainnet we leave state empty and surface a
+    // friendly error so the UI can show the "switch to testnet" notice.
+    if (SERVER === null) {
+      setManager(null)
+      setSummary(null)
+      setPositions([])
+      setWalletDusdc(BigInt(0))
+      setError('Predict is currently only supported on Testnet. Switch to Testnet in the top bar to use it.')
+      return
+    }
+
     // Wallet DUSDC balance — sum across all DUSDC coin objects.
     try {
-      const coinsResult = await suiRpcCall('suix_getCoins', [account.address, DUSDC_TYPE])
+      const coinsResult = await suiRpcCall(RPC, 'suix_getCoins', [account.address, DUSDC_TYPE])
       const coins = coinsResult.result?.data ?? []
       const total = coins.reduce(
         (acc: bigint, c: any) => acc + BigInt(c.balance ?? '0'),
@@ -155,7 +168,7 @@ export function usePredict(): UsePredictReturn {
         // Fetch positions
         try {
           const posRes = await fetch(`${SERVER}/managers/${userManager.manager_id}/positions/summary`)
-          const posData = await posRes.json() 
+          const posData = await posRes.json()
           setPositions(posData.filter((p: Position) => Number(p.open_quantity) > 0))
         } catch (e) {
           console.error('Failed to fetch positions:', e)
@@ -168,7 +181,7 @@ export function usePredict(): UsePredictReturn {
     } catch (e) {
       console.error('Failed to find manager:', e)
     }
-  }, [account])
+  }, [account, RPC, SERVER])
 
   // Initial fetch and polling
   useEffect(() => {
@@ -205,7 +218,7 @@ export function usePredict(): UsePredictReturn {
 
     setError(null)
     try {
-      const coinsResult = await suiRpcCall('suix_getCoins', [account.address, DUSDC_TYPE])
+      const coinsResult = await suiRpcCall(RPC, 'suix_getCoins', [account.address, DUSDC_TYPE])
 
       if (!coinsResult.result?.data?.length) {
         throw new Error('No DUSDC found')
