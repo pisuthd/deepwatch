@@ -27,9 +27,9 @@ export default function TradeWrapper({ children }: TradeWrapperProps) {
             <button
               key={opt.value}
               onClick={() => setMode(opt.value)}
-              className="relative z-10 px-5 py-1.5 text-center text-xs font-semibold transition-all"
+              className="relative z-10 px-5 py-1.5 flex items-center justify-center min-w-[110px] text-xs font-semibold transition-all"
             >
-              <span className={mode === opt.value ? 'text-black' : 'text-gray-400'}>{opt.label}</span>
+              <span className={` ${mode === opt.value ? 'text-black' : 'text-gray-400'}`}>{opt.label}</span>
             </button>
           ))}
           <div

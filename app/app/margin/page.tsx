@@ -1,22 +1,12 @@
 'use client';
 
-import PageWrapper from '../../components/common/PageWrapper';
 import TradeWrapper from '../../components/common/TradeWrapper';
+import MarginPage from '../../components/pages/margin/page';
 
-export default function MarginPage() {
+export default function Page() {
   return (
     <TradeWrapper>
-      {(mode) => (
-        <PageWrapper title="Margin">
-          <div className="flex items-center justify-center h-64">
-            <p className="text-gray-500">
-              {mode === 'advanced'
-                ? 'Margin trading coming soon — leverage sliders, liquidation buffers, and risk metrics will live here.'
-                : 'Margin trading coming soon...'}
-            </p>
-          </div>
-        </PageWrapper>
-      )}
+      {(mode) => <MarginPage mode={mode} />}
     </TradeWrapper>
   );
 }
