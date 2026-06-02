@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Timer, Menu, X } from 'lucide-react';
+import { TowerControl, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useTheme } from '../../context/ThemeContext';
@@ -20,7 +20,7 @@ export default function LandingHeader() {
                 {/* Logo - Scroll to top */}
                 <a href="#" className="flex items-center gap-3 cursor-pointer">
                     <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center">
-                        <Timer size={20} className="text-[#0F1117]" strokeWidth={2} />
+                        <TowerControl size={20} className="text-[#0F1117]" strokeWidth={2} />
                     </div>
                     <span className={`text-lg font-black tracking-widest font-brand ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
                         DeepWatch

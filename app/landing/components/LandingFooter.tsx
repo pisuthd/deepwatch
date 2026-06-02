@@ -1,6 +1,6 @@
 'use client';
 
-import { Timer } from 'lucide-react';
+import { TowerControl } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 export default function LandingFooter() {
@@ -11,7 +11,7 @@ export default function LandingFooter() {
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-accent-primary flex items-center justify-center">
-            <Timer size={16} className="text-black" />
+            <TowerControl size={16} className="text-black" />
           </div>
           <span className={`font-brand text-sm tracking-widest ${isDark ? 'text-gradient-white' : 'text-gradient-light'}`}>
             DeepWatch
