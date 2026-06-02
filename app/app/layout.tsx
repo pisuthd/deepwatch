@@ -13,7 +13,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const getPageId = (): PageId => {
     const path = pathname.replace('/app/', '');
     const pageMap: Record<string, PageId> = {
-      'markets': 'markets',
+      'predict': 'predict',
+      'spot': 'spot',
+      'margin': 'margin',
       'add-insight': 'add-insight',
       'recent-insights': 'recent-insights',
       'account-overview': 'account-overview',
@@ -21,12 +23,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       'buy-dbusdc': 'buy-dbusdc',
       'settings': 'settings',
     };
-    return pageMap[path] || 'markets';
+    return pageMap[path] || 'predict';
   };
 
   // PageId to route mapping
   const pageToRoute: Record<PageId, string> = {
-    'markets': '/app/markets',
+    'predict': '/app/predict',
+    'spot': '/app/spot',
+    'margin': '/app/margin',
     'add-insight': '/app/add-insight',
     'recent-insights': '/app/recent-insights',
     'account-overview': '/app/account-overview',
