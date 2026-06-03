@@ -15,8 +15,7 @@ export const categories: NavCategory[] = [
   {
     title: 'Trade',
     items: [
-      { icon: 'RefreshCcw', label: 'Spot', pageId: 'spot' },
-      // { icon: 'ChartCandlestick', label: 'Margin', pageId: 'margin' },
+      { icon: 'RefreshCcw', label: 'Spot', pageId: 'spot' }, 
       { icon: 'Goal', label: 'Predict', pageId: 'predict' }
     ],
   },
@@ -24,8 +23,8 @@ export const categories: NavCategory[] = [
     title: 'Account',
     items: [
       { icon: 'LayoutDashboard', label: 'Overview', pageId: 'account-overview' }, 
-      { icon: 'Sparkle', label: 'Find Insight', pageId: 'add-insight' },
-      { icon: 'Sparkles', label: 'Recent Insights', pageId: 'recent-insights' },
+      { icon: 'FilePlusCorner', label: 'Add Insight', pageId: 'add-insight' },
+      { icon: 'ListTree', label: 'Recent Insights', pageId: 'recent-insights' },
     ],
   },
 ];

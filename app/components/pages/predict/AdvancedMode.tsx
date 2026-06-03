@@ -423,7 +423,7 @@ export default function PredictAdvancedMode() {
         </GlassCard>
 
         {/* Right-side strike ladder */}
-        <div className="w-72 shrink-0 min-h-0">
+        <div className="w-80 shrink-0 min-h-0">
           <GlassCard className="  p-0 overflow-hidden">
             <StrikeGrid
               market={

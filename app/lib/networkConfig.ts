@@ -41,7 +41,7 @@ export interface NetworkConfig {
 
 export const NETWORKS: Record<Network, NetworkConfig> = {
   testnet: {
-    fullnodeGrpc: process.env.NEXT_PUBLIC_TESTNET_GRPC || 'https://sui-testnet-grpc.gateway.tatum.io?xApiKey=',
+    fullnodeGrpc: process.env.NEXT_PUBLIC_TESTNET_GRPC || 'https://fullnode.testnet.sui.io:443',
     predictServer: 'https://predict-server.testnet.mystenlabs.com',
     deepbookIndexer: 'https://deepbook-indexer.testnet.mystenlabs.com',
     packages: {
@@ -58,7 +58,7 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
     defaultPools: ['SUI_DBUSDC', 'DEEP_USDC', 'SUI_USDC'],
   },
   mainnet: {
-    fullnodeGrpc: process.env.NEXT_PUBLIC_MAINNET_GRPC || 'https://sui-mainnet-grpc.gateway.tatum.io?xApiKey=',
+    fullnodeGrpc: process.env.NEXT_PUBLIC_MAINNET_GRPC || 'https://fullnode.mainnet.sui.io:443',
     predictServer: null,
     deepbookIndexer: 'https://deepbook-indexer.mainnet.mystenlabs.com',
     packages: {

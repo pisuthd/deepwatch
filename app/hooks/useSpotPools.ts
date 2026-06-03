@@ -8,18 +8,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNetworkConfig } from './useNetworkConfig'
 
-// Asset decimals for conversion
-// const ASSET_SCALARS: Record<string, number> = {
-//   'SUI': 9,
-//   'USDC': 6,
-//   'DEEP': 6,
-//   'WUSDC': 6,
-//   'WUSDT': 6,
-//   'xBTC': 8,
-//   'BETH': 8,
-//   'NS': 6,
-// }
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SpotPool {
@@ -218,10 +206,13 @@ export function useSpotPools(refreshInterval = 5_000) {
         }
       }).reverse()
  
-      setPools(mappedPools.filter(p =>
-        p.poolName === 'DEEP_SUI' || p.poolName === 'SUI_DBUSDC' ||
-        ((p.lastPrice ?? 0) > 0 && !p.isFrozen)
-      ))
+      setPools(mappedPools
+        .filter(p =>
+          p.poolName === 'DEEP_SUI' || p.poolName === 'SUI_DBUSDC' ||
+          ((p.lastPrice ?? 0) > 0 && !p.isFrozen)
+        )
+        .sort((a, b) => (b.quoteVolume ?? 0) - (a.quoteVolume ?? 0))
+      )
       setError(null)
     } catch (err) {
       console.error('Error fetching pools:', err)

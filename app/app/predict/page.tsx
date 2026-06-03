@@ -31,7 +31,7 @@ function MainnetWarning() {
       duration: 8000,
       key: 'predict-mainnet-warning',
       action: {
-        label: 'Switch to Testnet',
+        label: 'Switch to Testnet to trade',
         onClick: () => setNetwork('testnet'),
       },
     });

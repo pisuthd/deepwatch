@@ -4,6 +4,8 @@ import Link from 'next/link';
 import {
   TrendingUp,
   Plus,
+  FilePlusCorner,
+  ListTree,
   Clock,
   LayoutDashboard,
   Wallet,
@@ -28,6 +30,8 @@ interface SidebarProps {
 const iconMap: Record<string, typeof TrendingUp> = {
   TrendingUp,
   Plus,
+  FilePlusCorner,
+  ListTree,
   Clock,
   LayoutDashboard,
   Wallet,
