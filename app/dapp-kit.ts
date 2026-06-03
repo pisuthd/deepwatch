@@ -3,7 +3,8 @@ import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { NETWORKS } from './lib/networkConfig';
 
 export const dAppKit = createDAppKit({
-	networks: ['testnet', 'mainnet'],
+	networks: [ 'mainnet', 'testnet'],
+	defaultNetwork: "mainnet",
 	createClient: (network) =>
 		new SuiGrpcClient({ network, baseUrl: NETWORKS[network].fullnodeGrpc }),
 });
