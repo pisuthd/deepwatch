@@ -74,6 +74,34 @@ async function suiRpcCall(rpcUrl: string, method: string, params: any): Promise<
   return response.json()
 }
 
+/**
+ * GET a URL and parse it as JSON, gracefully handling:
+ *   - non-2xx HTTP responses (the predict indexer occasionally 500s)
+ *   - non-JSON bodies (HTML error pages, gateway intercepts, etc.)
+ *   - network failures
+ *
+ * Returns `null` on any error and logs a single descriptive message that
+ * includes the status code and a short body excerpt — much more actionable
+ * than the cryptic `SyntaxError: Unexpected token 'I', "Internal e"...`
+ * you get from letting `res.json()` throw on a non-JSON body.
+ */
+async function safeJsonGet<T>(url: string, label: string): Promise<T | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '<unreadable>');
+      console.warn(
+        `[predict] ${label}: ${res.status} ${res.statusText} — ${body.slice(0, 200)}`,
+      );
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (e: any) {
+    console.warn(`[predict] ${label} failed:`, e?.message ?? e);
+    return null;
+  }
+}
+
 // Convert human DUSDC string ("1.234567") to u6 bigint (1234567n) without
 // losing precision past 2 dp. Integer math via string split.
 function toDusdcUnits(amount: string): bigint {
@@ -149,29 +177,32 @@ export function usePredict(): UsePredictReturn {
     }
 
     try {
-      const res = await fetch(`${SERVER}/managers`)
-      const data = await res.json()
+      const data = await safeJsonGet<ManagerData[]>(`${SERVER}/managers`, 'GET /managers')
+      if (!data) {
+        // safeJsonGet already logged the underlying error. Reset state so
+        // the UI doesn't show stale data from a prior successful fetch.
+        setManager(null)
+        setSummary(null)
+        setPositions([])
+        return
+      }
       const userManager = data.find((m: ManagerData) => m.owner === account.address)
 
       if (userManager) {
         setManager(userManager)
 
-        // Fetch summary
-        try {
-          const summaryRes = await fetch(`${SERVER}/managers/${userManager.manager_id}/summary`)
-          const summaryData = await summaryRes.json()
-          setSummary(summaryData)
-        } catch (e) {
-          console.error('Failed to fetch summary:', e)
-        }
+        const summaryData = await safeJsonGet<ManagerSummary>(
+          `${SERVER}/managers/${userManager.manager_id}/summary`,
+          'GET /summary',
+        )
+        if (summaryData) setSummary(summaryData)
 
-        // Fetch positions
-        try {
-          const posRes = await fetch(`${SERVER}/managers/${userManager.manager_id}/positions/summary`)
-          const posData = await posRes.json()
+        const posData = await safeJsonGet<Position[]>(
+          `${SERVER}/managers/${userManager.manager_id}/positions/summary`,
+          'GET /positions/summary',
+        )
+        if (posData) {
           setPositions(posData.filter((p: Position) => Number(p.open_quantity) > 0))
-        } catch (e) {
-          console.error('Failed to fetch positions:', e)
         }
       } else {
         setManager(null)
@@ -338,16 +369,18 @@ export function usePredict(): UsePredictReturn {
   const fetchMintPrice = (oracleId: string, strike: number) => {
     if (!oracleId || strike <= 0) return
 
-    fetch(`${SERVER}/oracles/${oracleId}/ask-bounds?strike=${strike}`)
-      .then(res => res.json())
-      .then((data: AskBounds) => {
+    safeJsonGet<AskBounds>(
+      `${SERVER}/oracles/${oracleId}/ask-bounds?strike=${strike}`,
+      'GET /ask-bounds',
+    )
+      .then(data => {
+        if (!data) {
+          setMintPrice({ up: 50, down: 50 })
+          return
+        }
         const upPrice = Number(BigInt(data.ask) / BigInt(1e7)) / 100
         const downPrice = 100 - upPrice
         setMintPrice({ up: upPrice, down: downPrice })
-      })
-      .catch(e => {
-        console.error('Failed to fetch mint price:', e)
-        setMintPrice({ up: 50, down: 50 })
       })
   }
 
