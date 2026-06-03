@@ -116,22 +116,7 @@ export default function CandlestickChart({ fetchCandles, interval }: Candlestick
   }, [interval, fetchCandles]);
 
   return (
-    <div className="relative w-full h-full min-h-[280px]">
-      {/* Interval selector */}
-      <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
-        {INTERVALS.map((iv) => (
-          <span
-            key={iv}
-            className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-            style={{
-              background: iv === interval ? 'rgba(62,196,192,0.15)' : 'rgba(255,255,255,0.04)',
-              color: iv === interval ? '#3EC4C0' : textSecondary,
-            }}
-          >
-            {iv}
-          </span>
-        ))}
-      </div>
+    <div className="relative w-full h-full min-h-[280px]"> 
       {loading && (
         <div
           className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"

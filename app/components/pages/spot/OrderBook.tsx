@@ -74,13 +74,10 @@ export default function OrderBookView({ poolName, pollMs = 2_000 }: OrderBookPro
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide" style={{ color: textSecondary }}>
-        <span>Order Book</span>
-        <span className="font-mono normal-case tracking-normal" style={{ color: textPrimary }}>
-          {poolName}
-        </span>
-      </div>
-      <div className="grid grid-cols-2 text-[10px] uppercase tracking-wide" style={{ color: textSecondary }}>
+      {/* Column header (Price / Size). The "Order Book" title and pool name
+          are now surfaced by the parent tab in `AdvancedMode.tsx`, so this
+          component skips its own header to avoid duplication. */}
+      <div className="grid grid-cols-2 text-[10px] uppercase tracking-wide px-2" style={{ color: textSecondary }}>
         <span>Price</span>
         <span className="text-right">Size</span>
       </div>
@@ -105,12 +102,12 @@ export default function OrderBookView({ poolName, pollMs = 2_000 }: OrderBookPro
         })}
       </div>
 
-      {/* Spread */}
+      {/* Spread — mid price is a relative rate (base per quote), no $ prefix. */}
       <div
         className="flex items-center justify-between px-2 py-1 text-[11px] font-mono"
         style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 4 }}
       >
-        <span style={{ color: textPrimary }}>${fmt(book.midPrice, 4)}</span>
+        <span style={{ color: textPrimary }}>{fmt(book.midPrice, 4)}</span>
         <span style={{ color: textSecondary }}>spread {fmt(book.spreadPercent, 3)}%</span>
       </div>
 

@@ -90,30 +90,35 @@ export default function TradePanel({ poolKey, baseAsset, quoteAsset, initialPric
   };
 
   return (
-    <div className="space-y-3">
-      {/* Order type tabs */}
-      <div className="grid grid-cols-2 gap-1.5">
+    <div className="space-y-4">
+      {/* Underline tab bar — Limit/Market order-type, then Buy/Sell side.
+          `border-b` on the parent plus a 2px transparent border on inactive
+          tabs (and 2px cyan/green/red on active) keeps the layout stable
+          when the active tab changes (no height jump). */}
+      <div
+        className="flex"
+        style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}
+      >
         {(['limit', 'market'] as const).map((t) => {
           const isActive = orderType === t;
           return (
             <button
               key={t}
               onClick={() => setOrderType(t)}
-              className="py-1.5 rounded-md text-xs font-semibold uppercase tracking-wide transition-colors"
+              className="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors relative"
               style={{
-                background: isActive ? 'rgba(62, 196, 192, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                border: `1px solid ${isActive ? 'rgba(62, 196, 192, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
                 color: isActive ? cyan : textSecondary,
+                borderBottom: isActive
+                  ? `2px solid ${cyan}`
+                  : '2px solid transparent',
+                marginBottom: '-1px',
               }}
             >
               {t}
             </button>
           );
         })}
-      </div>
-
-      {/* Buy/Sell tabs */}
-      <div className="grid grid-cols-2 gap-1.5">
+        <div className="flex-1" />
         {(['buy', 'sell'] as const).map((s) => {
           const isActive = side === s;
           const color = s === 'buy' ? green : red;
@@ -121,11 +126,13 @@ export default function TradePanel({ poolKey, baseAsset, quoteAsset, initialPric
             <button
               key={s}
               onClick={() => setSide(s)}
-              className="py-1.5 rounded-md text-xs font-semibold uppercase tracking-wide transition-colors"
+              className="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors relative"
               style={{
-                background: isActive ? `${color}1F` : 'rgba(255, 255, 255, 0.04)',
-                border: `1px solid ${isActive ? `${color}66` : 'rgba(255, 255, 255, 0.08)'}`,
                 color: isActive ? color : textSecondary,
+                borderBottom: isActive
+                  ? `2px solid ${color}`
+                  : '2px solid transparent',
+                marginBottom: '-1px',
               }}
             >
               {s} {baseAsset}

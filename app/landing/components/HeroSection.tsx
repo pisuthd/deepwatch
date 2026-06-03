@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import {   ArrowRight  } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import HeroVisualCards from './HeroVisualCards';
 
@@ -10,9 +10,9 @@ export default function HeroSection() {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-4 md:pt-24 pb-4 md:pb-16 px-6">
       <div className="relative z-10 max-w-6xl mx-auto w-full">
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-          
+
           {/* Left: Content - Always visible */}
-          <div className="text-center lg:text-left"> 
+          <div className="text-center lg:text-left">
 
             {/* Headline */}
             <motion.h1
@@ -35,8 +35,8 @@ export default function HeroSection() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
               className="text-base sm:text-lg text-gray-400 mb-6 lg:mb-8 max-w-lg mx-auto lg:mx-0 leading-relaxed"
-            > 
-             Get started with DeepBook Predict more simply with AI-curated insights from Polymarket, Kalshi and more via Tatum APIs, while every insight is shared on Walrus.
+            >
+              AI turns live SVI oracle data + Polymarket & Kalshi odds from Tatum APIs into clear, actionable insights — every analysis stored and shared on Walrus.
             </motion.p>
 
             {/* CTA Buttons */}
@@ -49,7 +49,7 @@ export default function HeroSection() {
               <Link
                 href="/app"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-accent-primary text-black font-semibold hover:bg-accent-primary-hover transition-all"
-              > 
+              >
                 Get Started
                 <ArrowRight size={16} />
               </Link>
@@ -63,8 +63,8 @@ export default function HeroSection() {
           </div>
 
           {/* Right: Abstract Visual - Hidden on mobile */}
-          <HeroVisualCards/>
-           
+          <HeroVisualCards />
+
 
         </div>
       </div>
