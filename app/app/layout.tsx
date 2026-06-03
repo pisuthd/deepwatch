@@ -22,7 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       'positions': 'positions', 
       'settings': 'settings',
     };
-    return pageMap[path] || 'predict';
+    return pageMap[path] || 'spot';
   };
 
   // PageId to route mapping
