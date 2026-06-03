@@ -13,14 +13,13 @@ import {
 
 const textSecondary = '#9ca3af';
 const muted = 'rgba(180,200,255,0.6)';
+const green = '#00E68A';
 
 interface CandlestickChartProps {
   fetchCandles: (interval: string) => Promise<{ time: number; open: number; high: number; low: number; close: number; volume: number }[]>;
   interval: string;
 }
-
-const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'];
-
+ 
 export default function CandlestickChart({ fetchCandles, interval }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -95,13 +94,17 @@ export default function CandlestickChart({ fetchCandles, interval }: Candlestick
         const candles = await fetchCandles(interval);
         if (cancelled) return;
         // Dedupe by timestamp (last-write-wins) then sort asc.
+        // Convert milliseconds to seconds for Lightweight Charts
         const deduped = new Map<number, { open: number; high: number; low: number; close: number }>();
         for (const c of candles) {
           deduped.set(c.time, { open: c.open, high: c.high, low: c.low, close: c.close });
         }
         const data = Array.from(deduped.entries())
           .sort(([a], [b]) => a - b)
-          .map(([time, v]) => ({ time: time as UTCTimestamp, ...v }));
+          .map(([time, v]) => ({ 
+            time: Math.floor(time / 1000) as UTCTimestamp, // Convert ms → seconds
+            ...v 
+          }));
         series.setData(data);
         chartRef.current?.timeScale().fitContent();
       } catch (e: any) {
@@ -123,7 +126,7 @@ export default function CandlestickChart({ fetchCandles, interval }: Candlestick
           style={{ color: textSecondary }}
         >
           <div className="flex items-center gap-2 text-xs">
-            <Loader2 size={14} className="animate-spin" style={{ color: '#3EC4C0' }} />
+            <Loader2 size={14} className="animate-spin" style={{ color: green }} />
             Loading chart…
           </div>
         </div>

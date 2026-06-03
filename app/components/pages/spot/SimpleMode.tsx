@@ -10,7 +10,6 @@ import SwapCard from './SwapCard';
 import { getCoinIcon } from '../../../lib/coinIcons';
 import { useNetwork } from '../../../context/NetworkContext';
 
-const cyan = '#3EC4C0';
 const green = '#00E68A';
 const red = '#ef4444';
 const textPrimary = '#ffffff';
@@ -20,6 +19,12 @@ const textSecondary = '#9ca3af';
 // readably (without either drowning in trailing zeros or losing precision).
 function formatPrice(n: number | undefined): string {
   if (n === undefined || n === null || !Number.isFinite(n) || n === 0) return '—';
+  if (n >= 10000) {
+    return n.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+  }
   if (n >= 1000) {
     return n.toLocaleString(undefined, {
       minimumFractionDigits: 2,
@@ -226,9 +231,8 @@ export default function SpotSimpleMode() {
                       </span>
                       <ChevronDown
                         size={14}
-                        className={`shrink-0 transition-transform ${
-                          selectorOpen ? 'rotate-180' : ''
-                        }`}
+                        className={`shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''
+                          }`}
                         style={{ color: textSecondary }}
                       />
                     </div>
@@ -253,8 +257,6 @@ export default function SpotSimpleMode() {
                   >
                     {pools.map((p) => {
 
-                      console.log("pool : ", p)
-
                       const isActive = p.poolName === currentPoolKey;
                       const change = p.change24h ?? 0;
                       return (
@@ -264,7 +266,7 @@ export default function SpotSimpleMode() {
                           className="w-full px-3 py-2.5 text-left transition-colors"
                           style={{
                             background: isActive
-                              ? 'rgba(62, 196, 192, 0.12)'
+                              ? 'rgba(0, 230, 138, 0.12)'
                               : 'transparent',
                           }}
                           onMouseEnter={(e) => {
@@ -370,7 +372,7 @@ export default function SpotSimpleMode() {
                 label="Bid / Ask"
                 value={
                   currentPool.highestBid !== undefined &&
-                  currentPool.lowestAsk !== undefined
+                    currentPool.lowestAsk !== undefined
                     ? `${formatPrice(currentPool.highestBid)} / ${formatPrice(currentPool.lowestAsk)}`
                     : '—'
                 }

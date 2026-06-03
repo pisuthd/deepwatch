@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
 import { useSpotPools, type SpotPool } from '../../../hooks/useSpotPools';
 import { useCurrentPool, useSetCurrentPool } from './CurrentPoolContext';
 import CandlestickChart from './CandlestickChart';
-import OrderBookView from './OrderBook';
-import TradePanel from './TradePanel';
+import AdvancedSwapCard from './AdvancedSwapCard';
 import GlassCard from '../../common/GlassCard';
 import { getCoinIcon } from '../../../lib/coinIcons';
 
@@ -19,8 +17,6 @@ const textSecondary = '#9ca3af';
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const;
 type Interval = (typeof INTERVALS)[number];
-
-type TradingTab = 'orderbook' | 'trade';
 
 // Adaptive price formatter (mirrors `SimpleMode.formatPrice`).
 function formatPrice(n: number | undefined): string {
@@ -70,44 +66,11 @@ function Stat({
   );
 }
 
-/**
- * Underline-style tab button with animated underline indicator.
- * Uses framer-motion layoutId for smooth sliding animation.
- */
-function UnderlineTab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`relative pb-3 px-3 text-sm font-medium transition-colors duration-200 ${
-        active ? 'text-white' : 'text-gray-500 hover:text-gray-300'
-      }`}
-    >
-      {children}
-      {active && (
-        <motion.div
-          layoutId="spotActiveTab"
-          className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary"
-          transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-        />
-      )}
-    </button>
-  );
-}
-
 export default function SpotAdvancedMode() {
   const { pools, loading, getOHLCV } = useSpotPools();
   const { poolKey, baseAsset, quoteAsset } = useCurrentPool();
   const setCurrentPool = useSetCurrentPool();
   const [interval, setInterval] = useState<Interval>('4h');
-  const [tab, setTab] = useState<TradingTab>('orderbook');
   const [selectorOpen, setSelectorOpen] = useState(false);
   const selectorRef = useRef<HTMLDivElement>(null);
 
@@ -181,8 +144,8 @@ export default function SpotAdvancedMode() {
   }
 
   return (
-    <div className="grid grid-cols-7 gap-4 mx-auto"> 
-      <GlassCard overflow="visible" className="col-span-5 relative z-20">
+    <div className="grid grid-cols-12 gap-4 mx-auto">
+      <GlassCard overflow="visible" className="col-span-8 relative z-20">
         {currentPool && baseAsset && quoteAsset ? (
           <>
             {/* Row 1: Pair selector (compact) + Price + 24h change */}
@@ -277,9 +240,7 @@ export default function SpotAdvancedMode() {
               )}
             </div>
 
-            {/* Chart with interval selector — fixed 400px height so the
-                chart always renders the same vertical real estate regardless
-                of the active tab in card 2. */}
+            {/* Chart with interval selector — fixed 400px height. */}
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <span
@@ -322,35 +283,10 @@ export default function SpotAdvancedMode() {
         )}
       </GlassCard>
 
-      {/* ── Card 2: Order Book / Trade (underline tabs) ────────────────── */}
+      {/* ── Card 2: Compact swap panel (stacked layout for narrow column) ── */}
       {currentPool && baseAsset && quoteAsset && poolKey && (
-        <GlassCard className="flex flex-col col-span-2 overflow-hidden">
-          <div className="flex shrink-0 ">
-            <UnderlineTab
-              active={tab === 'orderbook'}
-              onClick={() => setTab('orderbook')}
-            >
-              Order Book
-            </UnderlineTab>
-            <UnderlineTab
-              active={tab === 'trade'}
-              onClick={() => setTab('trade')}
-            >
-              Trade
-            </UnderlineTab>
-          </div>
-
-          <div className="pt-4 flex-1 overflow-y-auto min-h-0">
-            {tab === 'orderbook' ? (
-              <OrderBookView poolName={poolKey} />
-            ) : (
-              <TradePanel
-                poolKey={poolKey}
-                baseAsset={baseAsset}
-                quoteAsset={quoteAsset}
-              />
-            )}
-          </div>
+        <GlassCard className="col-span-4">
+          <AdvancedSwapCard poolKey={poolKey} baseAsset={baseAsset} quoteAsset={quoteAsset} />
         </GlassCard>
       )}
     </div>

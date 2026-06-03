@@ -6,7 +6,6 @@ import { getCoinIcon } from '../../../lib/coinIcons';
 import GlassCard from '../../common/GlassCard';
 import Image from 'next/image';
 
-const cyan = '#3EC4C0';
 const green = '#00E68A';
 const red = '#ef4444';
 const textPrimary = '#ffffff';
@@ -102,10 +101,10 @@ export default function MarketsList({ pools, activePoolKey }: MarketsListProps) 
                 className="flex-shrink-0 w-44 p-2.5 rounded-lg text-left transition-colors"
                 style={{
                   background: isActive
-                    ? 'rgba(62, 196, 192, 0.10)'
+                    ? 'rgba(0, 230, 138, 0.10)'
                     : 'rgba(255, 255, 255, 0.03)',
                   border: `1px solid ${
-                    isActive ? 'rgba(62, 196, 192, 0.40)' : 'rgba(255, 255, 255, 0.06)'
+                    isActive ? 'rgba(0, 230, 138, 0.40)' : 'rgba(255, 255, 255, 0.06)'
                   }`,
                 }}
               >

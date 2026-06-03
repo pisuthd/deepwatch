@@ -42,11 +42,8 @@ function rateFor(parsedFrom: number, toAmount: number, fromAsset: string, toAsse
  * direction is user-toggleable via the arrow button in the middle of the
  * input row — flipping it also swaps input/output values (Uniswap-style).
  *
- * The branch ladder mirrors `BinaryTradeModal`:
- *  - no account     → ConnectButton
- *  - no manager     → "Create Balance Manager at Overview"
- *  - insufficient   → disabled CTA with hint
- *  - else           → swap
+ * Spot trading is wallet-coin: the user's wallet pays the input amount and
+ * receives the output. No BalanceManager, no caps, no extra wallet popups.
  */
 type Direction = 'b2q' | 'q2b';
 
@@ -54,12 +51,10 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
   const {
-    managerId,
     sdk,
-    balances,
+    walletBalances,
     swapExactBaseForQuote,
     swapExactQuoteForBase,
-    refreshBalances,
     refreshWalletBalances,
     error: sdkError,
   } = useDeepbook();
@@ -75,12 +70,19 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
   const [direction, setDirection] = useState<Direction>('b2q');
 
   // Derive which asset is currently on the "from" side and which is on the
-  // "to" side, plus the matching balance. The pool key is unchanged either
-  // way — DeepBook is bidirectional; only the swap function differs.
+  // "to" side, plus the matching wallet balance. The pool key is unchanged
+  // either way — DeepBook is bidirectional; only the swap function differs.
   const fromAsset = direction === 'b2q' ? baseAsset : quoteAsset;
   const toAsset = direction === 'b2q' ? quoteAsset : baseAsset;
   const fromBalance: number = (() => {
-    const found: CoinBalance | undefined = balances.find((b) => b.coinKey === fromAsset);
+    const found: CoinBalance | undefined = walletBalances.find((b) => b.coinKey === fromAsset);
+    return found?.amount ?? 0;
+  })();
+  // Show the TO asset's wallet balance too — gives the user context for what
+  // they'll have left after the swap (and surfaces "you have 0 DBUSDC" before
+  // they try to swap quote → base on an empty wallet).
+  const toBalance: number = (() => {
+    const found: CoinBalance | undefined = walletBalances.find((b) => b.coinKey === toAsset);
     return found?.amount ?? 0;
   })();
 
@@ -88,17 +90,13 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
   const insufficient = parsed > 0 && parsed > fromBalance;
 
   // ─── Balance refresh ────────────────────────────────────────────────────────
-  // `useDeepbook` keeps its state local per component, so a deposit made in
-  // the Account Overview popover does NOT propagate to this card's `balances`.
-  // Re-fetch the active market's wallet + manager balances on mount, when the
-  // pool/account/manager changes, and on a 5s poll so the FROM balance stays
-  // in sync with external changes (deposits, withdraws, swaps).
+  // Wallet balances are polled so the FROM input reflects external transfers
+  // and previous swaps within a few seconds. No manager involved.
   useEffect(() => {
     if (!account) return;
     let cancelled = false;
     const refresh = () => {
       if (cancelled) return;
-      if (managerId) refreshBalances([baseAsset, quoteAsset]);
       refreshWalletBalances([baseAsset, quoteAsset]);
     };
     refresh();
@@ -107,15 +105,7 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
       cancelled = true;
       clearInterval(id);
     };
-  }, [
-    account,
-    managerId,
-    poolKey,
-    baseAsset,
-    quoteAsset,
-    refreshBalances,
-    refreshWalletBalances,
-  ]);
+  }, [account, poolKey, baseAsset, quoteAsset, refreshWalletBalances]);
 
   // Fetch the output for the current direction. `b2q` quotes quote-out for a
   // base-in amount; `q2b` quotes base-out for a quote-in amount. Debounced so
@@ -187,7 +177,6 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
       setFromAmount('');
       setToAmount('0');
       // Force an immediate refresh on top of the poll.
-      if (managerId) await refreshBalances([baseAsset, quoteAsset]);
       await refreshWalletBalances([baseAsset, quoteAsset]);
     } catch (e: any) {
       setError(e?.message ?? 'Swap failed');
@@ -283,6 +272,9 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
             style={{ color: textSecondary }}
           >
             <span>To (est)</span>
+            <span className="font-mono truncate">
+              Bal: {fmtNum(toBalance, 4)} {toAsset}
+            </span>
             {quoteLoading && <Loader2 size={10} className="animate-spin shrink-0" />}
           </div>
           <div
@@ -315,7 +307,12 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
         </div>
       </div>
 
-      {/* Info row — rate + min received only. Pool removed. */}
+      {/* Info row — rate + min received only. Pool removed. The placeholder
+          branches: "Calculating…" while the SDK quote is in flight, a real
+          rate once we have an output, "Low liquidity" if the quote came
+          back zero (DeepBook testnet pools are sparsely populated, so this
+          is the expected state on testnet for many sizes), or the
+          neutral "—" / `1 X ≈ — Y` when no amount is typed. */}
       <div
         className="rounded-lg p-2.5 text-[11px] space-y-1.5"
         style={{ background: 'rgba(255, 255, 255, 0.03)' }}
@@ -323,13 +320,25 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
         <div className="flex items-center justify-between" style={{ color: textSecondary }}>
           <span>Rate</span>
           <span className="font-mono" style={{ color: textPrimary }}>
-            {rateFor(parsed, outNum, fromAsset, toAsset)}
+            {quoteLoading
+              ? 'Calculating…'
+              : parsed > 0 && outNum > 0
+                ? rateFor(parsed, outNum, fromAsset, toAsset)
+                : parsed > 0
+                  ? 'Low liquidity'
+                  : `1 ${fromAsset} ≈ — ${toAsset}`}
           </span>
         </div>
         <div className="flex items-center justify-between" style={{ color: textSecondary }}>
           <span>Min received ({slipPct}% slippage)</span>
           <span className="font-mono" style={{ color: parsed > 0 ? green : textPrimary }}>
-            {parsed > 0 ? `${fmtNum(minOut, 6)} ${toAsset}` : '—'}
+            {quoteLoading
+              ? 'Calculating…'
+              : parsed > 0
+                ? outNum > 0
+                  ? `${fmtNum(minOut, 6)} ${toAsset}`
+                  : 'Low liquidity'
+                : '—'}
           </span>
         </div>
       </div>
@@ -343,17 +352,12 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
         </div>
       )}
 
-      {/* Submit branch ladder */}
+      {/* Submit branch ladder — wallet-coin swap, no manager.
+          `!account` is the only gate: no BalanceManager to create, no caps
+          to mint, no extra popups. */}
       {!account ? (
         <div className="text-center text-xs py-2" style={{ color: textSecondary }}>
           Connect your wallet to swap.
-        </div>
-      ) : !managerId ? (
-        <div
-          className="rounded-lg p-2.5 text-xs text-center"
-          style={{ background: 'rgba(0, 230, 138, 0.08)', color: green }}
-        >
-          Create a Balance Manager in Overview to start swapping.
         </div>
       ) : (
         <button
