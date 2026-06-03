@@ -27,7 +27,7 @@ function MainnetWarning() {
     if (hasToast('predict-mainnet-warning')) return;
     notify('DeepBook Predict is still on Testnet.', {
       variant: 'warning',
-      title: 'Wrong network',
+      title: 'Not Supported',
       duration: 8000,
       key: 'predict-mainnet-warning',
       action: {

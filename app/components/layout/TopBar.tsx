@@ -2,7 +2,8 @@
 
 import { ChevronRight, ChevronDown, Check } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import {  useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNetwork } from '../../context/NetworkContext';
 
 const ConnectButton = dynamic(
@@ -67,26 +68,34 @@ export default function TopBar({ activePage }: TopBarProps) {
           />
         </button>
 
-        {isNetworkOpen && (
-          <div className="absolute top-full right-0 mt-2 w-44 py-1 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] z-50 overflow-hidden shadow-lg shadow-black/20">
-            {networkOptions.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => { 
-                  setNetwork(opt.value);
-                  setIsNetworkOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-sidebar-hover)] transition-colors"
-              >
-                <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotClass}`} />
-                <span className="text-xs font-medium text-[var(--color-text-primary)] flex-1">{opt.label}</span>
-                {opt.value === network && (
-                  <Check size={12} className="text-[var(--color-accent-primary)]" />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
+        <AnimatePresence>
+          {isNetworkOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="absolute top-full right-0 mt-2 w-44 py-1 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] z-50 overflow-hidden shadow-lg shadow-black/20"
+            >
+              {networkOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    setNetwork(opt.value);
+                    setIsNetworkOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-sidebar-hover)] transition-colors"
+                >
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotClass}`} />
+                  <span className="text-xs font-medium text-[var(--color-text-primary)] flex-1">{opt.label}</span>
+                  {opt.value === network && (
+                    <Check size={12} className="text-[var(--color-accent-primary)]" />
+                  )}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {isConnected ? (
