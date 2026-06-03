@@ -188,7 +188,7 @@ export default function SpotAdvancedMode() {
             {/* Row 1: Pair selector (compact) + Price + 24h change */}
             <div className="flex items-center gap-6">
               {/* Compact pair selector */}
-              <div ref={selectorRef} className="relative shrink-0 w-40">
+              <div ref={selectorRef} className="relative shrink-0 w-[200px]">
                 <button
                   onClick={() => setSelectorOpen(!selectorOpen)}
                   className="flex items-center gap-2 w-full text-left rounded-lg hover:bg-white/5 transition-colors"

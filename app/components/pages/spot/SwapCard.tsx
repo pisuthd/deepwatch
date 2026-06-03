@@ -7,7 +7,6 @@ import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
 import { useDeepbook, type CoinBalance } from '../../../hooks/useDeepbook';
 import { getCoinIcon } from '../../../lib/coinIcons';
 
-const cyan = '#3EC4C0';
 const green = '#00E68A';
 const red = '#ef4444';
 const textPrimary = '#ffffff';
@@ -19,12 +18,22 @@ interface SwapCardProps {
   quoteAsset: string;
 }
 
+const SWAP_SLIPPAGE_BPS = 50; // 0.5%
+const BALANCE_POLL_MS = 5_000;
+
 function fmtNum(n: number, digits = 6): string {
   if (!Number.isFinite(n) || n === 0) return '0';
   return n.toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: digits,
   });
+}
+
+function rateFor(parsedFrom: number, toAmount: number, fromAsset: string, toAsset: string) {
+  if (parsedFrom <= 0) return `1 ${fromAsset} ≈ — ${toAsset}`;
+  const r = toAmount / parsedFrom;
+  if (!Number.isFinite(r) || r <= 0) return `1 ${fromAsset} ≈ — ${toAsset}`;
+  return `1 ${fromAsset} ≈ ${fmtNum(r, 6)} ${toAsset}`;
 }
 
 /**
@@ -51,6 +60,7 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
     swapExactBaseForQuote,
     swapExactQuoteForBase,
     refreshBalances,
+    refreshWalletBalances,
     error: sdkError,
   } = useDeepbook();
 
@@ -76,6 +86,36 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
 
   const parsed = parseFloat(fromAmount) || 0;
   const insufficient = parsed > 0 && parsed > fromBalance;
+
+  // ─── Balance refresh ────────────────────────────────────────────────────────
+  // `useDeepbook` keeps its state local per component, so a deposit made in
+  // the Account Overview popover does NOT propagate to this card's `balances`.
+  // Re-fetch the active market's wallet + manager balances on mount, when the
+  // pool/account/manager changes, and on a 5s poll so the FROM balance stays
+  // in sync with external changes (deposits, withdraws, swaps).
+  useEffect(() => {
+    if (!account) return;
+    let cancelled = false;
+    const refresh = () => {
+      if (cancelled) return;
+      if (managerId) refreshBalances([baseAsset, quoteAsset]);
+      refreshWalletBalances([baseAsset, quoteAsset]);
+    };
+    refresh();
+    const id = setInterval(refresh, BALANCE_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [
+    account,
+    managerId,
+    poolKey,
+    baseAsset,
+    quoteAsset,
+    refreshBalances,
+    refreshWalletBalances,
+  ]);
 
   // Fetch the output for the current direction. `b2q` quotes quote-out for a
   // base-in amount; `q2b` quotes base-out for a quote-in amount. Debounced so
@@ -128,7 +168,7 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
     setSubmitting(true);
     setError(null);
     try {
-      const minOut = Math.max(0, (Number(toAmount) || 0) * 0.995); // 50bps default
+      const minOut = Math.max(0, (Number(toAmount) || 0) * (1 - SWAP_SLIPPAGE_BPS / 10_000));
       if (direction === 'b2q') {
         await swapExactBaseForQuote(
           dAppKit.signAndExecuteTransaction,
@@ -146,13 +186,19 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
       }
       setFromAmount('');
       setToAmount('0');
-      await refreshBalances([baseAsset, quoteAsset]);
+      // Force an immediate refresh on top of the poll.
+      if (managerId) await refreshBalances([baseAsset, quoteAsset]);
+      await refreshWalletBalances([baseAsset, quoteAsset]);
     } catch (e: any) {
       setError(e?.message ?? 'Swap failed');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const outNum = Number(toAmount) || 0;
+  const minOut = outNum * (1 - SWAP_SLIPPAGE_BPS / 10_000);
+  const slipPct = (SWAP_SLIPPAGE_BPS / 100).toFixed(1);
 
   return (
     <div className="space-y-3">
@@ -191,7 +237,7 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
               onClick={() => setFromAmount(fromBalance > 0 ? String(fromBalance) : '0')}
               disabled={fromBalance <= 0}
               className="px-2 py-2.5 text-[11px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              style={{ color: cyan }}
+              style={{ color: green }}
             >
               MAX
             </button>
@@ -219,9 +265,9 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
             onClick={flipDirection}
             className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-white/10 active:scale-95"
             style={{
-              background: 'rgba(62, 196, 192, 0.10)',
-              border: '1px solid rgba(62, 196, 192, 0.35)',
-              color: cyan,
+              background: 'rgba(0, 230, 138, 0.10)',
+              border: '1px solid rgba(0, 230, 138, 0.35)',
+              color: green,
             }}
             title={`Switch to ${toAsset} → ${fromAsset}`}
             aria-label="Switch swap direction"
@@ -250,7 +296,7 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
               className="flex-1 min-w-0 px-3 py-2.5 text-sm font-mono truncate"
               style={{ color: textPrimary }}
             >
-              {fmtNum(Number(toAmount), 6)}
+              {fmtNum(outNum, 6)}
             </div>
             <div
               className="px-3 py-2.5 text-xs font-semibold border-l shrink-0 flex items-center gap-1.5"
@@ -269,27 +315,21 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
         </div>
       </div>
 
-      {/* Info row */}
+      {/* Info row — rate + min received only. Pool removed. */}
       <div
-        className="rounded-lg p-2.5 text-[11px] space-y-1"
+        className="rounded-lg p-2.5 text-[11px] space-y-1.5"
         style={{ background: 'rgba(255, 255, 255, 0.03)' }}
       >
         <div className="flex items-center justify-between" style={{ color: textSecondary }}>
           <span>Rate</span>
           <span className="font-mono" style={{ color: textPrimary }}>
-            1 {fromAsset} ≈ {parsed > 0 ? fmtNum(Number(toAmount) / parsed, 6) : '—'} {toAsset}
+            {rateFor(parsed, outNum, fromAsset, toAsset)}
           </span>
         </div>
         <div className="flex items-center justify-between" style={{ color: textSecondary }}>
-          <span>Min received (0.5%)</span>
-          <span className="font-mono" style={{ color: textPrimary }}>
-            {fmtNum(Number(toAmount) * 0.995, 6)} {toAsset}
-          </span>
-        </div>
-        <div className="flex items-center justify-between" style={{ color: textSecondary }}>
-          <span>Pool</span>
-          <span className="font-mono" style={{ color: textPrimary }}>
-            {poolKey}
+          <span>Min received ({slipPct}% slippage)</span>
+          <span className="font-mono" style={{ color: parsed > 0 ? green : textPrimary }}>
+            {parsed > 0 ? `${fmtNum(minOut, 6)} ${toAsset}` : '—'}
           </span>
         </div>
       </div>
@@ -311,7 +351,7 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
       ) : !managerId ? (
         <div
           className="rounded-lg p-2.5 text-xs text-center"
-          style={{ background: 'rgba(62, 196, 192, 0.08)', color: cyan }}
+          style={{ background: 'rgba(0, 230, 138, 0.08)', color: green }}
         >
           Create a Balance Manager in Overview to start swapping.
         </div>
