@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { useCurrentNetwork } from '@mysten/dapp-kit-react';
 
 export type Network = 'mainnet' | 'testnet';
 
@@ -13,26 +14,38 @@ const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'deepwatch-network';
 
-function readInitialNetwork(): Network {
-  if (typeof window === 'undefined') return 'mainnet';
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === 'mainnet' || stored === 'testnet' ? stored : 'mainnet';
-}
-
 export function NetworkProvider({ children }: { children: ReactNode }) {
-  // Read localStorage synchronously so hooks that depend on `network`
-  // (indexer URLs, RPC, coin types) don't fetch the wrong one on first render.
-  const [network, setNetworkState] = useState<Network>(readInitialNetwork);
+  const dappKitNetwork = useCurrentNetwork();
+  const [localNetwork, setLocalNetwork] = useState<Network>(() => {
+    if (typeof window === 'undefined') return 'mainnet';
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    return (stored === 'mainnet' || stored === 'testnet' ? stored : 'mainnet') as Network;
+  });
 
-  const setNetwork = (newNetwork: Network) => {
-    setNetworkState(newNetwork);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, newNetwork);
+  // Sync localStorage preference
+  useEffect(() => {
+    if (typeof window !== 'undefined' && dappKitNetwork !== localNetwork) {
+      // When dapp-kit network changes, update local state
+      setLocalNetwork(dappKitNetwork as Network);
     }
+  }, [dappKitNetwork]);
+
+  const setNetwork = (network: Network) => {
+    setLocalNetwork(network);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_KEY, network);
+    }
+    // Trigger re-render by updating state
+    setLocalNetwork(network);
+  };
+
+  const contextValue: NetworkContextType = {
+    network: localNetwork,
+    setNetwork,
   };
 
   return (
-    <NetworkContext.Provider value={{ network, setNetwork }}>
+    <NetworkContext.Provider value={contextValue}>
       {children}
     </NetworkContext.Provider>
   );

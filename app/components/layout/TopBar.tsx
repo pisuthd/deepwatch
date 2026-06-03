@@ -4,7 +4,8 @@ import { ChevronRight, ChevronDown, Check } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNetwork } from '../../context/NetworkContext';
+import { useCurrentNetwork } from '@mysten/dapp-kit-react';
+import { dAppKit } from '../../dapp-kit';
 
 const ConnectButton = dynamic(
   () =>
@@ -24,7 +25,7 @@ interface TopBarProps {
 
 export default function TopBar({ activePage }: TopBarProps) {
   const { isConnected, disconnect } = useWallet();
-  const { network, setNetwork } = useNetwork();
+  const network = useCurrentNetwork() as 'mainnet' | 'testnet';
   const [isNetworkOpen, setIsNetworkOpen] = useState(false);
   const networkRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +82,7 @@ export default function TopBar({ activePage }: TopBarProps) {
                 <button
                   key={opt.value}
                   onClick={() => {
-                    setNetwork(opt.value);
+                    dAppKit.switchNetwork(opt.value);
                     setIsNetworkOpen(false);
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--color-sidebar-hover)] transition-colors"

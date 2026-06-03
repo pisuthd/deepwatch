@@ -7,12 +7,12 @@ import { dAppKit } from './dapp-kit';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <NetworkProvider>
-      <ToastProvider>
-        <DAppKitProvider dAppKit={dAppKit}>
+    <DAppKitProvider dAppKit={dAppKit}>
+      <NetworkProvider>
+        <ToastProvider>
           {children}
-        </DAppKitProvider>
-      </ToastProvider>
-    </NetworkProvider>
+        </ToastProvider>
+      </NetworkProvider>
+    </DAppKitProvider>
   );
 }

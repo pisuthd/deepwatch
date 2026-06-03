@@ -20,7 +20,7 @@ import {
 import {
   deepbook,
   mainnetCoins,
-  mainnetPackageIds,
+  // mainnetPackageIds,
   mainnetPools,
   testnetCoins,
   testnetPools,
@@ -43,8 +43,8 @@ import { useNetworkConfig } from './useNetworkConfig';
 // constants — the SDK's `deepbook()` config fully replaces the defaults when
 // `packageIds` is provided (missing fields fall back to `''`), so we have to
 // pass the complete object.
-const MAINNET_DEEPBOOK_PACKAGE_ID_OVERRIDE =
-  '0x337f4f4f6567fcd778d5454f27c16c70e2f274cc6377ea6249ddf491482ef497';
+// const MAINNET_DEEPBOOK_PACKAGE_ID_OVERRIDE =
+//   '0x337f4f4f6567fcd778d5454f27c16c70e2f274cc6377ea6249ddf491482ef497';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +72,7 @@ export function useDeepbook() {
     () => (network === 'mainnet' ? mainnetCoins : testnetCoins),
     [network],
   );
+ 
 
   const sdk = useMemo(() => {
     if (!account) return null;
@@ -85,12 +86,12 @@ export function useDeepbook() {
         // `mainnetPackageIds` are still current, so we spread them and just
         // swap in the new `DEEPBOOK_PACKAGE_ID`. Testnet uses the bundled
         // defaults (no `packageIds` passed).
-        ...(network === 'mainnet' && {
-          packageIds: {
-            ...mainnetPackageIds,
-            DEEPBOOK_PACKAGE_ID: MAINNET_DEEPBOOK_PACKAGE_ID_OVERRIDE,
-          },
-        }),
+        // ...(network === 'mainnet' && {
+        //   packageIds: {
+        //     ...mainnetPackageIds,
+        //     DEEPBOOK_PACKAGE_ID: MAINNET_DEEPBOOK_PACKAGE_ID_OVERRIDE,
+        //   },
+        // }),
       }),
     );
   }, [account, network, cfg.fullnodeGrpc, coinTable]);
@@ -108,10 +109,11 @@ export function useDeepbook() {
         const coin = (coinTable as Record<string, { type: string; scalar: number }>)[coinKey];
         if (!coin) continue;
         try {
+          
           const res = await suiClient.listCoins({
             owner: account.address,
             coinType: coin.type,
-          });
+          }); 
           const objs = res.objects ?? [];
           const totalRaw = objs.reduce<bigint>((acc, o) => acc + BigInt(o.balance), BigInt(0));
           const scalarNum = Number(coin.scalar);
