@@ -19,8 +19,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       'add-insight': 'add-insight',
       'recent-insights': 'recent-insights',
       'account-overview': 'account-overview',
-      'positions': 'positions',
-      'buy-dbusdc': 'buy-dbusdc',
+      'positions': 'positions', 
       'settings': 'settings',
     };
     return pageMap[path] || 'predict';
@@ -34,8 +33,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     'add-insight': '/app/add-insight',
     'recent-insights': '/app/recent-insights',
     'account-overview': '/app/account-overview',
-    'positions': '/app/positions',
-    'buy-dbusdc': '/app/buy-dbusdc',
+    'positions': '/app/positions', 
     'settings': '/app/settings',
   };
 

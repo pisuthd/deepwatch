@@ -1,4 +1,4 @@
-export type PageId = 'predict' | 'spot' | 'margin' | 'account-overview' | 'positions' | 'buy-dbusdc' | 'add-insight' | 'recent-insights' | 'settings';
+export type PageId = 'predict' | 'spot' | 'margin' | 'account-overview' | 'positions' | 'add-insight' | 'recent-insights' | 'settings';
 
 export interface NavItem {
   icon: string;
@@ -35,8 +35,7 @@ export const routeMeta: Record<PageId, { category: string; label: string }> = {
   'spot': { category: 'Trade', label: 'Spot' },
   'margin': { category: 'Trade', label: 'Margin' },
   'account-overview': { category: 'Account', label: 'Overview' },
-  'positions': { category: 'Account', label: 'Positions' },
-  'buy-dbusdc': { category: 'Account', label: 'Buy DBUSDC' },
+  'positions': { category: 'Account', label: 'Positions' }, 
   'add-insight': { category: 'Account', label: 'Add Insight' },
   'recent-insights': { category: 'Account', label: 'Recent Insights' },
   'settings': { category: 'Settings', label: 'Settings' },
