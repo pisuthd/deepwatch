@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import HeroVisualCards from './HeroVisualCards';
+import HeroScreenshotCarousel from './HeroScreenshotCarousel';
 
 export default function HeroSection() {
   return (
@@ -62,8 +62,8 @@ export default function HeroSection() {
             </motion.div>
           </div>
 
-          {/* Right: Abstract Visual - Hidden on mobile */}
-          <HeroVisualCards />
+          {/* Right: Screenshots carousel - Hidden on mobile */}
+          <HeroScreenshotCarousel />
 
 
         </div>

@@ -179,7 +179,7 @@ export default function InsightPopover({ onClose }: Props) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {!!TATUM_API_KEY && rows.length > 0 && (
+              {/* {!!TATUM_API_KEY && rows.length > 0 && (
                 <div className="w-36">
                   <GlassDropdown
                     options={filterOptions}
@@ -189,7 +189,7 @@ export default function InsightPopover({ onClose }: Props) {
                     showValue={false}
                   />
                 </div>
-              )}
+              )} */}
               <button
                 onClick={onClose}
                 className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-white/10"
