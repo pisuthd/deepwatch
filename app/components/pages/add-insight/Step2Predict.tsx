@@ -20,8 +20,8 @@ export default function Step2Predict({ asset, value, onChange }: Props) {
   return (
     <StepHeader
       number={2}
-      title="Predict market"
-      description="Capture a snapshot of the SVI surface, spot/forward, the 5 standard-strike IVs, and the last 30 spot prices for one BTC predict market. This data is what the AI will cite when it writes the analysis."
+      title="Volatility snapshot"
+      description="Pull a full overview of the BTC volatility surface for one predict market: the current price, where the market expects BTC to settle, and how jumpy the market thinks it will be at five reference prices. Powered by Block Scholes' SVI model and surfaced through the DeepBook Predict oracle."
     >
       <PredictCard asset={asset} value={value} onChange={onChange} />
     </StepHeader>

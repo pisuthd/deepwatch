@@ -20,8 +20,8 @@ export default function Step3Polymarket({ apiKey, value, onChange }: Props) {
   return (
     <StepHeader
       number={3}
-      title="Polymarket"
-      description="Pick one or more BTC prediction markets from Polymarket. The default search is 'bitcoin' with the 'up-or-down' tag, active markets only — change either field to broaden the search. Tick the markets you want cited in the analysis."
+      title="Polymarket odds"
+      description="Real-time prediction markets about Bitcoin, pulled live from Polymarket via Tatum. The five highest-volume markets are picked for you. Drop any you don't want cited."
     >
       <PolymarketCard apiKey={apiKey} value={value} onChange={onChange} />
     </StepHeader>

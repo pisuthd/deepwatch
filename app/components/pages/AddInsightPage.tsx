@@ -31,7 +31,7 @@ const TATUM_API_KEY = process.env.NEXT_PUBLIC_TATUM_API_KEY ?? '';
 
 const STEPS = [
   { id: 1, label: 'Title' },
-  { id: 2, label: 'Predict' },
+  { id: 2, label: 'Volatility' },
   { id: 3, label: 'Polymarket' },
   { id: 4, label: 'Kalshi' },
   { id: 5, label: 'Generate' },
@@ -201,7 +201,7 @@ export default function AddInsightPage() {
 
       const enqueued = await uploadInsightToWalrus(file, TATUM_API_KEY);
       notify(
-        `Submitted as ${insightFilename(asset, timestamp)} — check Recent Insights once it certifies.`,
+        'Submitted — open Recent Insights to see it once it finalises.',
         { variant: 'info', title: 'Uploading' },
       );
 
@@ -222,12 +222,12 @@ export default function AddInsightPage() {
           });
           if (final.status === 'CERTIFIED') {
             notify(
-              `Published (blob ${(final.blobId ?? '').slice(0, 10)}…)`,
+              'Published — your insight is live on-chain.',
               { variant: 'success', title: 'Insight certified' },
             );
           } else if (final.status === 'FAILED') {
             notify(
-              final.errorMessage ?? 'Tatum rejected the upload.',
+              final.errorMessage ?? 'Upload was rejected.',
               { variant: 'error', title: 'Upload failed' },
             );
           }

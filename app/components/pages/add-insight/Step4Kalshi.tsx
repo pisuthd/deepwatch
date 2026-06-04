@@ -18,8 +18,8 @@ export default function Step4Kalshi({ value, onChange }: Props) {
   return (
     <StepHeader
       number={4}
-      title="Kalshi"
-      description="List Kalshi market tickers (e.g. KXELONMARS-99) — one per line. Each line is checked against the ticker format; invalid entries are skipped. Kalshi search is intentionally not wired up; manual entry is the only path."
+      title="Kalshi tickers"
+      description="List the Kalshi markets you want cited (e.g. KXBTCD-99), one ticker per line. We check each line for the right format and skip anything invalid. We don't pull live Kalshi odds here — type the markets you want the AI to reference."
     >
       <KalshiCard value={value} onChange={onChange} />
     </StepHeader>

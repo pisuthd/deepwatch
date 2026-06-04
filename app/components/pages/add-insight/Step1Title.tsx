@@ -2,16 +2,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import GlassDropdown from '../../common/GlassDropdown';
+import { getCoinIcon } from '../../../lib/coinIcons';
 import type { InsightAsset } from '../../../lib/insights';
 import StepHeader from './StepHeader';
 
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 
-const ASSET_OPTIONS: { value: InsightAsset; label: string }[] = [
-  { value: 'BTC', label: 'BTC' },
-  { value: 'SUI', label: 'SUI' },
-  { value: 'WAL', label: 'WAL' },
+// Each option shows the project's CoinMarketCap logo in the dropdown
+// (see `getCoinIcon`). The `value` stays as the bare ticker because
+// downstream code in `insights.ts` and the predict/polymarket hooks
+// switch on `'BTC' | 'SUI' | 'WAL'` strings.
+const ASSET_OPTIONS: { value: InsightAsset; label: string; icon: string }[] = [
+  { value: 'BTC', label: 'Bitcoin (BTC)', icon: getCoinIcon('BTC') },
+  { value: 'SUI', label: 'Sui (SUI)',    icon: getCoinIcon('SUI') },
+  { value: 'WAL', label: 'Walrus (WAL)', icon: getCoinIcon('WAL') },
 ];
 
 const inputStyle: React.CSSProperties = {
@@ -65,7 +70,7 @@ export default function Step1Title({ title, setTitle, asset, setAsset }: Props) 
     <StepHeader
       number={1}
       title="Title & asset"
-      description="A short heading for the insight. The default is auto-generated from the asset and today's date — edit it freely if you want a different angle. Pick the asset to scope the available data cards on the next steps."
+      description="Give your insight a heading. We auto-generate one from the asset and the date — change it if you want a different angle. The asset also determines which data cards are available next."
     >
       <div className="space-y-6">
         <div>
@@ -101,6 +106,7 @@ export default function Step1Title({ title, setTitle, asset, setAsset }: Props) 
               options={ASSET_OPTIONS}
               value={asset}
               onChange={(v) => setAsset(v as InsightAsset)}
+              showValue={false}
             />
           </div>
         </div>

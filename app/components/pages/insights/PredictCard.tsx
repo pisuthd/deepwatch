@@ -169,7 +169,7 @@ export default function PredictCard({ asset, value, onChange }: Props) {
               Predict market analysis
             </div>
             <div className="text-xs mt-0.5" style={{ color: textSecondary }}>
-              Snapshot of SVI parameters, implied vols at standard strikes, recent spot.
+              Spot, expected price, and the full SVI volatility curve — five reference strikes from −10% to +10%.
             </div>
           </div>
         </div>

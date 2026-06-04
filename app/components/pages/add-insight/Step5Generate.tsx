@@ -98,38 +98,36 @@ export default function Step5Generate(props: Props) {
 
   return (
     <div className="space-y-6">
-      {/* ─── Summary ──────────────────────────────────────────────── */}
+      {/* ─── Review card ──────────────────────────────────────────── */}
       <GlassCard className="p-8">
         <h2 className="text-lg font-semibold" style={{ color: textPrimary }}>
-          Review what you've collected
+          Review your insight
         </h2>
         <p className="text-sm mt-1" style={{ color: textSecondary }}>
-          A short summary of the data that will be passed to MiniMax and
-          embedded in the published blob. Use the stepper at the top to
-          jump back and change anything.
+          Here's a quick summary of what will go into your insight.
+          Jump back to any step to change something.
         </p>
-
         <div className="mt-6 space-y-3">
           <Row label="Title"      value={title || '—'} />
           <Row label="Asset"      value={asset} />
           <Row label="Predict"    value={predictLabel} />
           <Row label="Polymarket" value={polyLabel} />
           <Row label="Kalshi"     value={kalshiLabel} />
-        </div>
 
-        {!hasAnyCard && (
-          <div
-            className="mt-6 rounded-lg p-3 text-xs border"
-            style={{
-              background: 'rgba(234, 179, 8, 0.08)',
-              borderColor: 'rgba(234, 179, 8, 0.3)',
-              color: yellow,
-            }}
-          >
-            No data sources are selected. Go back to steps 2-4 to add at
-            least one, otherwise the AI will have very little to write about.
-          </div>
-        )}
+          {!hasAnyCard && (
+            <div
+              className="mt-6 rounded-lg p-3 text-xs border"
+              style={{
+                background: 'rgba(234, 179, 8, 0.08)',
+                borderColor: 'rgba(234, 179, 8, 0.3)',
+                color: yellow,
+              }}
+            >
+              No data sources are selected. Go back to steps 2-4 to add at
+              least one, otherwise the AI will have very little to write about.
+            </div>
+          )}
+        </div>
       </GlassCard>
 
       {/* ─── AI generation ───────────────────────────────────────── */}
@@ -140,9 +138,10 @@ export default function Step5Generate(props: Props) {
               AI analysis
             </h2>
             <p className="text-sm mt-1" style={{ color: textSecondary }}>
-              Click <b style={{ color: textPrimary }}>Generate</b> to ask
-              MiniMax to write a markdown analysis from the data above.
-              Tokens stream in as they're produced.
+              Click <b style={{ color: textPrimary }}>Generate</b> and
+              our AI reads the data you've collected and writes a
+              structured analysis for you. It thinks out loud while it
+              works — you can watch it reason in real time.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -168,7 +167,7 @@ export default function Step5Generate(props: Props) {
                 color: generating || !hasAnyCard ? textSecondary : '#000',
                 cursor: generating || !hasAnyCard ? 'not-allowed' : 'pointer',
               }}
-            > 
+            >
               {generating
                 ? 'Generating…'
                 : analysis.trim().length > 0
@@ -319,10 +318,10 @@ export default function Step5Generate(props: Props) {
       </button>
 
       <p className="text-xs leading-relaxed" style={{ color: textSecondary }}>
-        Insights are stored on <span style={{ color: textPrimary }}>Walrus</span> via{' '}
-        <span style={{ color: textPrimary }}>Tatum</span>. The on-chain blob is publicly
-        readable. Each upload is a single JSON file capped at{' '}
-        <span style={{ color: textPrimary }}>100 KB</span>.
+        Your insight is published to a public, on-chain storage network (
+        <span style={{ color: textPrimary }}>Walrus</span>) via the{' '}
+        <span style={{ color: textPrimary }}>Tatum</span> storage API.
+        The full text is permanently readable by anyone with the link.
       </p>
     </div>
   );

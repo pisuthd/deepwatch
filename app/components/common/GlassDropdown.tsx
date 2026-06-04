@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronDown } from 'lucide-react';
+import Image from 'next/image';
 import { useState } from 'react';
 
 const green = '#00E68A';
@@ -15,6 +16,14 @@ interface Option {
    * expiry" market.
    */
   badge?: string;
+  /**
+   * Optional icon URL rendered as a small round image to the left of
+   * the label in both the closed trigger and the open panel. Used by
+   * the asset picker in Step 1. Non-asset dropdowns (e.g. the predict
+   * oracle id picker) leave this unset and the dropdown renders the
+   * label only.
+   */
+  icon?: string;
 }
 
 interface GlassDropdownProps {
@@ -30,6 +39,12 @@ interface GlassDropdownProps {
    * predict oracle id — the expiry label is the meaningful signal).
    */
   showValue?: boolean;
+  /**
+   * If true, never render an icon column even if the selected option
+   * provides one. Default false. (Reserved for non-asset dropdowns
+   * that may later pass icons in by mistake — currently unused.)
+   */
+  hideIcon?: boolean;
 }
 
 export default function GlassDropdown({
@@ -38,6 +53,7 @@ export default function GlassDropdown({
   onChange,
   placeholder = 'Select...',
   showValue = true,
+  hideIcon = false,
 }: GlassDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find(o => o.value === value);
@@ -51,8 +67,20 @@ export default function GlassDropdown({
         <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 to-transparent" />
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-        <span className="relative z-10 text-sm leading-none text-gray-300">
-          {selected?.label || placeholder}
+        <span className="relative z-10 flex items-center gap-2 min-w-0">
+          {!hideIcon && selected?.icon && (
+            <Image
+              src={selected.icon}
+              alt=""
+              width={14}
+              height={14}
+              className="rounded-full flex-shrink-0"
+              unoptimized
+            />
+          )}
+          <span className="text-sm leading-none text-gray-300 truncate">
+            {selected?.label || placeholder}
+          </span>
         </span>
 
         <span className="relative z-10 flex items-center gap-2">
@@ -87,7 +115,19 @@ export default function GlassDropdown({
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium truncate">{option.label}</span>
+                <span className="flex items-center gap-2 min-w-0">
+                  {!hideIcon && option.icon && (
+                    <Image
+                      src={option.icon}
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="rounded-full flex-shrink-0"
+                      unoptimized
+                    />
+                  )}
+                  <span className="text-sm font-medium truncate">{option.label}</span>
+                </span>
                 <span className="flex items-center gap-2 flex-shrink-0">
                   {option.badge && (
                     <span

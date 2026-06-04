@@ -139,7 +139,7 @@ export default function PolymarketCard({ apiKey, value, onChange }: Props) {
               </div>
             </div>
             <div className="text-xs mt-0.5" style={{ color: textSecondary }}>
-              Auto-picks the {TOP_N} most meaningful BTC markets (highest volume, non-5M). Drop any you don't want.
+              Top {TOP_N} BTC markets by trading volume, refreshing live from Polymarket.
             </div>
           </div>
         </div>

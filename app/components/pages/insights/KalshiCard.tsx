@@ -76,7 +76,7 @@ export default function KalshiCard({ value, onChange }: Props) {
               Kalshi
             </div>
             <div className="text-xs mt-0.5" style={{ color: textSecondary }}>
-              Manually list Kalshi market tickers (e.g. <code>KXELONMARS-99</code>). One per line.
+              Paste Kalshi market tickers, one per line. We don't pull live odds — type the markets you want cited.
             </div>
           </div>
         </div>
