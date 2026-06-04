@@ -12,7 +12,7 @@ import {
 import PageWrapper from '../common/PageWrapper';
 import GlassCard from '../common/GlassCard';
 import GlassDropdown from '../common/GlassDropdown';
-import MarkdownRenderer from '../common/MarkdownRenderer';
+import InsightBodyView from './insights/InsightBodyView';
 import { useToast } from '../../context/ToastContext';
 import {
   INSIGHT_ASSETS,
@@ -574,23 +574,7 @@ function InsightDetail({
                 Could not load the on-chain body.
               </p>
             ) : (
-              <div className="space-y-2">
-                {(bodyState.tag || bodyState.source) && (
-                  <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono" style={{ color: textSecondary }}>
-                    {bodyState.tag && (
-                      <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                        tag: {bodyState.tag}
-                      </span>
-                    )}
-                    {bodyState.source && (
-                      <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                        source: {bodyState.source}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <MarkdownRenderer content={bodyState.analysis} />
-              </div>
+              <InsightBodyView body={bodyState} />
             )}
           </div>
         </div>
