@@ -27,8 +27,9 @@ export default function LandingHeader() {
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
-                    <a href="#what-is-deepbook-predict" className="text-gray-400 hover:text-white transition-colors">What is DeepBook Predict</a>
+                    <a href="/app" className="text-gray-400 hover:text-white transition-colors">Trade</a>
                     <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors">How It Works</a>
+                    <a href="https://github.com/pisuthd/deepwatch" target='_blank' className="text-gray-400 hover:text-white transition-colors">GitHub</a>
                 </nav>
 
                 {/* CTA Button */}

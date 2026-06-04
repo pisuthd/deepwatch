@@ -1,27 +1,27 @@
 'use client';
 
-import { motion } from 'framer-motion'; 
+import { motion } from 'framer-motion';
 
-export default function HowItWorksSection() { 
+export default function HowItWorksSection() {
 
   const steps = [
     {
       step: '01',
-      title: 'Discover Markets',
+      title: 'Generate Insight with AI',
       description:
-        'Browse DeepBook Predict markets expiring < 4 hours, and manage your DeepBook account in one place.',
+        'Skip SVI technical market data. Read human-readable insights generated and shared on Walrus.',
     },
     {
       step: '02',
-      title: 'Read Insights',
+      title: 'Enrich with Tatum API',
       description:
-        'Skip SVI technical market data. Read human-readable insights generated and shared on Walrus.',
+        'Add real-time odds from Polymarket and Kalshi via Tatum API to strengthen your analysis.',
     },
     {
       step: '03',
       title: 'Trade Instantly',
       description:
-        'One-click links to mint positions directly on DeepBook Predict. No friction, just action.',
+        'Execute on spot, margin, or predict markets with one click. No friction, just action.',
     },
   ]
 
@@ -34,7 +34,7 @@ export default function HowItWorksSection() {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <h2 className={`text-4xl font-bold mb-4 ${true ? 'text-gradient-white' : 'text-gradient-light'}`}>
+          <h2 className="text-4xl font-bold mb-4 text-gradient-white">
             How DeepWatch Works
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
@@ -50,9 +50,9 @@ export default function HowItWorksSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.2 }}
-              className={`relative rounded-2xl p-8 ${true ? 'border border-white/10' : 'border border-black/5 shadow-lg'}`}
+              className="relative rounded-2xl p-8 border border-white/10"
               style={{
-                background: true ? 'rgba(26, 29, 46, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                background: 'rgba(26, 29, 46, 0.6)',
                 backdropFilter: 'blur(20px)',
               }}
             >
