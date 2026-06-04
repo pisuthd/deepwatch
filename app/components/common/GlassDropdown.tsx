@@ -3,9 +3,18 @@
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
+const green = '#00E68A';
+
 interface Option {
   value: string;
   label: string;
+  /**
+   * Optional short tag rendered as a small pill on the right side of
+   * the option in both the closed trigger and the open panel. Used
+   * e.g. by the predict market dropdown to mark the "closest to 1d
+   * expiry" market.
+   */
+  badge?: string;
 }
 
 interface GlassDropdownProps {
@@ -13,9 +22,23 @@ interface GlassDropdownProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /**
+   * Whether to show the right-hand `value` column (the option's `value`
+   * field, typically a backend id) in the closed trigger and the open
+   * panel. Defaults to `true`; set `false` for dropdowns where the id
+   * is an internal identifier the user doesn't need to see (e.g. the
+   * predict oracle id — the expiry label is the meaningful signal).
+   */
+  showValue?: boolean;
 }
 
-export default function GlassDropdown({ options, value, onChange, placeholder = 'Select...' }: GlassDropdownProps) {
+export default function GlassDropdown({
+  options,
+  value,
+  onChange,
+  placeholder = 'Select...',
+  showValue = true,
+}: GlassDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find(o => o.value === value);
 
@@ -27,13 +50,23 @@ export default function GlassDropdown({ options, value, onChange, placeholder = 
       >
         <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 to-transparent" />
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-        
+
         <span className="relative z-10 text-sm leading-none text-gray-300">
           {selected?.label || placeholder}
         </span>
-        
+
         <span className="relative z-10 flex items-center gap-2">
-          <span className="text-xs text-gray-500">{selected?.value || ''}</span>
+          {selected?.badge && (
+            <span
+              className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide"
+              style={{ background: 'rgba(0,230,138,0.15)', color: green }}
+            >
+              {selected.badge}
+            </span>
+          )}
+          {showValue && (
+            <span className="text-xs text-gray-500">{selected?.value || ''}</span>
+          )}
           <ChevronDown size={14} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </span>
       </button>
@@ -53,9 +86,21 @@ export default function GlassDropdown({ options, value, onChange, placeholder = 
                   : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{option.label}</span>
-                <span className="text-xs text-gray-500">{option.value}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium truncate">{option.label}</span>
+                <span className="flex items-center gap-2 flex-shrink-0">
+                  {option.badge && (
+                    <span
+                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide"
+                      style={{ background: 'rgba(0,230,138,0.15)', color: green }}
+                    >
+                      {option.badge}
+                    </span>
+                  )}
+                  {showValue && (
+                    <span className="text-xs text-gray-500">{option.value}</span>
+                  )}
+                </span>
               </div>
             </button>
           ))}

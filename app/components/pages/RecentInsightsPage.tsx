@@ -111,7 +111,6 @@ export default function RecentInsightsPage() {
     setLoading(true);
     try {
       const jobs = await listWalrusUploads(TATUM_API_KEY, { limit: 100 });
-      console.log("jobs", jobs)
       const rows = jobs.map(jobToRow).filter((r): r is InsightRow => r !== null);
       rows.sort((a, b) => b.timestamp - a.timestamp);
       setRows(rows);
@@ -590,7 +589,7 @@ function InsightDetail({
                     )}
                   </div>
                 )}
-                <MarkdownRenderer content={bodyState.markdown} />
+                <MarkdownRenderer content={bodyState.analysis} />
               </div>
             )}
           </div>

@@ -21,7 +21,7 @@
  * client-side env var by design.
  */
 
-const TATUM_BASE_URL = 'https://api.tatum.io';
+export const TATUM_BASE_URL = 'https://api.tatum.io';
 
 export type WalrusUploadStatus = 'PENDING' | 'UPLOADING' | 'CERTIFIED' | 'FAILED';
 export type WalrusRenewalBillingStatus =
@@ -151,7 +151,7 @@ export async function pollWalrusStatus(
   return last!;
 }
 
-function describeTatumError(body: unknown): string | null {
+export function describeTatumError(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null;
   const b = body as Record<string, unknown>;
   if (typeof b.message === 'string') return b.message;
@@ -184,8 +184,7 @@ export async function listWalrusUploads(
       `List failed (${res.status}): ${describeTatumError(body) ?? res.statusText}`,
     );
   }
-  const data = await res.json();
-  console.log("data :", data)
+  const data = await res.json(); 
   return Array.isArray(data) ? (data as WalrusStorageJobStatusResponse[]) : [];
 }
 
