@@ -1,12 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Zap } from 'lucide-react'; 
-import type { PageId } from '../../types/navigation';
+import { ArrowRight, Zap , TowerControl } from 'lucide-react';
+import Link from 'next/link'; 
 
- 
 
-export default function WelcomeCard() { 
+
+export default function WelcomeCard() {
 
   const isDark = true
 
@@ -47,24 +47,19 @@ export default function WelcomeCard() {
       <div className="flex items-start justify-between relative z-10">
         <div className="flex-1">
           <h2 className={`text-xl font-bold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Welcome to SnapPredict
+            Welcome to DeepWatch
           </h2>
           <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Your AI-powered prediction platform. Get started by exploring the features below.
+            Your intelligence layer for DeepBook — spot, margin, and predict, with AI-curated insights on every DeepBook markets.
           </p>
 
-          <button
-           // onClick={() => onNavigate('chat')}
-            className={`inline-flex items-center gap-2 font-medium text-sm transition-colors text-accent-primary hover:text-accent-primary/80`}
+          <Link
+            href="/app/spot"
+            className="inline-flex items-center gap-1.5 font-semibold text-sm transition-colors text-accent-primary hover:text-accent-primary-hover"
           >
-            Start Chat
-          </button>
-          <button
-            // onClick={() => onNavigate('overview')}
-            className={`ml-4 inline-flex items-center gap-2 font-medium text-sm transition-colors text-accent-primary hover:text-accent-primary/80`}
-          >
-            View Overview
-          </button>
+            Trade Now
+            <ArrowRight size={14} />
+          </Link>
         </div>
 
         {/* Icon with blur glow circle */}
@@ -74,7 +69,7 @@ export default function WelcomeCard() {
           {/* Solid circle */}
           <div className={`absolute inset-0 rounded-2xl ${isDark ? 'bg-[var(--color-bg-elevated)]' : 'bg-white'} ${isDark ? 'border border-white/10' : 'border border-black/10'} shadow-sm`} />
           {/* Icon */}
-          <Zap size={24} className={`relative z-10 ${isDark ? 'text-white' : 'text-gray-700'}`} />
+          <TowerControl size={24} className={`relative z-10 ${isDark ? 'text-white' : 'text-gray-700'}`} />
         </div>
       </div>
     </motion.div>

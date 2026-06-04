@@ -1,26 +1,48 @@
 'use client';
 
-import { Shield } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeftRight, ChevronRight, Globe, Layers, Shield, TrendingUp } from 'lucide-react';
 import StatCard from '../common/StatCard';
 import WelcomeCard from '../common/WelcomeCard';
 import PageWrapper from '../common/PageWrapper';
 import PredictManagerPanel from './overview/PredictManagerPanel';
-import type { PageId } from '../../types/navigation';
 
-interface OverviewPageProps { 
+
+interface OverviewPageProps {
 }
 
-export default function OverviewPage({  }: OverviewPageProps) {
+const QUICK_ACTIONS = [
+  {
+    label: 'Spot',
+    description: 'Swap on DeepBook V3 pools',
+    href: '/app/spot',
+    icon: ArrowLeftRight,
+  },
+  {
+    label: 'Predict',
+    description: 'Binary options on settlement markets',
+    href: '/app/predict',
+    icon: TrendingUp,
+  },
+  {
+    label: 'Margin',
+    description: 'Coming soon...',
+    href: '/app/margin',
+    icon: Layers,
+  },
+] as const;
+
+export default function OverviewPage({ }: OverviewPageProps) {
   return (
     <PageWrapper title="Overview">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <WelcomeCard />
+        <WelcomeCard /> 
         <StatCard
-          title="Powered by"
-          value="AI Models"
-          subtitle="Advanced prediction engine"
-          icon={Shield}
-          accentColor="purple"
+          title="Live on"
+          value="Sui"
+          subtitle="Mainnet + Testnet"
+          icon={Globe}
+          accentColor="blue"
         />
       </div>
 
@@ -37,8 +59,25 @@ export default function OverviewPage({  }: OverviewPageProps) {
         >
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent" />
           <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-          <h3 className="text-lg font-bold mb-4 text-white">Recent Activity</h3>
-          <p className="text-gray-400 text-sm">No recent activity yet. Start a chat to begin making predictions.</p>
+          <h3 className="text-lg font-bold mb-4 text-white">Quick Actions</h3>
+          <div className="space-y-2">
+            {QUICK_ACTIONS.map((action) => (
+              <Link
+                key={action.label}
+                href={action.href}
+                className="flex items-center gap-3 p-3 rounded-xl border border-white/5 hover:border-accent-primary/30 hover:bg-white/[0.02] transition-colors group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-accent-primary/10 flex items-center justify-center group-hover:bg-accent-primary/20 transition-colors">
+                  <action.icon size={16} className="text-accent-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">{action.label}</p>
+                  <p className="text-xs text-gray-400">{action.description}</p>
+                </div>
+                <ChevronRight size={14} className="text-gray-500 group-hover:text-accent-primary transition-colors" />
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </PageWrapper>
