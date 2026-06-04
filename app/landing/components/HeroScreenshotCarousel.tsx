@@ -41,7 +41,7 @@ export default function HeroScreenshotCarousel() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.7, delay: 0.2 }}
-            className="hidden lg:block"
+            className="block my-8 md:my-0"
         >
             <div className="relative w-full max-w-2xl mx-auto">
                 {/* Glow */}

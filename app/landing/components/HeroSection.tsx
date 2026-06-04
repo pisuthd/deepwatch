@@ -7,7 +7,7 @@ import HeroScreenshotCarousel from './HeroScreenshotCarousel';
 
 export default function HeroSection() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-4 md:pt-24 pb-4 md:pb-16 px-6">
+    <section className="relative  flex items-center justify-center overflow-hidden pt-32 md:pt-24 pb-4 md:pb-16 px-6">
       <div className="relative z-10 max-w-6xl mx-auto w-full">
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
 

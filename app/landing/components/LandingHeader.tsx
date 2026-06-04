@@ -3,9 +3,9 @@
 import { motion } from 'framer-motion';
 import { TowerControl, Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import Link from 'next/link'; 
+import Link from 'next/link';
 
-export default function LandingHeader() { 
+export default function LandingHeader() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     return (
@@ -60,8 +60,9 @@ export default function LandingHeader() {
                     className="md:hidden mt-4 pt-4 border-t border-white/10"
                 >
                     <nav className="flex flex-col gap-4">
-                        <a href="#what-is-deepbook-predict" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">What is DeepBook Predict</a>
+                        <a href="/app" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Trade</a>
                         <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">How It Works</a>
+                        <a href="https://github.com/pisuthd/deepwatch" target='_blank' onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">GitHub</a>
                         <Link
                             href="/app"
                             onClick={() => setIsMenuOpen(false)}
