@@ -19,7 +19,7 @@ export default function Step4Kalshi({ value, onChange }: Props) {
     <StepHeader
       number={4}
       title="Kalshi tickers"
-      description="List the Kalshi markets you want cited (e.g. KXBTCD-99), one ticker per line. We check each line for the right format and skip anything invalid. We don't pull live Kalshi odds here — type the markets you want the AI to reference."
+      description="List the Kalshi markets you want cited (e.g. KXBTCD-99), one ticker per line. We check each line for the right format and skip anything invalid."
     >
       <KalshiCard value={value} onChange={onChange} />
     </StepHeader>

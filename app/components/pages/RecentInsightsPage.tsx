@@ -46,7 +46,7 @@ const STATUS_COLORS: Record<
   FAILED: { bg: 'rgba(239, 68, 68, 0.15)', text: red, label: 'FAILED' },
 };
 
-const FILTER_ALL = '__all__';
+const FILTER_ALL = 'ALL';
 
 function fmtRelative(ts: number): string {
   const diff = Date.now() - ts;
@@ -250,7 +250,7 @@ export default function RecentInsightsPage() {
       <div className="space-y-4">
         {/* Header row */}
         <div className="flex items-center gap-3">
-          <button
+          {/* <button
             onClick={() => void fetchList()}
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
@@ -262,7 +262,7 @@ export default function RecentInsightsPage() {
           >
             {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
             Refresh
-          </button>
+          </button> */}
           <div className="w-44">
             <GlassDropdown
               options={filterOptions}

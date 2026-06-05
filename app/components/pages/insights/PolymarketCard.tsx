@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import GlassCard from '../../common/GlassCard';
 import {
   searchPredictionMarkets,
@@ -132,10 +132,9 @@ export default function PolymarketCard({ apiKey, value, onChange }: Props) {
             className="mt-1"
           />
           <div className="flex-1">
-            <div className="flex items-center gap-1.5">
-              <Sparkles size={12} style={{ color: green }} />
+            <div className="flex items-center gap-1.5"> 
               <div className="text-sm font-semibold" style={{ color: textPrimary }}>
-                Polymarket
+                Polymarket BTC
               </div>
             </div>
             <div className="text-xs mt-0.5" style={{ color: textSecondary }}>

@@ -6,17 +6,14 @@ import { getCoinIcon } from '../../../lib/coinIcons';
 import type { InsightAsset } from '../../../lib/insights';
 import StepHeader from './StepHeader';
 
-const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 
-// Each option shows the project's CoinMarketCap logo in the dropdown
-// (see `getCoinIcon`). The `value` stays as the bare ticker because
-// downstream code in `insights.ts` and the predict/polymarket hooks
-// switch on `'BTC' | 'SUI' | 'WAL'` strings.
 const ASSET_OPTIONS: { value: InsightAsset; label: string; icon: string }[] = [
   { value: 'BTC', label: 'Bitcoin (BTC)', icon: getCoinIcon('BTC') },
-  { value: 'SUI', label: 'Sui (SUI)',    icon: getCoinIcon('SUI') },
-  { value: 'WAL', label: 'Walrus (WAL)', icon: getCoinIcon('WAL') },
+];
+
+const DEPLOY_OPTIONS: { value: string; label: string; icon: string }[] = [
+  { value: 'walrus', label: 'Walrus Mainnet via Tatum', icon: getCoinIcon('WAL') },
 ];
 
 const inputStyle: React.CSSProperties = {
@@ -29,6 +26,8 @@ interface Props {
   setTitle: (v: string) => void;
   asset: InsightAsset;
   setAsset: (v: InsightAsset) => void;
+  deployTo: string;
+  setDeployTo: (v: string) => void;
 }
 
 /**
@@ -45,7 +44,7 @@ export function defaultInsightTitle(asset: InsightAsset, date: Date = new Date()
 }
 
 /**
- * Step 1 — title + asset.
+ * Step 1 — title + asset + deploy to.
  *
  * The title is pre-filled with a sensible default ("BTC price outlook
  * 4 June 2026" on first load) and re-generates as the user switches
@@ -53,7 +52,7 @@ export function defaultInsightTitle(asset: InsightAsset, date: Date = new Date()
  * user's edit is preserved. The date is frozen on first mount so the
  * title doesn't shift if the page is left open past midnight.
  */
-export default function Step1Title({ title, setTitle, asset, setAsset }: Props) {
+export default function Step1Title({ title, setTitle, asset, setAsset, deployTo, setDeployTo }: Props) {
   // The date is captured once on first mount and never updated, so
   // the auto-generated title stays consistent for the whole session.
   const initialDateRef = useRef<Date>(new Date());
@@ -70,7 +69,7 @@ export default function Step1Title({ title, setTitle, asset, setAsset }: Props) 
     <StepHeader
       number={1}
       title="Title & asset"
-      description="Give your insight a heading. We auto-generate one from the asset and the date — change it if you want a different angle. The asset also determines which data cards are available next."
+      description="Create an insight about a specific asset. We pull live SVI data, real-time odds from Polymarket and Kalshi, then distill everything into plain language — published to Walrus for the community."
     >
       <div className="space-y-6">
         <div>
@@ -93,23 +92,43 @@ export default function Step1Title({ title, setTitle, asset, setAsset }: Props) 
             autoFocus
           />
         </div>
+        <div className='grid grid-cols-2'>
+          <div>
+            <label
+              className="block text-[10px] uppercase tracking-wide mb-2"
+              style={{ color: textSecondary }}
+            >
+              Asset
+            </label>
+            <div className="max-w-xs">
+              <GlassDropdown
+                options={ASSET_OPTIONS}
+                value={asset}
+                onChange={(v) => setAsset(v as InsightAsset)}
+                showValue={false}
+              />
+            </div>
+          </div>
 
-        <div>
-          <label
-            className="block text-[10px] uppercase tracking-wide mb-2"
-            style={{ color: textSecondary }}
-          >
-            Asset
-          </label>
-          <div className="max-w-xs">
-            <GlassDropdown
-              options={ASSET_OPTIONS}
-              value={asset}
-              onChange={(v) => setAsset(v as InsightAsset)}
-              showValue={false}
-            />
+          <div>
+            <label
+              className="block text-[10px] uppercase tracking-wide mb-2"
+              style={{ color: textSecondary }}
+            >
+              Deploy to
+            </label>
+            <div className="max-w-xs">
+              <GlassDropdown
+                options={DEPLOY_OPTIONS}
+                value={deployTo}
+                onChange={setDeployTo}
+                showValue={false}
+              />
+            </div>
           </div>
         </div>
+
+
       </div>
     </StepHeader>
   );

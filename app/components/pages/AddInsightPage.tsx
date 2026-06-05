@@ -49,6 +49,7 @@ export default function AddInsightPage() {
   // ── Form state ───────────────────────────────────────────────────
   const [title, setTitle] = useState(() => defaultInsightTitle('BTC'));
   const [asset, setAsset] = useState<InsightAsset>('BTC');
+  const [deployTo, setDeployTo] = useState('walrus');
   const [predict, setPredict] = useState<PredictSnapshot | null>(null);
   const [polymarket, setPolymarket] = useState<PolymarketMarket[]>([]);
   const [kalshi, setKalshi] = useState<string[]>([]);
@@ -270,6 +271,7 @@ export default function AddInsightPage() {
               <Step1Title
                 title={title} setTitle={setTitle}
                 asset={asset} setAsset={setAsset}
+                deployTo={deployTo} setDeployTo={setDeployTo}
               />
             )}
             {step === 2 && (

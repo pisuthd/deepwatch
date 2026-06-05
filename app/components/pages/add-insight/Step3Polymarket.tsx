@@ -21,7 +21,7 @@ export default function Step3Polymarket({ apiKey, value, onChange }: Props) {
     <StepHeader
       number={3}
       title="Polymarket odds"
-      description="Real-time prediction markets about Bitcoin, pulled live from Polymarket via Tatum. The five highest-volume markets are picked for you. Drop any you don't want cited."
+      description="Real-time prediction market odds, pulled live from Tatum Data API. The five highest-volume markets are picked for you. Drop any you don't want cited."
     >
       <PolymarketCard apiKey={apiKey} value={value} onChange={onChange} />
     </StepHeader>
