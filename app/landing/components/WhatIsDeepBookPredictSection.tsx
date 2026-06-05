@@ -36,7 +36,7 @@ export default function WhatIsDeepBookPredictSection() {
         >
           <div className="text-gray-300 space-y-4">
             <p className="text-lg">
-              Unlike traditional prediction platforms, <span className="text-accent-primary font-semibold">DeepBook Predict</span> is designed for:
+              Unlike traditional prediction platforms, <span className="text-accent-primary font-semibold">DeepBook Predict</span> is designed with:
             </p>
             <ul className="space-y-3 text-base text-gray-300">
               <li className="flex items-start gap-3">
@@ -57,7 +57,7 @@ export default function WhatIsDeepBookPredictSection() {
               </li>
             </ul>
             <p className="text-gray-400">
-              <span className="text-accent-primary font-semibold">DeepWatch</span> builds on top of this foundation to help users discover and understand markets approaching settlement.
+              <span className="text-accent-primary font-semibold">DeepWatch</span> uses SVI data from the oracle, then distills everything into actionable insights for trading on all DeepBook markets.
             </p>
           </div>
         </motion.div>

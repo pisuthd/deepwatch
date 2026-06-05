@@ -1,42 +1,35 @@
-# DeepWatch
+# DeepWatch — The Intelligence Layer for DeepBook
 
-> The intelligence layer for DeepBook — an AI-augmented trading UI for Sui's DeepBook V3, with on-chain SVI surface data, Polymarket odds, and Kalshi tickers distilled into a markdown insight and pinned to Walrus.
+> DeepWatch uses live SVI oracle data, Polymarket & Kalshi odds via Tatum API — distilled into AI insights and published to Walrus for trading on all DeepBook markets (Spot, Margin, Predict).
 
-DeepWatch is a Sui-native web app that bundles three on-chain trading surfaces (spot, predict/binary options, margin) with a generative-AI insight feed. The insights are built in-app from real market state, streamed through a MiniMax model, and persisted as blobs on Walrus via Tatum so they're readable later from any client.
+DeepWatch is a Sui-native web app that bundles three on-chain trading surfaces (Spot, Margin, Predict) with a generative-AI insight feed. The insights are built from live SVI oracle data, enriched with Polymarket odds and Kalshi tickers via Tatum API, streamed through a MiniMax model, and persisted as blobs on Walrus so they're readable later from any client.
 
 ---
 
 ## What is DeepWatch
 
-**For traders.** DeepWatch gives you a single pane of glass over DeepBook V3 pools, DeepBook Predict binary options, and DeepBook margin — with an Insight button in the corner of every trading page that opens a feed of AI-generated market analyses. Each insight pulls in the SVI implied-vol surface for the current asset, the closest Polymarket markets, and any matching Kalshi tickers, so the prose is anchored in concrete numbers.
+**DeepWatch** is a unified trading terminal for all DeepBook markets — Spot, Margin, and Predict. We use AI to convert complex on-chain SVI data, enriched with Polymarket and Kalshi odds via Tatum API, into actionable insights for confident trading. All insights are shared on Walrus for the community to verify and reference.
 
-**For analysts.** The Add Insight wizard is a five-step composition surface: pick a title, attach a predict snapshot, attach Polymarket markets, attach Kalshi tickers, and let the model write the analysis. The result is published to Walrus and shows up on the Recent Insights page, where you can re-check the body, deep-link to the raw JSON, or revisit the underlying data sources.
-
-**For the curious.** Every insight body is a self-contained JSON blob with a deterministic filename (`insight-{ASSET}-{timestamp}.json`), so anyone with a Walrus aggregator can verify what the model said against the inputs it had.
+[DeepBook Predict](https://docs.sui.io/onchain-finance/deepbook-predict/) introduced institutional-grade prediction markets powered by Block Scholes oracle, but understanding the data isn't easy. DeepWatch bridges that gap — letting AI translate complex market signals into plain language anyone can act on.
 
 ---
 
-## Features
+## Highlight Features
 
-- **Spot trading** — DeepBook V3 pool swap, simple and advanced modes, candlestick chart. Route: [`/app/spot`](app/app/spot/page.tsx).
-- **Predict markets** — binary up/down options on DeepBook Predict with a live strike grid. Route: [`/app/predict`](app/app/predict/page.tsx). *Note: the underlying `predict-server` is testnet-only; mainnet users see a warning toast.*
-- **Margin** — DeepBook margin-manager flow, simple and advanced modes. Route: [`/app/margin`](app/app/margin/page.tsx).
-- **AI insights** — a 5-step wizard ([`/app/add-insight`](app/app/add-insight/page.tsx)) composes a markdown analysis from on-chain SVI surface data, Polymarket odds, and Kalshi tickers, then publishes the blob to Walrus via Tatum. The streaming model runs through `MiniMax` (Anthropic-compatible SSE) using the `MiniMax-M3` default model.
-- **Recent insights** — [`/app/recent-insights`](app/app/recent-insights/page.tsx) reads live from Tatum's Walrus list endpoint and lazily fetches full bodies.
-- **Network switching** — mainnet ↔ testnet, persisted to `localStorage`. The wallet switcher is in the top bar.
-- **Glass-morphism UI** — Tailwind v4 with a custom `@theme` block in [`app/globals.css`](app/globals.css) defining the neon-green primary (`#00E68A`), electric-blue secondary, and the Orbitron / Space Grotesk / Inter font stack.
+- **Production-ready DeepBook trading** — spot swaps, margin manager, and predict markets from the battle-tested DeepBook V3 stack, with a live candlestick chart, all under one terminal.
+- **DeepBook Predict, the easy way in** — Sui's new institutional-grade prediction markets (Block Scholes oracle pricing) ship dense data. DeepWatch turns it into plain-language insights so you can be early without the legwork.
+- **AI insights, published on Walrus** — a 5-step wizard composes a markdown analysis from on-chain SVI surface data, Polymarket odds, and Kalshi tickers, then publishes the blob for the community to verify and reference.
+- **Tatum-powered data layer** — Polymarket & Kalshi odds, Walrus upload/list, and Sui gRPC endpoints flow through Tatum APIs — one vendor, one key, no glue code.
 
 ## Tech stack
 
-- **Framework** — [Next.js](https://nextjs.org) 16.2.6 (see "Conventions" — this project pins a vendored build, not the upstream release) with the App Router, plus React 19.2.4.
-- **Language** — TypeScript 5, strict mode, `moduleResolution: "bundler"`, `@/*` path alias.
-- **Styling** — Tailwind CSS v4 with a single `@import "tailwindcss"` and a custom `@theme` block.
-- **Sui SDKs** — `@mysten/dapp-kit-react`, `@mysten/deepbook-v3`, `@mysten/sui` (`SuiGrpcClient`).
-- **AI** — `MiniMax` (Anthropic-compatible Messages API). The server route streams SSE; the client parses it incrementally.
-- **Storage** — Walrus via Tatum (browser-direct read paths, single `POST` for upload).
-- **UI** — `framer-motion` 12, `lucide-react`, `lightweight-charts` 5, `react-markdown` 10 + `remark-gfm` 4.
-- **State** — React Context only ([`NetworkContext`](app/context/NetworkContext.tsx), [`ToastContext`](app/context/ToastContext.tsx)). No Redux or Zustand.
-- **Tooling** — ESLint 9 (flat config, `eslint-config-next`), pnpm workspace config, no test framework configured.
+| Layer | What's used |
+| --- | --- |
+| Frontend | Next.js 16.2.6 · React 19.2.4 · TypeScript 5 · Tailwind v4 · `@mysten/dapp-kit-react` · `@mysten/deepbook-v3` · `@mysten/sui` (`SuiGrpcClient`) · framer-motion · lucide-react · lightweight-charts · react-markdown |
+| DeepBook | DeepBook V3 — Spot, Margin, and Predict markets on Sui |
+| Network | Sui mainnet (Spot) · Sui testnet (Spot, Predict) |
+| AI | Anthropic Claude 4.6 · MiniMax M3 (Anthropic-compatible) |
+| Tatum API | Sui gRPC endpoints · Storage API for Walrus · Prediction API · Price and Exchange Rate API |
 
 ---
 
@@ -119,7 +112,7 @@ deepwatch/
 | `/app/margin` | DeepBook margin manager (simple + advanced) |
 | `/app/add-insight` | 5-step wizard that publishes an AI insight to Walrus |
 | `/app/recent-insights` | Browse and read past published insights |
-| `/app/settings` | App settings |
+| `/app/download-agent` | Download AI trading agent (coming soon) |
 | `/api/insights/generate` | `POST` — server-proxied streaming MiniMax completion |
 
 ### Conventions & gotchas
