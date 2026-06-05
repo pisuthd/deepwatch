@@ -28,15 +28,7 @@ export default function PredictManagerPanel() {
 
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold" style={{ color: textPrimary }}>Predict Manager</h3>
-          {!!manager && (
-            <span
-              className="text-[10px] font-mono px-2 py-0.5 rounded"
-              style={{ background: 'rgba(0,230,138,0.08)', color: green }}
-            >
-              Connected
-            </span>
-          )}
+          <h3 className="text-lg font-bold" style={{ color: textPrimary }}>Predict Account</h3>
         </div>
 
         <PredictManagerContent />

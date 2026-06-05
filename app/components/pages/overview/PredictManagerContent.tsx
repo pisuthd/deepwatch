@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
-import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
+import { useCurrentAccount, useDAppKit, useCurrentNetwork } from '@mysten/dapp-kit-react';
 import { usePredict, DUSDC_SCALE } from '../../../hooks/usePredict';
+import { motion } from 'framer-motion';
 
 const ConnectButton = dynamic(
   () => import('@mysten/dapp-kit-react/ui').then((mod) => mod.ConnectButton),
@@ -13,7 +14,6 @@ const ConnectButton = dynamic(
 
 const green = '#00E68A';
 const red = '#ef4444';
-const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 
@@ -38,6 +38,7 @@ type Tab = 'deposit' | 'withdraw';
 export default function PredictManagerContent() {
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
+  const network = useCurrentNetwork() as 'mainnet' | 'testnet';
   const {
     manager,
     summary,
@@ -99,6 +100,22 @@ export default function PredictManagerContent() {
     }
   };
 
+  if (network === 'mainnet') {
+    return (
+      <div className="flex flex-col items-center gap-3 py-6 text-center">
+        <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mb-2">
+          <span className="text-xl">⚠️</span>
+        </div>
+        <p className="text-sm font-medium text-white">
+          DeepBook Predict is not available on Mainnet
+        </p>
+        <p className="text-xs" style={{ color: textSecondary }}>
+          Please switch to Testnet to use Predict features.
+        </p>
+      </div>
+    );
+  }
+
   if (!account) {
     return (
       <div className="flex flex-col items-center gap-2 py-6">
@@ -114,7 +131,7 @@ export default function PredictManagerContent() {
     return (
       <div className="flex flex-col items-center gap-3 py-4">
         <p className="text-sm text-center" style={{ color: textSecondary }}>
-          You don&apos;t have a Predict account yet. Create one to start trading.
+          You don't have a Predict account yet. Create one to start trading.
         </p>
         <button
           onClick={handleCreateManager}
@@ -150,7 +167,7 @@ export default function PredictManagerContent() {
           <div className="text-[10px] uppercase tracking-wide" style={{ color: textSecondary }}>
             Trading Balance
           </div>
-          <div className="text-xl font-mono font-bold mt-0.5" style={{ color: cyan }}>
+          <div className="text-xl font-mono font-bold mt-0.5" style={{ color: green }}>
             {fmtUsd(tradingBalance)}
           </div>
         </div>
@@ -169,8 +186,8 @@ export default function PredictManagerContent() {
         <MetricRow label="Exposure Ratio" value={`${exposureRatio.toFixed(1)}%`} color={textPrimary} />
       </div>
 
-      {/* Tabs */}
-      <div className="grid grid-cols-2 gap-1.5 mb-3">
+      {/* Tabs with Underline Indicator */}
+      <div className="flex gap-6 mb-4">
         {(['deposit', 'withdraw'] as const).map((t) => {
           const isActive = tab === t;
           return (
@@ -181,14 +198,18 @@ export default function PredictManagerContent() {
                 setAmount('');
                 setError(null);
               }}
-              className="py-2 rounded-md text-xs font-semibold uppercase tracking-wide transition-colors"
-              style={{
-                background: isActive ? 'rgba(62, 196, 192, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                border: `1px solid ${isActive ? 'rgba(62, 196, 192, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
-                color: isActive ? cyan : textSecondary,
-              }}
+              className={`relative pb-2 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                isActive ? 'text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
             >
               {t}
+              {isActive && (
+                <motion.div
+                  layoutId="predictTabIndicator"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
             </button>
           );
         })}
@@ -198,7 +219,7 @@ export default function PredictManagerContent() {
       <div className="flex items-center justify-between mb-1.5 text-[11px]" style={{ color: textSecondary }}>
         <span>Available</span>
         <span className="font-mono" style={{ color: textPrimary }}>
-          {availableForTab.toLocaleString(undefined, { maximumFractionDigits: 6 })} DBUSDC
+          {availableForTab.toLocaleString(undefined, { maximumFractionDigits: 6 })} DUSDC
         </span>
       </div>
 
@@ -227,7 +248,7 @@ export default function PredictManagerContent() {
           )}
           disabled={availableForTab <= 0}
           className="px-3 py-2.5 text-[11px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ color: cyan }}
+          style={{ color: green }}
         >
           MAX
         </button>
@@ -247,7 +268,7 @@ export default function PredictManagerContent() {
         disabled={submitting || parsedAmount <= 0 || insufficient}
         className="w-full py-2.5 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed"
         style={{
-          background: parsedAmount > 0 && !insufficient ? cyan : 'rgba(255, 255, 255, 0.08)',
+          background: parsedAmount > 0 && !insufficient ? green : 'rgba(255, 255, 255, 0.08)',
           color: parsedAmount > 0 && !insufficient ? '#000' : textSecondary,
           opacity: submitting ? 0.6 : 1,
         }}
@@ -257,7 +278,7 @@ export default function PredictManagerContent() {
           ? (tab === 'deposit' ? 'Depositing…' : 'Withdrawing…')
           : insufficient
             ? 'Insufficient balance'
-            : tab === 'deposit' ? 'Deposit DBUSDC' : 'Withdraw DBUSDC'}
+            : tab === 'deposit' ? 'Deposit DUSDC' : 'Withdraw DUSDC'}
       </button>
     </>
   );

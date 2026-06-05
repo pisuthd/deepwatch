@@ -41,14 +41,6 @@ export default function AccountOverviewPopover({ onClose }: AccountOverviewPopov
             Account Overview
           </h3>
           {!!manager && (
-            <span
-              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-              style={{ background: 'rgba(0,230,138,0.08)', color: green }}
-            >
-              Connected
-            </span>
-          )}
-          {!!manager && (
             <span className="text-[10px] font-mono" style={{ color: textSecondary }}>
               {tradingBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} DBUSDC
             </span>

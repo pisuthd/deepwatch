@@ -8,9 +8,7 @@ import PageWrapper from '../common/PageWrapper';
 import PredictManagerPanel from './overview/PredictManagerPanel';
 
 
-interface OverviewPageProps {
-}
-
+ 
 const QUICK_ACTIONS = [
   {
     label: 'Spot',
@@ -32,7 +30,7 @@ const QUICK_ACTIONS = [
   },
 ] as const;
 
-export default function OverviewPage({ }: OverviewPageProps) {
+export default function OverviewPage() {
   return (
     <PageWrapper title="Overview">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
