@@ -1,4 +1,4 @@
-export type PageId = 'predict' | 'spot' | 'margin' | 'account-overview' | 'positions' | 'add-insight' | 'recent-insights' | 'settings';
+export type PageId = 'predict' | 'spot' | 'margin' | 'account-overview' | 'positions' | 'add-insight' | 'recent-insights' | 'download-agent';
 
 export interface NavItem {
   icon: string;
@@ -37,5 +37,5 @@ export const routeMeta: Record<PageId, { category: string; label: string }> = {
   'positions': { category: 'Account', label: 'Positions' }, 
   'add-insight': { category: 'Account', label: 'Add Insight' },
   'recent-insights': { category: 'Account', label: 'Recent Insights' },
-  'settings': { category: 'Settings', label: 'Settings' },
+  'download-agent': { category: 'Tools', label: 'Download Agent' },
 };

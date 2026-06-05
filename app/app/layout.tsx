@@ -20,7 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       'recent-insights': 'recent-insights',
       'account-overview': 'account-overview',
       'positions': 'positions', 
-      'settings': 'settings',
+      'download-agent': 'download-agent',
     };
     return pageMap[path] || 'spot';
   };
@@ -34,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     'recent-insights': '/app/recent-insights',
     'account-overview': '/app/account-overview',
     'positions': '/app/positions', 
-    'settings': '/app/settings',
+    'download-agent': '/app/download-agent',
   };
 
   const handleNavigate = (pageId: PageId) => {

@@ -18,7 +18,8 @@ import {
   Archive,
   Sparkles,
   Sparkle,
-  Goal
+  Goal,
+  Download
 } from 'lucide-react';
 import { categories, type PageId } from '../../types/navigation';
 
@@ -94,17 +95,17 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Settings at bottom */}
+      {/* Download Agent at bottom */}
       <div className="px-4 pb-5">
         <button
-          onClick={() => onNavigate('settings')}
-          className={`flex items-center gap-3.5 w-full px-3.5 py-2.5 rounded-xl text-[15px] font-semibold transition-all ${activePage === 'settings'
+          onClick={() => onNavigate('download-agent')}
+          className={`flex items-center gap-3.5 w-full px-3.5 py-2.5 rounded-xl text-[15px] font-semibold transition-all ${activePage === 'download-agent'
             ? 'bg-accent-primary-dim'
             : 'hover:bg-[var(--color-sidebar-hover)]'
             }`}
         >
-          <Settings size={20} strokeWidth={activePage === 'settings' ? 2.2 : 1.8} className={activePage === 'settings' ? 'text-accent-primary' : ''} />
-          <span className={activePage === 'settings' ? 'text-accent-primary' : 'text-gradient-white'}>Settings</span>
+          <Download size={20} strokeWidth={activePage === 'download-agent' ? 2.2 : 1.8} className={activePage === 'download-agent' ? 'text-accent-primary' : ''} />
+          <span className={activePage === 'download-agent' ? 'text-accent-primary' : 'text-gradient-white'}>Download Agent</span>
         </button>
       </div>
     </aside>
