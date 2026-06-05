@@ -2,7 +2,7 @@
 
 > DeepWatch uses live SVI oracle data, Polymarket & Kalshi odds via Tatum API — distilled into AI insights and published to Walrus for trading on all DeepBook markets (Spot, Margin, Predict).
 
-<img width="768" height="371" alt="Screenshot 2026-06-05 105351" src="https://github.com/user-attachments/assets/83d83a16-317b-4d6b-aa8c-dcd759601c81" />
+<img width="830" height="379" alt="Screenshot 2026-06-05 131223" src="https://github.com/user-attachments/assets/a53e86cc-b1c0-4f4b-bb4e-691dc7a6e517" />
 
 ## What is DeepWatch
 
@@ -48,7 +48,7 @@ The data is powerful but hard to understand. **DeepWatch** bridges that gap by t
 
 2. **Pick a market view** — every surface has a simple mode for fast trades and an advanced mode with a live candlestick chart and a real-time price feed from the Block Scholes oracle.
 
-<img width="526" height="182" alt="Screenshot 2026-06-05 125743" src="https://github.com/user-attachments/assets/434a84ea-9d4b-4170-afe2-8334e10a104e" />
+<img width="768" height="371" alt="Screenshot 2026-06-05 105351" src="https://github.com/user-attachments/assets/83d83a16-317b-4d6b-aa8c-dcd759601c81" />
 
 3. **Read the latest insights** — tap the **Insights** button on any market to see the most recent AI analysis tied to that asset and window. Insights come from the community feed published to Walrus.
 
@@ -86,15 +86,15 @@ Open `http://localhost:3000`. The dev server uses HMR.
 
 All values are placeholders. The canonical, runnable template lives in [`.env.example`](.env.example) (which is committed). Your real `.env` is gitignored.
 
-| Env var | Purpose | Server / Client |
-| --- | --- | --- |
-| `NEXT_PUBLIC_TESTNET_GRPC` | Sui testnet gRPC endpoint (Tatum gateway) | client |
-| `NEXT_PUBLIC_MAINNET_GRPC` | Sui mainnet gRPC endpoint (Tatum gateway) | client |
-| `NEXT_PUBLIC_TATUM_API_KEY` | Tatum API key — used for Walrus upload/list and Polymarket/Kalshi search | client |
-| `MINIMAX_API_KEY` | MiniMax Anthropic-compatible API key (insight generation) | **server only** |
-| `MINIMAX_BASE_URL` | MiniMax base URL — override only if you proxy | **server only** |
-| `MINIMAX_MODEL` | MiniMax model id. Default: `MiniMax-M3` | **server only** |
-| `MINIMAX_THINKING_BUDGET` | Optional extended-thinking budget in tokens. Set to `0` to disable. Default: `2048` | **server only** |
+| Env var | Purpose |
+| --- | --- | 
+| `NEXT_PUBLIC_TESTNET_GRPC` | Sui testnet gRPC endpoint (Tatum gateway) | 
+| `NEXT_PUBLIC_MAINNET_GRPC` | Sui mainnet gRPC endpoint (Tatum gateway) |
+| `NEXT_PUBLIC_TATUM_API_KEY` | Tatum API key — used for Walrus upload/list and Polymarket/Kalshi search | 
+| `MINIMAX_API_KEY` | MiniMax Anthropic-compatible API key (insight generation) | 
+| `MINIMAX_BASE_URL` | MiniMax base URL — override only if you proxy | 
+| `MINIMAX_MODEL` | MiniMax model id. Default: `MiniMax-M3` | 
+| `MINIMAX_THINKING_BUDGET` | Optional extended-thinking budget in tokens. Set to `0` to disable. Default: `2048` |
 
 Notes:
 
