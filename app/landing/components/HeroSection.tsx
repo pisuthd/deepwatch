@@ -54,7 +54,7 @@ export default function HeroSection() {
                 <ArrowRight size={16} />
               </Link>
               <Link
-                href="#what-is-deepbook-predict"
+                href="https://github.com/pisuthd/deepwatch"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-white/20 text-white font-medium hover:bg-white/5 transition-all"
               >
                 Learn More

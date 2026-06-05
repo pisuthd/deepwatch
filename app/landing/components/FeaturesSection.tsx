@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Terminal, Sparkles, Database } from 'lucide-react';
+import { Terminal, Sparkles, Table } from 'lucide-react';
 
 export default function FeaturesSection() {
 
@@ -17,9 +17,9 @@ export default function FeaturesSection() {
       description: 'SVI data + Polymarket + Kalshi odds distilled into human-readable insights via Tatum API.',
     },
     {
-      icon: Database,
-      title: 'Walrus Storage',
-      description: 'All insights permanently archived on-chain for verifiable historical record.',
+      icon: Table,
+      title: 'Shared on Walrus',
+      description: 'Every insight uploaded to Walrus via Tatum API for decentralized sharing and verifiable historical record.',
     },
   ];
 

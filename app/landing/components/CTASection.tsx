@@ -31,7 +31,7 @@ export default function CTASection() {
           <div className="flex items-center justify-center gap-1.5 mb-4">
             <Sparkles size={12} className="text-accent-primary" />
             <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-primary">
-              AI Insights
+              AI + DeFi
             </span>
             <span
               className="w-1.5 h-1.5 rounded-full animate-pulse"
@@ -54,12 +54,12 @@ export default function CTASection() {
               <ArrowRight size={16} />
             </Link>
             <a
-              href="https://docs.sui.io/onchain-finance/deepbook-predict"
+              href="https://github.com/pisuthd/deepwatch"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-white/20 text-white font-medium hover:bg-white/5 transition-all"
             >
-              Read the Docs
+              GitHub Repo
               <ExternalLink size={14} />
             </a>
           </div>
