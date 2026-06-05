@@ -10,7 +10,14 @@ DeepWatch is a Sui-native web app that bundles three on-chain trading surfaces (
 
 **DeepWatch** is a unified trading terminal for all DeepBook markets — Spot, Margin, and Predict. We use AI to convert complex on-chain SVI data, enriched with Polymarket and Kalshi odds via Tatum API, into actionable insights for confident trading. All insights are shared on Walrus for the community to verify and reference.
 
-[DeepBook Predict](https://docs.sui.io/onchain-finance/deepbook-predict/) introduced institutional-grade prediction markets powered by Block Scholes oracle, but understanding the data isn't easy. DeepWatch bridges that gap — letting AI translate complex market signals into plain language anyone can act on.
+[DeepBook Predict](https://docs.sui.io/onchain-finance/deepbook-predict/) is Sui's institutional-grade prediction market with:
+
+- **Block Scholes oracle** for institutional pricing
+- **Sub-400ms settlement** — fast enough to feel like a game
+- **Internal market maker** provides liquidity from day one
+- **All positions composable** with deep shared liquidity
+
+The data is powerful but hard to understand. **DeepWatch** bridges that gap by turning those SVI signals into plain-language insights as well as enriches with real-time odds from other prediction markets that you can act on.
 
 ---
 
@@ -33,9 +40,23 @@ DeepWatch is a Sui-native web app that bundles three on-chain trading surfaces (
 
 ---
 
+## Quick start
+
+1. **Open the terminal** — pick **Spot** or **Predict** from the sidebar. Both run in the same interface.
+2. **Pick a market view** — every surface has a simple mode for fast trades and an advanced mode with a live candlestick chart and a real-time price feed from the Block Scholes oracle.
+3. **Read the latest insights** — tap the **Insights** button on any market to see the most recent AI analysis tied to that asset and window. Insights come from the community feed published to Walrus.
+4. **Trade.**
+   - **Spot** — swap tokens on Sui mainnet at the displayed rate. Tokens settle in the same block.
+   - **Predict** — pick **Up** or **Down**, set a strike price, and mint your position. After the market expires, redeem if you were on the winning side.
+5. **Create a new insight** — if no existing insight matches your window or asset, jump to **Add Insight**, pick your data sources (Oracle SVI, Polymarket odds, Kalshi tickers), and let the AI compose an analysis. Tatum handles the Walrus upload in the background — wait a few seconds, and your insight is published.
+
+One terminal, three markets, and an AI co-pilot that turns dense oracle data into trades you can act on.
+
+---
+
 ## For developers
 
-### Quick start
+### Local setup
 
 ```bash
 git clone <your fork url>
@@ -83,59 +104,19 @@ There is **no `typecheck` script**. Type-checking is available via `npx tsc --no
 ```
 deepwatch/
 ├── app/
-│   ├── app/                # App Router pages (authenticated shell: /app/spot, /predict, /margin, ...)
-│   ├── components/         # Reusable UI: common/, layout/, pages/{spot,predict,margin,insights,add-insight}
-│   ├── context/            # NetworkContext, ToastContext
-│   ├── hooks/              # useDeepbook, usePredict, useSVI, useMarkets, useSpotPools, useMarginMarkets, ...
-│   ├── landing/            # Public marketing site served at /
-│   ├── lib/                # tatum, insights, polymarket, minimax, networkConfig, marginMarkets, coinIcons
-│   ├── types/              # navigation.ts (sidebar source of truth)
-│   ├── api/insights/       # Server route: streaming MiniMax proxy
-│   ├── layout.tsx          # Root layout (fonts, metadata, providers)
-│   ├── page.tsx            # Renders the landing page
-│   └── providers.tsx       # DAppKitProvider → NetworkProvider → ToastProvider
-├── public/                 # Static assets (empty)
-├── next.config.ts          # Remote image patterns (CoinMarketCap, Sui bridge, suins.io)
-├── tsconfig.json           # Strict TS, paths @/* → ./*, moduleResolution: "bundler"
-├── pnpm-workspace.yaml     # allowBuilds: sharp, unrs-resolver
-├── eslint.config.mjs       # ESLint 9 flat config (core-web-vitals + typescript)
-└── postcss.config.mjs      # @tailwindcss/postcss
+│   ├── app/                # App Router pages — /app/spot, /app/predict, /app/margin, /app/add-insight, /app/recent-insights
+│   ├── components/         # Reusable UI (common, layout, per-page)
+│   ├── hooks/              # useDeepbook, usePredict, useSVI, useMarkets, ...
+│   ├── landing/            # Public marketing site (/)
+│   ├── lib/                # tatum, insights, polymarket, minimax, networkConfig
+│   └── api/insights/       # Server route — streaming MiniMax proxy
+├── .env.example            # Canonical env template (committed)
+├── next.config.ts          # Remote image patterns
+└── tsconfig.json           # Strict TS, paths @/* → ./*
 ```
-
-### Available routes
-
-| Route | Description |
-| --- | --- |
-| `/` | Public marketing/landing page |
-| `/app/spot` | DeepBook V3 spot swap (simple + advanced) |
-| `/app/predict` | DeepBook Predict binary options (testnet only) |
-| `/app/margin` | DeepBook margin manager (simple + advanced) |
-| `/app/add-insight` | 5-step wizard that publishes an AI insight to Walrus |
-| `/app/recent-insights` | Browse and read past published insights |
-| `/app/download-agent` | Download AI trading agent (coming soon) |
-| `/api/insights/generate` | `POST` — server-proxied streaming MiniMax completion |
-
-### Conventions & gotchas
-
-- **Vendored Next.js** — this project pins a custom build of Next.js (16.2.6) with API changes from upstream. The canonical reference is `node_modules/next/dist/docs/` (per [`AGENTS.md`](AGENTS.md)), not nextjs.org. Heed deprecation notices there.
-- **Single project, mixed folders** — `app/app/` is the authenticated App Router; `app/landing/` is the public marketing site. The root `app/page.tsx` renders the landing page.
-- **State** — Context only, no Redux/Zustand. New global state should be added under `app/context/`.
-- **Styling** — Tailwind v4 with a custom `@theme` block in [`app/globals.css`](app/globals.css). Prefer the CSS variables (`--color-accent-primary`, `--color-bg-elevated`, `--color-border-default`) for theming.
-- **Insight data** — body shape, filename convention (`insight-{ASSET}-{timestamp}.json`, 100 KB cap), and helper functions live in [`app/lib/insights.ts`](app/lib/insights.ts).
-- **Walrus / Tatum** — all calls are browser-direct from [`app/lib/tatum.ts`](app/lib/tatum.ts). No server proxy for read paths.
-- **AI generation** — the streaming proxy lives in [`app/api/insights/generate/route.ts`](app/api/insights/generate/route.ts). The client SSE parser is in [`app/lib/minimax.ts`](app/lib/minimax.ts).
-- **No test framework** — there is no Jest / Vitest / Playwright configured. Add one if you need it.
-
-### Known limitations
-
-- **Account Overview is a stub** — [`/app/account-overview`](app/app/account-overview/page.tsx) renders a placeholder page.
-- **Predict is testnet-only** — the underlying `predict-server` is testnet; the page surfaces a warning toast for mainnet users.
-- **No test suite** — the project ships with no test framework configured.
 
 ---
 
 ## License
-
-<!-- TODO: confirm license -->
 
 MIT.
