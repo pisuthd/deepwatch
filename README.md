@@ -21,10 +21,10 @@ The data is powerful but hard to understand. **DeepWatch** bridges that gap by t
 
 ## Highlight Features
 
-- **Production-ready DeepBook trading** — spot swaps, margin manager, and predict markets from the battle-tested DeepBook V3 stack, with a live candlestick chart, all under one terminal.
-- **DeepBook Predict, the easy way in** — Sui's new institutional-grade prediction markets (Block Scholes oracle pricing) ship dense data. DeepWatch turns it into plain-language insights so you can be early without the legwork.
-- **AI insights, published on Walrus** — a 5-step wizard composes a markdown analysis from on-chain SVI surface data, Polymarket odds, and Kalshi tickers, then publishes the blob for the community to verify and reference.
-- **Tatum-powered data layer** — Polymarket & Kalshi odds, Walrus upload/list, and Sui gRPC endpoints flow through Tatum APIs — one vendor, one key, no glue code.
+- **Unified DeepBook trading terminal** — spot swaps, margin manager, and predict markets from the battle-tested DeepBook V3 stack, with a live candlestick chart, all under one terminal.
+- **DeepBook Predict, the easy way in** — Sui's new institutional-grade prediction markets (Block Scholes oracle pricing) ship dense data. DeepWatch turns it into plain-language analysis  so you can be early with clear, actionable insights instead of raw data.
+- **AI insights, published on Walrus** — combine SVI data, prediction market odds, and external signals into structured insights on Walrus via Tatum Storage API.
+- **Tatum-powered data layer** — Polymarket & Kalshi odds, Walrus upload/list, and Sui gRPC endpoints flow through a single API layer for faster integration and fewer moving parts.
 
 ## Tech stack
 
