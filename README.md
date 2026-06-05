@@ -2,9 +2,7 @@
 
 > DeepWatch uses live SVI oracle data, Polymarket & Kalshi odds via Tatum API — distilled into AI insights and published to Walrus for trading on all DeepBook markets (Spot, Margin, Predict).
 
-DeepWatch is a Sui-native web app that bundles three on-chain trading surfaces (Spot, Margin, Predict) with a generative-AI insight feed. The insights are built from live SVI oracle data, enriched with Polymarket odds and Kalshi tickers via Tatum API, streamed through a MiniMax model, and persisted as blobs on Walrus so they're readable later from any client.
-
----
+<img width="768" height="371" alt="Screenshot 2026-06-05 105351" src="https://github.com/user-attachments/assets/83d83a16-317b-4d6b-aa8c-dcd759601c81" />
 
 ## What is DeepWatch
 
@@ -42,13 +40,29 @@ The data is powerful but hard to understand. **DeepWatch** bridges that gap by t
 
 ## Quick start
 
+<img width="747" height="328" alt="Screenshot 2026-06-05 125554" src="https://github.com/user-attachments/assets/0961d34c-0bad-45ad-b154-a7eb332db62a" />
+
 1. **Open the terminal** — pick **Spot** or **Predict** from the sidebar. Both run in the same interface.
+
+<img width="758" height="328" alt="Screenshot 2026-06-05 130331" src="https://github.com/user-attachments/assets/4896e3f8-f577-43bd-bdbe-1f97727b6b49" />
+
 2. **Pick a market view** — every surface has a simple mode for fast trades and an advanced mode with a live candlestick chart and a real-time price feed from the Block Scholes oracle.
+
+<img width="526" height="182" alt="Screenshot 2026-06-05 125743" src="https://github.com/user-attachments/assets/434a84ea-9d4b-4170-afe2-8334e10a104e" />
+
 3. **Read the latest insights** — tap the **Insights** button on any market to see the most recent AI analysis tied to that asset and window. Insights come from the community feed published to Walrus.
+
+<img width="752" height="320" alt="Screenshot 2026-06-05 130449" src="https://github.com/user-attachments/assets/8bc84748-acf4-4c5f-9bb7-dc76bf4f9136" />
+
 4. **Trade.**
    - **Spot** — swap tokens on Sui mainnet at the displayed rate. Tokens settle in the same block.
    - **Predict** — pick **Up** or **Down**, set a strike price, and mint your position. After the market expires, redeem if you were on the winning side.
+
+<img width="591" height="301" alt="Screenshot 2026-06-05 130709" src="https://github.com/user-attachments/assets/bbf0902c-88c5-44fc-bc8c-d0cffe0d3946" />
+
 5. **Create a new insight** — if no existing insight matches your window or asset, jump to **Add Insight**, pick your data sources (Oracle SVI, Polymarket odds, Kalshi tickers), and let the AI compose an analysis. Tatum handles the Walrus upload in the background — wait a few seconds, and your insight is published.
+
+<img width="757" height="334" alt="Screenshot 2026-06-05 130546" src="https://github.com/user-attachments/assets/a91319e2-b790-4741-a728-d0c69102f99c" />
 
 One terminal, three markets, and an AI co-pilot that turns dense oracle data into trades you can act on.
 
