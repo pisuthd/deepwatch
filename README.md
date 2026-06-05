@@ -15,16 +15,22 @@
 - **Internal market maker** provides liquidity from day one
 - **All positions composable** with deep shared liquidity
 
-The data is powerful but hard to understand. **DeepWatch** bridges that gap by turning those SVI signals into plain-language insights as well as enriches with real-time odds from other prediction markets that you can act on.
+The data is powerful but hard to understand. **DeepWatch** bridges that gap by turning those SVI signals into plain-language insights as well as enriches with real-time odds from other prediction markets, giving you the clarity to enter early and exit smarter.
 
 ---
 
 ## Highlight Features
 
-- **Unified DeepBook trading terminal** — spot swaps, margin manager, and predict markets from the battle-tested DeepBook V3 stack, with a live candlestick chart, all under one terminal.
-- **DeepBook Predict, the easy way in** — Sui's new institutional-grade prediction markets (Block Scholes oracle pricing) ship dense data. DeepWatch turns it into plain-language analysis  so you can be early with clear, actionable insights instead of raw data.
-- **AI insights, published on Walrus** — combine SVI data, prediction market odds, and external signals into structured insights on Walrus via Tatum Storage API.
-- **Tatum-powered data layer** — Polymarket & Kalshi odds, Walrus upload/list, and Sui gRPC endpoints flow through a single API layer for faster integration and fewer moving parts.
+- **Unified DeepBook trading terminal** — A single interface for Spot, Margin, and Predict markets with live candlestick charts and real-time execution on DeepBook V3.
+- **Predict markets made readable** — DeepBook Predict’s Block Scholes–based pricing produces dense signals. DeepWatch translates them into clear, actionable insights for faster decision-making.
+- **AI-powered market intelligence on-chain** — Combines SVI oracle data, prediction market odds, and external signals into structured insights stored on Walrus via Tatum Storage API.
+- **Tatum-powered data layer** — Aggregates Polymarket, Kalshi, Sui gRPC, and Walrus into a single integration layer, reducing infrastructure complexity and accelerating development.
+
+## Quick Links
+
+- [3-min Video Demo](https://youtu.be/zuv1_9bVVFk)
+- [Live Dapp](https://www.deepbook.watch/)
+- [Example Insight on Walrus](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-id/2hCrRgzlRsfAuee_n7xn4ji_UeekbeqHTrSFMYM3RfU/insight-BTC-1780641231758.json)
 
 ## Tech stack
 
@@ -42,29 +48,66 @@ The data is powerful but hard to understand. **DeepWatch** bridges that gap by t
 
 <img width="747" height="328" alt="Screenshot 2026-06-05 125554" src="https://github.com/user-attachments/assets/0961d34c-0bad-45ad-b154-a7eb332db62a" />
 
-1. **Open the terminal** — pick **Spot** or **Predict** from the sidebar. Both run in the same interface.
+### 1. Enter the app and pick your market
+
+Choose between two DeepBook products from the sidebar:
+
+**DeepBook Spot**
+- Available on both **Mainnet** and **Testnet**
+- Trade tokens on SUI with DeepBook V3 — capital-efficient, orderbook-based execution with an AMM-alike experience
+
+**DeepBook Predict**
+- Currently available on **Testnet**
+- Uses real-time Oracle Testnet data to generate insights on BTC price movements that you can trade on **Mainnet**
+- *Note: Predict requires **DUSD**, you can find a form to request tokens on the dapp.*
 
 <img width="758" height="328" alt="Screenshot 2026-06-05 130331" src="https://github.com/user-attachments/assets/4896e3f8-f577-43bd-bdbe-1f97727b6b49" />
 
-2. **Pick a market view** — every surface has a simple mode for fast trades and an advanced mode with a live candlestick chart and a real-time price feed from the Block Scholes oracle.
+### 2. Pick a market view
+
+Each product has **Simple** and **Advanced** modes:
+
+**DeepBook Spot**
+- **Simple mode** — Uniswap-style UI for quick, easy swaps with deep liquidity
+- **Advanced mode** — Live candlestick chart with OHLC data from DeepBook's index server
+
+**DeepBook Predict**
+- **Simple mode** — Pre-defined strike prices for quick bets
+- **Advanced mode** — Live chart with real-time oracle price via index server, manual strike price selection with dynamic odds
+
+*Before trading on Predict, you need a trading account. Deposit DUSD via the **Overview** button on the Predict page to fund your account and view your P&L dashboard.*
 
 <img width="768" height="371" alt="Screenshot 2026-06-05 105351" src="https://github.com/user-attachments/assets/83d83a16-317b-4d6b-aa8c-dcd759601c81" />
 
-3. **Read the latest insights** — tap the **Insights** button on any market to see the most recent AI analysis tied to that asset and window. Insights come from the community feed published to Walrus.
+### 3. Read the latest insights
+
+Tap the **Insights** button on any market to get AI-generated analysis that helps you decide your trades (Up/Down for Predict, Buy/Sell for Spot). Insights are actionable — they combine SVI oracle data, Polymarket odds, and Kalshi tickers into clear signals.
+
+Insights are published to **Walrus Mainnet** via Tatum and remain active for **2 epochs (~4 weeks)**.
 
 <img width="752" height="320" alt="Screenshot 2026-06-05 130449" src="https://github.com/user-attachments/assets/8bc84748-acf4-4c5f-9bb7-dc76bf4f9136" />
 
-4. **Trade.**
-   - **Spot** — swap tokens on Sui mainnet at the displayed rate. Tokens settle in the same block.
-   - **Predict** — pick **Up** or **Down**, set a strike price, and mint your position. After the market expires, redeem if you were on the winning side.
+### 4. Trade
+
+Both Simple and Advanced modes share the same trade UI:
+
+**DeepBook Spot**
+- Choose your trading pair and view live rates
+- Tokens settle in the same block
+- Default trading fee: **0.5%**
+
+**DeepBook Predict**
+- Pick **Up** or **Down** on a strike price (default: current spot price)
+- Predict whether the price will be above or below at expiry
+- Odds are shown relative to $1 — e.g., if the mint price for Predict Up is $0.60 and you bet $1, you receive ~$0.40 profit if winning
+- A small spread is deducted for DeepBook fees, shared with liquidity providers
 
 <img width="591" height="301" alt="Screenshot 2026-06-05 130709" src="https://github.com/user-attachments/assets/bbf0902c-88c5-44fc-bc8c-d0cffe0d3946" />
 
-5. **Create a new insight** — if no existing insight matches your window or asset, jump to **Add Insight**, pick your data sources (Oracle SVI, Polymarket odds, Kalshi tickers), and let the AI compose an analysis. Tatum handles the Walrus upload in the background — wait a few seconds, and your insight is published.
+### 5. Create a new insight
+If no existing insight matches your window or asset, jump to **Add Insight**, pick your data sources (Oracle SVI, Polymarket odds, Kalshi tickers), and let the AI compose an analysis. Tatum handles the Walrus upload in the background — wait a few seconds, and your insight is published.
 
 <img width="757" height="334" alt="Screenshot 2026-06-05 130546" src="https://github.com/user-attachments/assets/a91319e2-b790-4741-a728-d0c69102f99c" />
-
-One terminal, three markets, and an AI co-pilot that turns dense oracle data into trades you can act on.
 
 ---
 
@@ -130,6 +173,12 @@ deepwatch/
 ```
 
 ---
+
+## Roadmap
+
+The dapp is **live on mainnet and fully functional** today.
+
+**Next up:** We're building toward a downloadable AI trading agent. The agent will read insights shared on Walrus and use them — combined with a locally fine-tuned model — to trade autonomously on DeepBook and beyond.
 
 ## License
 
