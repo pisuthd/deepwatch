@@ -18,8 +18,9 @@ const orbitron = Orbitron({
 });
 
 export const metadata: Metadata = {
-  title: "DeepWatch - The intelligence layer for DeepBook",
-  description: "AI-powered prediction platform",
+  title: "DeepWatch — The Skyscanner for Prediction Markets",
+  description:
+    "Compare prediction market odds across DeepBook Predict, Polymarket, and Kalshi. Spot pricing gaps, trade with confidence.",
 };
 
 export default function RootLayout({
