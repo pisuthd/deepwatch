@@ -5,7 +5,7 @@ import { TowerControl, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
 
-export default function LandingHeader() {
+export default function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     return (

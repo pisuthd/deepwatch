@@ -1,23 +1,23 @@
 'use client';
 
-import LandingHeader from './components/LandingHeader'; 
-import HeroSection from './components/HeroSection';
-import WhatIsDeepBookPredictSection from './components/WhatIsDeepBookPredictSection';
-import HowItWorksSection from './components/HowItWorksSection';
-import FeaturesSection from './components/FeaturesSection';
-import CTASection from './components/CTASection';
-import LandingFooter from './components/LandingFooter';
+import Navbar from '@/components/shared/Navbar'; 
+import Footer from '@/components/shared/Footer';
+import HeroSection from '@/components/landing/HeroSection';
+import WhatIsDeepBookPredictSection from '@/components/landing/WhatIsDeepBookPredictSection';
+import HowItWorksSection from '@/components/landing/HowItWorksSection';
+import FeaturesSection from '@/components/landing/FeaturesSection';
+import CTASection from '@/components/landing/CTASection';
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[var(--color-bg-base)]">
-      <LandingHeader />
+      <Navbar />
       <HeroSection />
       <WhatIsDeepBookPredictSection />
       <HowItWorksSection />
       <FeaturesSection />
       <CTASection />
-      <LandingFooter/>
+      <Footer />
     </div>
   );
 }
