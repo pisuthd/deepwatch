@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { Search, ChevronDown, ArrowRight } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const categories = [
   { id: 'all', label: 'All' },
@@ -47,8 +47,19 @@ export default function HeroSection() {
     window.location.href = '/app';
   };
 
+  const [showScrollIndicator, setShowScrollIndicator] = useState(true);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setShowScrollIndicator(window.scrollY < 100);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <section className="relative flex items-center justify-center overflow-hidden pt-32 md:pt-24 pb-4 md:pb-16 px-6">
+    <section className="relative flex items-center justify-center overflow-hidden pt-32 md:pt-24 pb-4 md:pb-24 px-6">
       <div className="relative z-10 max-w-4xl mx-auto w-full text-center">
         {/* Headline */}
         <motion.h1
@@ -71,7 +82,7 @@ export default function HeroSection() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="text-base sm:text-lg text-gray-400 mb-8 max-w-2xl mx-auto leading-relaxed"
         >
-          Compare DeepBook Predict, Polymarket, and Kalshi side by side. Spot pricing gaps, discover opportunities, and trade with confidence.
+          Compare DeepBook Predict, Polymarket, and Kalshi side by side. Spot pricing gaps, uncover opportunities, and trade with confidence.
         </motion.p>
 
         {/* Search Form (Skyscanner-style multi-field card) */}
@@ -193,8 +204,8 @@ export default function HeroSection() {
       {/* Scroll indicator */}
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.8 }}
+        animate={{ opacity: showScrollIndicator ? 1 : 0 }}
+        transition={{ duration: 0.3 }}
         className="absolute bottom-4 lg:bottom-8 left-1/2 -translate-x-1/2"
       >
         <div className="w-5 h-8 rounded-full border border-gray-600 flex justify-center pt-1">
