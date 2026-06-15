@@ -1,12 +1,26 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Telescope, Menu, X } from 'lucide-react';
-import { useState } from 'react';
-import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Telescope, Menu, X, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import ConnectWallet from './ConnectWallet';
 
 export default function Navbar() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isMoreOpen, setIsMoreOpen] = useState(false);
+    const moreRef = useRef<HTMLDivElement>(null);
+
+    // Click-outside handler for the "More" dropdown
+    useEffect(() => {
+        if (!isMoreOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+                setIsMoreOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isMoreOpen]);
 
     return (
         <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4" style={{
@@ -27,19 +41,53 @@ export default function Navbar() {
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
-                    <a href="/app" className="text-gray-400 hover:text-white transition-colors">Trade</a>
-                    <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors">How It Works</a>
-                    <a href="https://github.com/pisuthd/deepwatch" target='_blank' className="text-gray-400 hover:text-white transition-colors">GitHub</a>
+                    <a href="/compare" className="text-gray-400 hover:text-white transition-colors">Compare</a>
+                    <a href="/stake" className="text-gray-400 hover:text-white transition-colors">Stake</a>
+                    <a href="/leaderboard" className="text-gray-400 hover:text-white transition-colors">Leaderboard</a>
+                     
+                    {/* "More" dropdown (GitHub) */}
+                    <div className="relative z-50" ref={moreRef}>
+                        <button
+                            onClick={() => setIsMoreOpen((o) => !o)}
+                            className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
+                        >
+                            More
+                            <ChevronDown
+                                size={12}
+                                className={`transition-transform ${isMoreOpen ? 'rotate-180' : ''}`}
+                            />
+                        </button>
+
+                        <AnimatePresence>
+                            {isMoreOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute top-full right-0 mt-2 w-44 py-1 rounded-lg border border-white/10 z-50 overflow-hidden shadow-lg shadow-black/40"
+                                    style={{ background: 'var(--color-bg-elevated)' }}
+                                >
+                                    <a
+                                        href="https://github.com/pisuthd/deepwatch"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={() => setIsMoreOpen(false)}
+                                        className="block px-3 py-2 text-sm text-gray-300 hover:bg-[var(--color-sidebar-hover)] hover:text-white transition-colors"
+                                    >
+                                        GitHub
+                                    </a>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </nav>
 
                 {/* CTA Button */}
                 <div className="flex items-center gap-4">
-                    <Link
-                        href="/app"
-                        className="hidden sm:inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-black font-semibold text-sm hover:bg-accent-primary-hover transition-all"
-                    >
-                        Enter App
-                    </Link>
+                    <div className="hidden sm:block">
+                        <ConnectWallet />
+                    </div>
 
                     {/* Mobile Menu Toggle */}
                     <button
@@ -60,16 +108,13 @@ export default function Navbar() {
                     className="md:hidden mt-4 pt-4 border-t border-white/10"
                 >
                     <nav className="flex flex-col gap-4">
-                        <a href="/app" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Trade</a>
-                        <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">How It Works</a>
+                        <a href="/compare" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Compare</a>
+                        <a href="/stake" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Stake</a>
+                        <a href="/leaderboard" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Leaderboard</a>
                         <a href="https://github.com/pisuthd/deepwatch" target='_blank' onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">GitHub</a>
-                        <Link
-                            href="/app"
-                            onClick={() => setIsMenuOpen(false)}
-                            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-black font-semibold text-sm hover:bg-accent-primary-hover transition-all mt-2"
-                        >
-                            Enter App
-                        </Link>
+                        <div className="mt-2">
+                            <ConnectWallet />
+                        </div>
                     </nav>
                 </motion.div>
             )}

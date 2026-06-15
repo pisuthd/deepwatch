@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk, Orbitron } from "next/font/google";
+import Providers from "./providers";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,7 +21,7 @@ const orbitron = Orbitron({
 export const metadata: Metadata = {
   title: "DeepWatch — The Skyscanner for Prediction Markets",
   description:
-    "Compare prediction market odds across DeepBook Predict, Polymarket, and Kalshi. Spot pricing gaps, trade with confidence.",
+    "The fast-track to DeepBook Predict. Compare odds across DeepBook, Polymarket, and Kalshi. Spot pricing gaps, trade with confidence.",
 };
 
 export default function RootLayout({
@@ -31,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${spaceGrotesk.variable} ${orbitron.variable} h-full antialiased`}>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
