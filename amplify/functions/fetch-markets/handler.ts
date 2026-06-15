@@ -1,12 +1,19 @@
 import { getAmplifyDataClientConfig } from "@aws-amplify/backend/function/runtime";
 import { Amplify } from "aws-amplify";
 import { generateClient } from "aws-amplify/data";
-import { env } from "$amplify/env/fetch-markets";
+import { env } from "$amplify/env/fetchMarkets";
 
 import type { Schema } from "../../data/resource";
 import { fetchDeepBookMarkets } from "../../../lib/markets/deepbook";
 import { fetchPolymarketMarkets } from "../../../lib/markets/polymarket";
 import { fetchKalshiMarkets } from "../../../lib/markets/kalshi";
+
+const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
+
+Amplify.configure(resourceConfig, libraryOptions);
+
+const client = generateClient<Schema>();
+
 
 const log = (...args: unknown[]) => console.log("[fetch-markets]", ...args);
 const warn = (...args: unknown[]) => console.warn("[fetch-markets]", ...args);
@@ -49,17 +56,6 @@ export const handler: Schema["fetchMarkets"]["functionHandler"] = async (event) 
 
   const t0 = Date.now();
   log("=== handler start ===", { trigger }); 
-
-  let client: ReturnType<typeof generateClient<Schema>>;
-  try {
-    const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
-    log("getAmplifyDataClientConfig ok in", Date.now() - t0, "ms");
-    Amplify.configure(resourceConfig, libraryOptions);
-    client = generateClient<Schema>();  
-  } catch (e) {
-    err("FATAL: failed to initialise Amplify data client", summariseError(e));
-    throw e;
-  }
 
   // ── Fetch phase ──────────────────────────────────────────────────────────
   log("starting 3 platform fetches in parallel…");

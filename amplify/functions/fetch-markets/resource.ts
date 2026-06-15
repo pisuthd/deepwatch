@@ -10,7 +10,7 @@ import { defineFunction } from "@aws-amplify/backend";
  * so the frontend can trigger a manual refresh on demand.
  */
 export const fetchMarkets = defineFunction({
-  name: "fetch-markets",
+  name: "fetchMarkets",
   schedule: "every 15m",
   timeoutSeconds: 120,
   memoryMB: 1024,
