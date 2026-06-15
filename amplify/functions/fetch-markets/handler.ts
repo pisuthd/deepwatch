@@ -55,8 +55,7 @@ export const handler: Schema["fetchMarkets"]["functionHandler"] = async (event) 
     // const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
     // log("getAmplifyDataClientConfig ok in", Date.now() - t0, "ms");
     // Amplify.configure(resourceConfig, libraryOptions);
-    // client = generateClient<Schema>();
-    throw new Error("not ready")
+    // client = generateClient<Schema>(); 
     log("Amplify + client ready");
   } catch (e) {
     err("FATAL: failed to initialise Amplify data client", summariseError(e));
