@@ -87,3 +87,40 @@ export function impliedProbUpForStrike(
   const vol = sviVol(strikeUsd, F, T, params);
   return binaryUpProb(F, strikeUsd, T, vol);
 }
+
+/**
+ * P(floor < S_T < cap) for a range market. Black-76 gives us
+ * P(S > K) per strike, so the band probability is the difference of two
+ * binary-up calls evaluated at the band endpoints.
+ *
+ * Vol is taken at the band midpoint — for our pre-picked bands (≤10% of
+ * spot) the vol surface is approximately flat, so the midpoint is a fine
+ * representative. For ultra-wide bands the caller should re-derive; the
+ * search index never emits bands wider than 10% of spot.
+ */
+export function impliedProbUpForRange(
+  floorUsd: number,
+  capUsd: number,
+  forwardRaw: number,
+  expiryMs: number,
+  svi: SVIParams | null,
+): number {
+  if (!floorUsd || !capUsd || capUsd <= floorUsd) return 0;
+  const F = forwardRaw / PRICE_SCALE;
+  if (!F || F <= 0) return 0;
+
+  const T = Math.max(0, (expiryMs - Date.now()) / (365.25 * 24 * 3600 * 1000));
+  const params: SVIParams = svi ?? {
+    a: 80887,
+    b: 9328786,
+    rho: 102029829,
+    m: 7561599,
+    sigma: 9522806,
+  };
+
+  const mid = (floorUsd + capUsd) / 2;
+  const vol = sviVol(mid, F, T, params);
+  const probAboveFloor = binaryUpProb(F, floorUsd, T, vol);
+  const probAboveCap = binaryUpProb(F, capUsd, T, vol);
+  return Math.max(0, Math.min(1, probAboveFloor - probAboveCap));
+}

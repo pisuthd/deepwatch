@@ -64,3 +64,40 @@ export function generateStrikes(spotUsd: number, count: number, tick: number): n
   const half = Math.floor(count / 2);
   return Array.from({ length: count }, (_, i) => center + (i - half) * tick);
 }
+
+/**
+ * A range market over [floorUsd, capUsd] with band width as a percentage
+ * of spot. We use three pre-picked bands: ±1% (narrow), ±3% (medium),
+ * ±5% (wide) — the actual DeepBook Predict market is a continuous spectrum
+ * (any (lower, higher) tuple is mintable), so we pre-pick representative
+ * widths to populate the search index.
+ */
+export interface RangeBand {
+  floorUsd: number;
+  capUsd: number;
+  widthPct: number; // 2, 6, or 10
+}
+
+const RANGE_BAND_WIDTHS_PCT = [2, 6, 10] as const;
+
+/**
+ * Three range bands centered on the (unrounded) spot price, snapped to the
+ * nearest tick: floor snaps DOWN, cap snaps UP. The band is always ≥ the
+ * requested width after snapping, so we never under-report a market.
+ *
+ *   spot=$70,000, tick=$1,000 →
+ *     narrow  (±1%):  [69,000, 71,000]  width 2
+ *     medium  (±3%):  [68,000, 72,000]  width 6
+ *     wide    (±5%):  [67,000, 74,000]  width 10
+ */
+export function generateRangeBands(spotUsd: number, tick: number): RangeBand[] {
+  if (!spotUsd || spotUsd <= 0 || tick <= 0) return [];
+  return RANGE_BAND_WIDTHS_PCT.map((widthPct) => {
+    const half = (spotUsd * widthPct) / 200; // pct is "total width"
+    const rawFloor = spotUsd - half;
+    const rawCap = spotUsd + half;
+    const floorUsd = Math.floor(rawFloor / tick) * tick;
+    const capUsd = Math.ceil(rawCap / tick) * tick;
+    return { floorUsd, capUsd, widthPct };
+  });
+}

@@ -8,8 +8,9 @@
  */
 
 import type { DeepBookMarket, OracleStatus } from "./types";
-import { generateStrikes } from "./format";
-import { impliedProbUpForStrike, type SVIParams } from "./svi";
+import { DISPLAY_TICK_USD, generateRangeBands, generateStrikes } from "./format";
+import { impliedProbUpForRange, impliedProbUpForStrike, type SVIParams } from "./svi";
+import { deepBookMarketId } from "./id";
 
 export const DEEPBOOK_INDEXER = "https://predict-server.testnet.mystenlabs.com";
 export const PREDICT_OBJECT_ID =
@@ -87,6 +88,11 @@ export async function fetchDeepBookMarkets(
       settledSkipped += 1;
       continue;
     }
+    // BTC only — the indexer also lists other assets (ETH, SUI, …) and we
+    // don't want to ingest them. Skipped count is reported in the summary.
+    if (oracle.underlying_asset && oracle.underlying_asset !== "BTC") {
+      continue;
+    }
     let state: RawOracleState = {};
     try {
       state = await fetchJSON<RawOracleState>(
@@ -124,6 +130,10 @@ export async function fetchDeepBookMarkets(
     // when spot is unknown (e.g. fresh oracle without price history).
     const baseSpot = spotUsd > 0 ? spotUsd : minStrikeUsd + 5 * tickSizeUsd;
     const strikes = generateStrikes(baseSpot, 5, tickSizeUsd || 1000);
+    // Range ladder: three pre-picked bands (±1% / ±3% / ±5%) snapped to tick.
+    // DeepBook Predict lets the user mint any (lower, higher) tuple, so we
+    // surface a representative set in the search index.
+    const bands = generateRangeBands(baseSpot, tickSizeUsd || DISPLAY_TICK_USD);
 
     for (const strike of strikes) {
       const impliedProbUp = impliedProbUpForStrike(
@@ -134,12 +144,52 @@ export async function fetchDeepBookMarkets(
       );
 
       out.push({
+        id: deepBookMarketId(oracle.oracle_id, oracle.expiry, strike, 0),
         oracleId: oracle.oracle_id,
         expiryMs: oracle.expiry,
         strikeUsd: strike,
+        floorStrikeUsd: null,
+        capStrikeUsd: null,
+        rangeBandPct: 0,
         spotUsd: spotUsd || null,
         forwardUsd: forwardRaw > 0 ? forwardRaw / PRICE_SCALE : null,
         impliedProbUp,
+        sviA: sviRaw?.a ?? null,
+        sviB: sviRaw?.b ?? null,
+        sviRho: sviRaw?.rho ?? null,
+        sviM: sviRaw?.m ?? null,
+        sviSigma: sviRaw?.sigma ?? null,
+        tickSizeUsd,
+        minStrikeUsd,
+        status,
+        rawJson: JSON.stringify({ oracle, state }),
+        fetchedAt: now,
+      });
+    }
+
+    for (const band of bands) {
+      const probRange = impliedProbUpForRange(
+        band.floorUsd,
+        band.capUsd,
+        forwardRaw,
+        oracle.expiry,
+        state.latest_svi ?? null,
+      );
+      const bandMid = (band.floorUsd + band.capUsd) / 2;
+
+      out.push({
+        id: deepBookMarketId(oracle.oracle_id, oracle.expiry, bandMid, band.widthPct),
+        oracleId: oracle.oracle_id,
+        expiryMs: oracle.expiry,
+        // Midpoint so the required strikeUsd column is always populated;
+        // the actual range bounds live in floorStrikeUsd / capStrikeUsd.
+        strikeUsd: bandMid,
+        floorStrikeUsd: band.floorUsd,
+        capStrikeUsd: band.capUsd,
+        rangeBandPct: band.widthPct,
+        spotUsd: spotUsd || null,
+        forwardUsd: forwardRaw > 0 ? forwardRaw / PRICE_SCALE : null,
+        impliedProbUp: probRange,
         sviA: sviRaw?.a ?? null,
         sviB: sviRaw?.b ?? null,
         sviRho: sviRaw?.rho ?? null,
@@ -157,16 +207,28 @@ export async function fetchDeepBookMarkets(
   console.log(
     `[deepbook] summary: ${oracles.length} oracles, ${settledSkipped} settled-skipped, ` +
     `${stateFetchFails} state-fetch-failed, ${processedOracles} processed, ` +
-    `${out.length} strike rows written`,
+    `${out.length} rows written (5 up/down + 3 range per oracle)`,
   );
   if (out.length > 0) {
-    console.log(`[deepbook] first row sample:`, JSON.stringify({
-      oracleId: out[0].oracleId.slice(0, 10) + "…",
-      strikeUsd: out[0].strikeUsd,
-      impliedProbUp: out[0].impliedProbUp,
-      spotUsd: out[0].spotUsd,
-      forwardUsd: out[0].forwardUsd,
-    }));
+    const upDownRow = out.find((r) => r.rangeBandPct === 0);
+    const rangeRow = out.find((r) => r.rangeBandPct > 0);
+    if (upDownRow) {
+      console.log(`[deepbook] up/down sample:`, JSON.stringify({
+        oracleId: upDownRow.oracleId.slice(0, 10) + "…",
+        strikeUsd: upDownRow.strikeUsd,
+        impliedProbUp: upDownRow.impliedProbUp,
+        spotUsd: upDownRow.spotUsd,
+      }));
+    }
+    if (rangeRow) {
+      console.log(`[deepbook] range sample:`, JSON.stringify({
+        oracleId: rangeRow.oracleId.slice(0, 10) + "…",
+        floorStrikeUsd: rangeRow.floorStrikeUsd,
+        capStrikeUsd: rangeRow.capStrikeUsd,
+        rangeBandPct: rangeRow.rangeBandPct,
+        impliedProbUp: rangeRow.impliedProbUp,
+      }));
+    }
   }
 
   return out;

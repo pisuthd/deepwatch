@@ -26,7 +26,23 @@ export interface BinaryMarket {
   bestBidUsd: number | null;
   bestAskUsd: number | null;
   volume24hUsd: number | null;
+  /**
+   * Up/down markets: the single strike price (e.g. "Will Bitcoin hit $150k?"
+   * → 150000). For Polymarket multi-strike ladders, parsed from
+   * `groupItemTitle` (e.g. "↑ 200,000" → 200000). Null for date-ladders
+   * and intraday "Bitcoin Up or Down" events.
+   * Range markets: the band midpoint ((floor + cap) / 2) so the column
+   * is always populated for sort/display.
+   */
   strikeUsd: number | null;
+  /**
+   * Range-band bounds. Both null on up/down rows; both set on range rows.
+   * For Polymarket, parsed from `groupItemTitle` when the title is
+   * shaped like "low-high" (e.g. "54,000-56,000" → 54000, 56000).
+   * Mirrors `DeepBookMarket` for cross-platform range analytics.
+   */
+  floorStrikeUsd: number | null;
+  capStrikeUsd: number | null;
   expiryMs: number | null;
   marketType: MarketType;
   url: string;
@@ -39,6 +55,16 @@ export interface DeepBookMarket {
   oracleId: string;
   expiryMs: number;
   strikeUsd: number;
+  /**
+   * Range-band bounds. Both null on up/down rows; both set on range rows
+   * (one of three pre-picked bands: ±1%, ±3%, ±5% of spot). For range
+   * rows `strikeUsd` is the band midpoint (a representative value so the
+   * required strike column is always populated).
+   */
+  floorStrikeUsd: number | null;
+  capStrikeUsd: number | null;
+  /** 0 for up/down, 2 / 6 / 10 for the three range bands. */
+  rangeBandPct: number;
   spotUsd: number | null;
   forwardUsd: number | null;
   impliedProbUp: number;        // 0–1
