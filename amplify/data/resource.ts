@@ -89,7 +89,9 @@ const schema = a.schema({
         .queryField("deepbookByStatus"),
     ])
     .authorization((allow) => [allow.publicApiKey()]),
-});
+}).authorization((allow) => [
+   allow.resource(fetchMarkets)
+]);
 
 export type Schema = ClientSchema<typeof schema>;
 
