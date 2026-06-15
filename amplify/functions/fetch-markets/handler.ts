@@ -5,9 +5,9 @@ import { generateClient } from "aws-amplify/data";
 import { env } from "$amplify/env/fetch-markets";
 
 import type { Schema } from "../../data/resource";
-import { fetchDeepBookMarkets } from "../../../app/lib/markets/deepbook";
-import { fetchPolymarketMarkets } from "../../../app/lib/markets/polymarket";
-import { fetchKalshiMarkets } from "../../../app/lib/markets/kalshi";
+import { fetchDeepBookMarkets } from "../../../lib/markets/deepbook";
+import { fetchPolymarketMarkets } from "../../../lib/markets/polymarket";
+import { fetchKalshiMarkets } from "../../../lib/markets/kalshi";
 
 const log = (...args: unknown[]) => console.log("[fetch-markets]", ...args);
 const warn = (...args: unknown[]) => console.warn("[fetch-markets]", ...args);

@@ -38,6 +38,8 @@ interface RawMarket {
   outcomePrices?: string;   // JSON-encoded string of array
   volume?: string | number;
   volumeNum?: number;
+  volume24hr?: number;
+  volume24hrClob?: number;
   liquidity?: string | number;
   liquidityNum?: number;
   bestBid?: string | number;
@@ -171,10 +173,6 @@ export async function fetchPolymarketMarkets(
         skippedMarketCount += 1;
         continue;
       }
-      if (m.closed || m.active === false) continue;
-      const outcomes = decodeJsonArray<string>(m.outcomes);
-      const prices = decodeJsonArray<string>(m.outcomePrices);
-      if (outcomes.length === 0 || outcomes.length !== prices.length) continue;
 
       const url = `https://polymarket.com/event/${ev.slug}`;
       const bestBid = toNumber(m.bestBid);
