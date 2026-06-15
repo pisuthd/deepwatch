@@ -48,9 +48,7 @@ export const handler: Schema["fetchMarkets"]["functionHandler"] = async (event) 
     : "schedule";
 
   const t0 = Date.now();
-  log("=== handler start ===", { trigger });
-  log("env region:", env.AWS_REGION ?? "n/a");
-  log("data resource name:", env.AMPLIFY_DATA_MODEL_SCHEMA_S3_KEY ? "configured" : "missing");
+  log("=== handler start ===", { trigger }); 
 
   let client: ReturnType<typeof generateClient<Schema>>;
   try {
