@@ -173,7 +173,9 @@ export async function fetchKalshiMarkets(
       parsed.expiryMs ?? toExpiryMs(m.close_time, m.expected_expiration_time);
     const strikeUsd =
       parsed.strikeUsd ?? toNumber(m.floor_strike) ?? toNumber(m.cap_strike) ?? null;
-    const url = `https://kalshi.com/markets/${m.series_ticker.toLowerCase()}`;
+    const url = m.series_ticker
+      ? `https://kalshi.com/markets/${m.series_ticker.toLowerCase()}`
+      : `https://kalshi.com/markets/${m.ticker.toLowerCase()}`;
 
     let eventMeta: RawKalshiEvent["event"] | null = null;
     try {
