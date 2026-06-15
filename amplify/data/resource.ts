@@ -1,4 +1,5 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { fetchMarkets } from "../functions/fetch-markets/resource";
 
 /*== STEP 1 ===============================================================
 The section below creates a Todo database table with a "content" field. Try
@@ -7,6 +8,17 @@ specifies that any user authenticated via an API key can "create", "read",
 "update", and "delete" any "Todo" records.
 =========================================================================*/
 const schema = a.schema({
+  // ─── Manual trigger for the scheduled poller ─────────────────────────────
+  // The fetch-markets Lambda runs every 15m on its own (schedule: "every 15m"
+  // in resource.ts), but we also expose it here as a query so the frontend
+  // (and CloudWatch / admin tooling) can invoke it on-demand. Returns a JSON
+  // summary of the run.
+  fetchMarkets: a
+    .query()
+    .arguments({})
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(fetchMarkets)),
   Todo: a
     .model({
       content: a.string(),
