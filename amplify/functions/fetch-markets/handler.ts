@@ -4,6 +4,7 @@ import { generateClient } from "aws-amplify/data";
 import { env } from "$amplify/env/fetchMarkets";
 
 import type { Schema } from "../../data/resource";
+import type { BinaryMarket, DeepBookMarket } from "../../../lib/markets/types";
 import { fetchDeepBookMarkets } from "../../../lib/markets/deepbook";
 import { fetchPolymarketMarkets } from "../../../lib/markets/polymarket";
 import { fetchKalshiMarkets } from "../../../lib/markets/kalshi";
@@ -19,18 +20,36 @@ const log = (...args: unknown[]) => console.log("[fetch-markets]", ...args);
 const warn = (...args: unknown[]) => console.warn("[fetch-markets]", ...args);
 const err = (...args: unknown[]) => console.error("[fetch-markets]", ...args);
 
-function summariseError(e: unknown): { name: string; message: string; stack?: string } {
-  if (e instanceof Error) {
-    return { name: e.name, message: e.message, stack: e.stack };
-  }
-  return { name: "Unknown", message: String(e) };
-}
+// ── Write-side policy ───────────────────────────────────────────────────────
+//
+// Production schedule is every 15 minutes → 96 runs/day. Without these knobs
+// the BinaryMarket / DeepBookMarket tables grow unbounded (mostly duplicates).
+// The full plan lives at the end of the Phase-1 plan file; the implementation
+// is split across these helpers:
+
+/** Drop markets expiring within this window — the next run will skip them via
+ *  the upstream `active=false` flag anyway, so writing them now is noise. */
+const NEAR_EXPIRY_MS = 60 * 60 * 1000;        // 1 hour
+/** Drop markets expiring beyond this window — long-dated noise. */
+const FAR_EXPIRY_MS = 365 * 24 * 60 * 60 * 1000;  // 365 days
+
+type DropCounts = {
+  /** No trading signal: zero volume AND no best bid AND no best ask. */
+  dead: number;
+  /** impliedProb is 0 or 1 — resolved or untradeable. */
+  degenerate: number;
+  /** Expiry within NEAR_EXPIRY_MS. */
+  nearExpiry: number;
+  /** Expiry beyond FAR_EXPIRY_MS. */
+  farExpiry: number;
+};
 
 type PlatformStat = {
   written: number;
   failed: number;
   error: string | null;
   fetched: number;
+  dropped: DropCounts;
 };
 
 type RunSummary = {
@@ -40,6 +59,138 @@ type RunSummary = {
   kalshi: PlatformStat;
   deepbook: PlatformStat;
 };
+
+function summariseError(e: unknown): { name: string; message: string; stack?: string } {
+  if (e instanceof Error) {
+    return { name: e.name, message: e.message, stack: e.stack };
+  }
+  return { name: "Unknown", message: String(e) };
+}
+
+/** Recognise the data-client "row not found" error so we can fall back to create. */
+function isNotFoundError(e: unknown): boolean {
+  if (e == null) return false;
+  const msg = e instanceof Error ? e.message : String(e);
+  return /not\s*found/i.test(msg) || /does not exist/i.test(msg) || /\b404\b/.test(msg);
+}
+
+/** Filter BinaryMarket rows (Polymarket + Kalshi) before the upsert. */
+function applyBinaryFilters(rows: BinaryMarket[], nowMs: number): { kept: BinaryMarket[]; dropped: DropCounts } {
+  const dropped: DropCounts = { dead: 0, degenerate: 0, nearExpiry: 0, farExpiry: 0 };
+  const kept: BinaryMarket[] = [];
+  for (const row of rows) {
+    const hasVolume = row.volume24hUsd != null && row.volume24hUsd > 0;
+    const hasQuote = row.bestBidUsd != null || row.bestAskUsd != null;
+    if (!hasVolume && !hasQuote) {
+      dropped.dead += 1;
+      continue;
+    }
+    if (row.impliedProb === 0 || row.impliedProb === 1) {
+      dropped.degenerate += 1;
+      continue;
+    }
+    if (row.expiryMs != null) {
+      const delta = row.expiryMs - nowMs;
+      if (delta < NEAR_EXPIRY_MS) {
+        dropped.nearExpiry += 1;
+        continue;
+      }
+      if (delta > FAR_EXPIRY_MS) {
+        dropped.farExpiry += 1;
+        continue;
+      }
+    }
+    kept.push(row);
+  }
+  return { kept, dropped };
+}
+
+/** Filter DeepBookMarket rows: just enforce status === ACTIVE. */
+function applyDeepBookFilters(rows: DeepBookMarket[]): { kept: DeepBookMarket[]; dropped: DropCounts } {
+  const dropped: DropCounts = { dead: 0, degenerate: 0, nearExpiry: 0, farExpiry: 0 };
+  const kept: DeepBookMarket[] = [];
+  for (const row of rows) {
+    if (row.status !== "ACTIVE") {
+      dropped.dead += 1;
+      continue;
+    }
+    kept.push(row);
+  }
+  return { kept, dropped };
+}
+
+/** Structural type for the data-client model wrapper. Satisfied by both
+ *  `client.models.BinaryMarket` and `client.models.DeepBookMarket`. */
+type DataModel = {
+  update: (input: unknown) => Promise<unknown>;
+  create: (input: unknown) => Promise<unknown>;
+};
+
+/** Update-or-create one row. Updates hit on re-runs; creates fire on the first
+ *  run for that id. Errors are caught and recorded in `stat`. */
+async function upsertOne(
+  model: DataModel,
+  row: unknown,
+  stat: PlatformStat,
+): Promise<void> {
+  try {
+    await model.update(row);
+    stat.written += 1;
+  } catch (e) {
+    if (isNotFoundError(e)) {
+      try {
+        await model.create(row);
+        stat.written += 1;
+      } catch (e2) {
+        stat.failed += 1;
+        if (!stat.error) stat.error = summariseError(e2).message;
+      }
+    } else {
+      stat.failed += 1;
+      if (!stat.error) stat.error = summariseError(e).message;
+    }
+  }
+}
+
+/** Chunked update-or-create. chunkSize=50 — well under the AppSync 1MB
+ *  request body cap and ~2x fewer round trips than the previous 25. */
+async function upsertBatch(
+  label: string,
+  rows: Array<{ id?: string }>,
+  model: DataModel,
+  stat: PlatformStat,
+): Promise<void> {
+  stat.fetched = rows.length;
+  if (rows.length === 0) {
+    log(`[${label}] nothing to write`);
+    return;
+  }
+  const chunkSize = 50;
+  log(`[${label}] upserting ${rows.length} rows in chunks of ${chunkSize}…`);
+  const writeStart = Date.now();
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const chunkStart = Date.now();
+    const writtenBefore = stat.written;
+    const failedBefore = stat.failed;
+    // Per-row upserts run in parallel; each upsert internally serialises
+    // update → (maybe) create.
+    await Promise.allSettled(chunk.map((row) => upsertOne(model, row, stat)));
+    const chunkWritten = stat.written - writtenBefore;
+    const chunkFailed = stat.failed - failedBefore;
+    log(
+      `[${label}] chunk ${i / chunkSize + 1}/${Math.ceil(rows.length / chunkSize)}: ` +
+      `${chunkWritten} ok / ${chunkFailed} fail in ${Date.now() - chunkStart}ms`,
+    );
+    if (chunkFailed > 0) {
+      warn(`[${label}] chunk had ${chunkFailed} failures; first error:`, stat.error);
+    }
+  }
+  log(
+    `[${label}] done in ${Date.now() - writeStart}ms: ` +
+    `${stat.written} written, ${stat.failed} failed`,
+  );
+}
 
 /**
  * Two invocation paths:
@@ -55,7 +206,7 @@ export const handler: Schema["fetchMarkets"]["functionHandler"] = async (event) 
     : "schedule";
 
   const t0 = Date.now();
-  log("=== handler start ===", { trigger }); 
+  log("=== handler start ===", { trigger });
 
   // ── Fetch phase ──────────────────────────────────────────────────────────
   log("starting 3 platform fetches in parallel…");
@@ -95,60 +246,27 @@ export const handler: Schema["fetchMarkets"]["functionHandler"] = async (event) 
     err("deepbook fetch REJECTED:", summariseError(deepbookResult.reason));
   }
 
+  const emptyDropCounts = (): DropCounts => ({ dead: 0, degenerate: 0, nearExpiry: 0, farExpiry: 0 });
   const stats = {
-    polymarket: { written: 0, failed: 0, error: null as string | null, fetched: 0 } satisfies PlatformStat,
-    kalshi: { written: 0, failed: 0, error: null as string | null, fetched: 0 } satisfies PlatformStat,
-    deepbook: { written: 0, failed: 0, error: null as string | null, fetched: 0 } satisfies PlatformStat,
+    polymarket: { written: 0, failed: 0, error: null as string | null, fetched: 0, dropped: emptyDropCounts() } satisfies PlatformStat,
+    kalshi: { written: 0, failed: 0, error: null as string | null, fetched: 0, dropped: emptyDropCounts() } satisfies PlatformStat,
+    deepbook: { written: 0, failed: 0, error: null as string | null, fetched: 0, dropped: emptyDropCounts() } satisfies PlatformStat,
   };
 
-  // Helper: write a batch to the named model. We chunk to avoid oversized
-  // single mutations. The data client creates new rows per snapshot.
-  async function writeBatch<T extends Record<string, unknown>>(
-    label: string,
-    rows: T[],
-    create: (row: T) => Promise<unknown>,
-    stat: PlatformStat,
-  ) {
-    stat.fetched = rows.length;
-    if (rows.length === 0) {
-      log(`[${label}] nothing to write`);
-      return;
-    }
-    log(`[${label}] writing ${rows.length} rows in chunks of 25…`);
-    const chunkSize = 25;
-    const writeStart = Date.now();
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      const chunkStart = Date.now();
-      const results = await Promise.allSettled(chunk.map(create));
-      let chunkWritten = 0;
-      let chunkFailed = 0;
-      for (const r of results) {
-        if (r.status === "fulfilled") {
-          stat.written += 1;
-          chunkWritten += 1;
-        } else {
-          stat.failed += 1;
-          chunkFailed += 1;
-          if (!stat.error) {
-            stat.error = summariseError(r.reason).message;
-          }
-        }
-      }
-      log(`[${label}] chunk ${i / chunkSize + 1}/${Math.ceil(rows.length / chunkSize)}: ${chunkWritten} ok / ${chunkFailed} fail in ${Date.now() - chunkStart}ms`);
-      if (chunkFailed > 0) {
-        warn(`[${label}] chunk had ${chunkFailed} failures; first error:`, stat.error);
-      }
-    }
-    log(`[${label}] done in ${Date.now() - writeStart}ms: ${stat.written} written, ${stat.failed} failed`);
-  }
+  const now = Date.now();
 
   // ── Write phase ──────────────────────────────────────────────────────────
   if (polyResult.status === "fulfilled") {
-    await writeBatch(
+    const { kept, dropped } = applyBinaryFilters(polyResult.value as BinaryMarket[], now);
+    stats.polymarket.dropped = dropped;
+    log(
+      `[polymarket] filtered: kept=${kept.length} ` +
+      `dropped=${JSON.stringify(dropped)}`,
+    );
+    await upsertBatch(
       "polymarket",
-      polyResult.value as unknown as Array<Record<string, unknown>>,
-      (row) => client!.models.BinaryMarket.create(row as never),
+      kept as Array<{ id?: string }>,
+      client!.models.BinaryMarket as unknown as DataModel,
       stats.polymarket,
     );
   } else {
@@ -156,10 +274,16 @@ export const handler: Schema["fetchMarkets"]["functionHandler"] = async (event) 
   }
 
   if (kalshiResult.status === "fulfilled") {
-    await writeBatch(
+    const { kept, dropped } = applyBinaryFilters(kalshiResult.value as BinaryMarket[], now);
+    stats.kalshi.dropped = dropped;
+    log(
+      `[kalshi] filtered: kept=${kept.length} ` +
+      `dropped=${JSON.stringify(dropped)}`,
+    );
+    await upsertBatch(
       "kalshi",
-      kalshiResult.value as unknown as Array<Record<string, unknown>>,
-      (row) => client!.models.BinaryMarket.create(row as never),
+      kept as Array<{ id?: string }>,
+      client!.models.BinaryMarket as unknown as DataModel,
       stats.kalshi,
     );
   } else {
@@ -167,10 +291,16 @@ export const handler: Schema["fetchMarkets"]["functionHandler"] = async (event) 
   }
 
   if (deepbookResult.status === "fulfilled") {
-    await writeBatch(
+    const { kept, dropped } = applyDeepBookFilters(deepbookResult.value as DeepBookMarket[]);
+    stats.deepbook.dropped = dropped;
+    log(
+      `[deepbook] filtered: kept=${kept.length} ` +
+      `dropped=${JSON.stringify(dropped)}`,
+    );
+    await upsertBatch(
       "deepbook",
-      deepbookResult.value as unknown as Array<Record<string, unknown>>,
-      (row) => client!.models.DeepBookMarket.create(row as never),
+      kept as Array<{ id?: string }>,
+      client!.models.DeepBookMarket as unknown as DataModel,
       stats.deepbook,
     );
   } else {

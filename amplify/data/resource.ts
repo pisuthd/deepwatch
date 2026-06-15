@@ -44,7 +44,16 @@ const schema = a.schema({
       bestBidUsd: a.float(),
       bestAskUsd: a.float(),
       volume24hUsd: a.float(),
-      strikeUsd: a.float(),                     // null for non-strike markets
+      // Up/down rows: the single strike (parsed from polymarket
+      // groupItemTitle for ladders, e.g. "↑ 200,000" → 200000). Range
+      // rows: the band midpoint so the column is always populated.
+      // Null for non-strike markets (date-ladders, intraday "Up or Down").
+      strikeUsd: a.float(),
+      // Range-band bounds. Both null on up/down rows; both set on range
+      // rows. For polymarket, parsed from groupItemTitle when shaped as
+      // "low-high" (e.g. "54,000-56,000" → 54000, 56000).
+      floorStrikeUsd: a.float(),
+      capStrikeUsd: a.float(),
       expiryMs: a.integer(),                    // null if no expiry
       marketType: a.enum(["UP_DOWN", "RANGE", "OTHER"]),
       url: a.string(),
@@ -65,7 +74,16 @@ const schema = a.schema({
     .model({
       oracleId: a.string().required(),
       expiryMs: a.integer().required(),
-      strikeUsd: a.float().required(),          // raw 1e9, scaled at write/read
+      // strikeUsd is required; for up/down rows it's the actual strike,
+      // for range rows it's the band midpoint (floor+cap)/2.
+      strikeUsd: a.float().required(),
+      // Range-band bounds. Both null on up/down rows. Both set on range
+      // rows — one of three pre-picked bands (±1%, ±3%, ±5% of spot).
+      floorStrikeUsd: a.float(),
+      capStrikeUsd: a.float(),
+      // Discriminator: 0 for up/down, 2 / 6 / 10 for the three range bands.
+      // (Kept as a column for cheap filtering without scanning floor/cap.)
+      rangeBandPct: a.float().required(),
       spotUsd: a.float(),
       forwardUsd: a.float(),
       impliedProbUp: a.float(),                 // 0–1, computed from SVI+Black-76
