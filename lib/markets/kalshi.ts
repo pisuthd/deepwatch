@@ -110,18 +110,30 @@ function toSubcategory(category: Category, title: string): string | null {
 }
 
 /**
- * Derive marketType from the structured `strike_type` field. The title
- * text is unreliable — KXBTC and KXBTCD markets have nearly identical
- * titles ("Bitcoin price range on …" / "Bitcoin price on …") that don't
- * carry the strike semantics. The structured field is the source of truth.
+ * Derive marketType from the structured fields. The Kalshi API uses two
+ * distinct structural signals that we prefer over `strike_type`:
+ *   - floor_strike / cap_strike presence: both set → RANGE (a "between"
+ *     bucket); exactly one set → UP_DOWN (a "less" or "greater" tail).
+ *   - series_ticker: KXBTCD markets have neither floor nor cap, so we
+ *     fall back to the series name to classify the "is BTC above $X?"
+ *     binary series as UP_DOWN.
+ *
+ * Using `strike_type` alone was a bug — KXBTCD's "above $X?" markets
+ * have `strike_type: "binary"`, which fell into the `default: "OTHER"`
+ * case and got filtered out, leaving only the KXBTC bucket markets
+ * (mostly RANGE) on the page. The floor/cap + series_ticker heuristic
+ * correctly classifies every case.
  */
 function toMarketType(market: RawKalshiMarket): MarketType {
-  switch (market.strike_type) {
-    case "between":  return "RANGE";
-    case "greater":  return "UP_DOWN";
-    case "less":     return "UP_DOWN";
-    default:         return "OTHER";
-  }
+  const floor = toNumber(market.floor_strike);
+  const cap = toNumber(market.cap_strike);
+  // Both bounds set → RANGE (KXBTC "between" bucket).
+  if (floor !== null && cap !== null) return "RANGE";
+  // Exactly one bound set → UP_DOWN (KXBTC "less" / "greater" tail).
+  if (floor !== null || cap !== null) return "UP_DOWN";
+  // Neither bound set → KXBTCD's "is BTC above $X?" binary series.
+  if (market.series_ticker === "KXBTCD") return "UP_DOWN";
+  return "OTHER";
 }
 
 function toOutcome(side: "YES" | "NO"): Outcome {
@@ -427,4 +439,96 @@ export async function fetchKalshiMarkets(
   }
 
   return out;
+}
+
+/**
+ * Range band width as a percentage of the band midpoint, used by the
+ * range card to display "±N%". Exported so callers (e.g. SearchResults)
+ * can recompute the same value without duplicating the formula.
+ */
+export function kalshiRangeBandPct(m: BinaryMarket): number {
+  if (
+    m.marketType === "RANGE" &&
+    m.floorStrikeUsd != null &&
+    m.capStrikeUsd != null
+  ) {
+    const mid = (m.floorStrikeUsd + m.capStrikeUsd) / 2;
+    if (mid > 0) {
+      return ((m.capStrikeUsd - m.floorStrikeUsd) / mid) * 100;
+    }
+  }
+  return 0;
+}
+
+/**
+ * A group of Kalshi markets that share the same (event, expiry).
+ * One group can carry BOTH an UP_DOWN ladder (from KXBTCD or KXBTC's
+ * greater/less tails) and a RANGE ladder (from KXBTC's between buckets),
+ * so the rendering can put the two card types side-by-side in a 2-col
+ * grid.
+ */
+export interface KalshiGroup {
+  /** `${externalEventId}::${expiryMs}` */
+  key: string;
+  externalEventId: string | null;
+  externalId: string;
+  question: string;
+  expiryMs: number;
+  /** One row per strike in an UP_DOWN ladder (empty if none). */
+  upDown: { strikeUsd: number; impliedProbUp: number }[];
+  /** One row per (floor, cap) band in a RANGE ladder (empty if none). */
+  range: {
+    floorStrikeUsd: number;
+    capStrikeUsd: number;
+    rangeBandPct: number;
+    impliedProbUp: number;
+  }[];
+}
+
+/**
+ * Group raw Kalshi BinaryMarket rows into render-ready KalshiGroup
+ * objects. Drops OTHER (single YES/NO) markets, dedupes YES/UP rows
+ * (NO/DOWN rows are the complement and would double-count). UP_DOWN
+ * and RANGE markets for the same (event, expiry) share a group so the
+ * cards can be rendered side-by-side.
+ *
+ * Sort order: earliest expiry first.
+ */
+export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
+  const byKey = new Map<string, KalshiGroup>();
+  for (const m of rows) {
+    if (m.marketType !== "UP_DOWN" && m.marketType !== "RANGE") continue;
+    // YES/UP row carries the implied prob; NO/DOWN row is the complement.
+    const isYes = m.outcome === "YES" || m.outcome === "UP";
+    if (!isYes) continue;
+    const expiry = m.expiryMs ?? 0;
+    const key = `${m.externalEventId ?? m.externalId}::${expiry}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = {
+        key,
+        externalEventId: m.externalEventId,
+        externalId: m.externalId,
+        question: m.question,
+        expiryMs: expiry,
+        upDown: [],
+        range: [],
+      };
+      byKey.set(key, group);
+    }
+    if (m.marketType === "UP_DOWN") {
+      group.upDown.push({
+        strikeUsd: m.strikeUsd ?? 0,
+        impliedProbUp: m.impliedProb,
+      });
+    } else {
+      group.range.push({
+        floorStrikeUsd: m.floorStrikeUsd ?? 0,
+        capStrikeUsd: m.capStrikeUsd ?? 0,
+        rangeBandPct: kalshiRangeBandPct(m),
+        impliedProbUp: m.impliedProb,
+      });
+    }
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.expiryMs - b.expiryMs);
 }

@@ -48,6 +48,24 @@ export function formatExpiryDate(ms: number | null | undefined): string {
   return `${month} ${day}, ${hh}:${mm} UTC`;
 }
 
+/**
+ * Compact expiry for question text: "Friday at 06:45 UTC".
+ * Used to fold the absolute date into the market question so we don't
+ * need a separate "Expires …" line on the card.
+ */
+export function formatExpiryQuestion(ms: number | null | undefined): string {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const dayName = d.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+  const time = d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  });
+  return `${dayName} at ${time} UTC`;
+}
+
 /** Round a USD value to the nearest display tick. */
 export function roundToTick(spotUsd: number, tick: number): number {
   if (!spotUsd || tick <= 0) return 0;

@@ -30,7 +30,7 @@ export default function Navbar() {
         }}>
             <div className="max-w-6xl mx-auto flex items-center justify-between">
                 {/* Logo - Scroll to top */}
-                <a href="#" className="flex items-center gap-3 cursor-pointer">
+                <a href="/#" className="flex items-center gap-3 cursor-pointer">
                     <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center">
                         <Telescope size={20} className="text-[#0F1117]" strokeWidth={2} />
                     </div>
@@ -41,6 +41,7 @@ export default function Navbar() {
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
+                    <a href="/search" className="text-gray-400 hover:text-white transition-colors">Search</a>
                     <a href="/compare" className="text-gray-400 hover:text-white transition-colors">Compare</a>
                     <a href="/stake" className="text-gray-400 hover:text-white transition-colors">Stake</a>
                     <a href="/leaderboard" className="text-gray-400 hover:text-white transition-colors">Leaderboard</a>
@@ -108,6 +109,7 @@ export default function Navbar() {
                     className="md:hidden mt-4 pt-4 border-t border-white/10"
                 >
                     <nav className="flex flex-col gap-4">
+                        <a href="/search" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Search</a>
                         <a href="/compare" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Compare</a>
                         <a href="/stake" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Stake</a>
                         <a href="/leaderboard" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Leaderboard</a>

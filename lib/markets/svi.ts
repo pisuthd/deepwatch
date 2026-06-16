@@ -43,7 +43,7 @@ export function sviVol(K: number, F: number, T: number, svi: SVIParams): number 
   const m = svi.m / SVI_SCALE;
   const sig = svi.sigma / SVI_SCALE;
   const k = Math.log(K / F);
-  const w = a + b * (rho * (k - m) + Math.sqrt((k - m) ** 2 + sig ** sig));
+  const w = a + b * (rho * (k - m) + Math.sqrt((k - m) ** 2 + sig ** 2));
   return w > 0 ? Math.sqrt(w / T) : sig;
 }
 

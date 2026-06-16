@@ -63,6 +63,51 @@ function readSvi(raw: SVIParams | undefined): SVIParams | null {
 }
 
 /**
+ * A group of DeepBook markets that share the same (oracle, expiry).
+ * One oracle produces one group; the group has both a 5-strike UP_DOWN
+ * ladder and a 3-band RANGE ladder, which together render as a single
+ * (UpDownCard + RangeCard) side-by-side pair.
+ */
+export interface DeepBookGroup {
+  oracleId: string;
+  expiryMs: number;
+  asset: string;
+  spotUsd: number | null;
+  forwardUsd: number | null;
+  upDown: DeepBookMarket[];
+  range: DeepBookMarket[];
+}
+
+/**
+ * Group raw DeepBook rows into render-ready DeepBookGroup objects,
+ * keyed by (oracleId, expiryMs). The latest non-null spot/forward
+ * within a group is preserved on the group itself.
+ *
+ * Sort order: earliest expiry first.
+ */
+export function groupDeepBookMarkets(rows: DeepBookMarket[]): DeepBookGroup[] {
+  const map = new Map<string, DeepBookGroup>();
+  for (const m of rows) {
+    const k = `${m.oracleId}::${m.expiryMs}`;
+    const entry: DeepBookGroup = map.get(k) ?? {
+      oracleId: m.oracleId,
+      expiryMs: m.expiryMs,
+      asset: "BTC",
+      spotUsd: m.spotUsd,
+      forwardUsd: m.forwardUsd,
+      upDown: [],
+      range: [],
+    };
+    if (entry.spotUsd == null && m.spotUsd != null) entry.spotUsd = m.spotUsd;
+    if (entry.forwardUsd == null && m.forwardUsd != null) entry.forwardUsd = m.forwardUsd;
+    if (m.rangeBandPct === 0) entry.upDown.push(m);
+    else entry.range.push(m);
+    map.set(k, entry);
+  }
+  return Array.from(map.values()).sort((a, b) => a.expiryMs - b.expiryMs);
+}
+
+/**
  * Fetch every active oracle, generate a 5-strike ladder per oracle, compute
  * impliedProbUp from the SVI+Black-76 model, and return one DeepBookMarket
  * row per (oracle, strike). One oracle therefore produces 5 rows.
@@ -80,8 +125,16 @@ export async function fetchDeepBookMarkets(
   const now = new Date().toISOString();
   const out: DeepBookMarket[] = [];
   let settledSkipped = 0;
+  let expiredSkipped = 0;
   let stateFetchFails = 0;
   let processedOracles = 0;
+
+  // 60-second buffer: filters out oracles that have already expired
+  // (or are about to) even if the indexer hasn't flipped their status to
+  // "settled" yet. Without this, the page shows markets whose probabilities
+  // collapse to the fallback (svi.sigma / SVI_SCALE) because T = 0.
+  const EXPIRY_BUFFER_MS = 60_000;
+  const nowMs = Date.now();
 
   for (const oracle of oracles) {
     if (oracle.status === "settled") {
@@ -91,6 +144,11 @@ export async function fetchDeepBookMarkets(
     // BTC only — the indexer also lists other assets (ETH, SUI, …) and we
     // don't want to ingest them. Skipped count is reported in the summary.
     if (oracle.underlying_asset && oracle.underlying_asset !== "BTC") {
+      continue;
+    }
+    // Exclude oracles that have already expired (or are within the buffer).
+    if (oracle.expiry <= nowMs + EXPIRY_BUFFER_MS) {
+      expiredSkipped += 1;
       continue;
     }
     let state: RawOracleState = {};
@@ -129,11 +187,15 @@ export async function fetchDeepBookMarkets(
     // Generate a 5-strike ladder around the rounded spot. Falls back to min+5*tick
     // when spot is unknown (e.g. fresh oracle without price history).
     const baseSpot = spotUsd > 0 ? spotUsd : minStrikeUsd + 5 * tickSizeUsd;
-    const strikes = generateStrikes(baseSpot, 5, tickSizeUsd || 1000);
+    // Use the DISPLAY_TICK_USD ($1,000) for the strike ladder regardless of
+    // the indexer's on-chain tick_size. The on-chain min_strike / tick_size
+    // can be 1 USD on testnet, which makes the snap produce ugly values like
+    // $61,541 instead of the $61,000 a user actually wants to see.
+    const strikes = generateStrikes(baseSpot, 5, DISPLAY_TICK_USD);
     // Range ladder: three pre-picked bands (±1% / ±3% / ±5%) snapped to tick.
     // DeepBook Predict lets the user mint any (lower, higher) tuple, so we
     // surface a representative set in the search index.
-    const bands = generateRangeBands(baseSpot, tickSizeUsd || DISPLAY_TICK_USD);
+    const bands = generateRangeBands(baseSpot, DISPLAY_TICK_USD);
 
     for (const strike of strikes) {
       const impliedProbUp = impliedProbUpForStrike(
@@ -206,8 +268,8 @@ export async function fetchDeepBookMarkets(
 
   console.log(
     `[deepbook] summary: ${oracles.length} oracles, ${settledSkipped} settled-skipped, ` +
-    `${stateFetchFails} state-fetch-failed, ${processedOracles} processed, ` +
-    `${out.length} rows written (5 up/down + 3 range per oracle)`,
+    `${expiredSkipped} expired-skipped, ${stateFetchFails} state-fetch-failed, ` +
+    `${processedOracles} processed, ${out.length} rows written (5 up/down + 3 range per oracle)`,
   );
   if (out.length > 0) {
     const upDownRow = out.find((r) => r.rangeBandPct === 0);

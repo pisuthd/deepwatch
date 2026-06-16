@@ -293,9 +293,16 @@ export async function fetchPolymarketMarkets(
   let closedSkipped = 0;
   let noOutcomesSkipped = 0;
   let noTagSkipped = 0;
+  let horizonSkipped = 0;
   let upDownRows = 0;
   let rangeRows = 0;
   let otherRows = 0;
+
+  // Markets with expiry more than this many days in the future are
+  // dropped — they're not actionable in the next trading window.
+  const MAX_HORIZON_DAYS = 30;
+  const MAX_HORIZON_MS = MAX_HORIZON_DAYS * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
 
   for (const e of events) {
     // Defensive BTC check. The server already filtered by tag_id=235,
@@ -311,6 +318,15 @@ export async function fetchPolymarketMarkets(
       totalMarketsSeen += 1;
       if (m.closed || m.active === false) {
         closedSkipped += 1;
+        continue;
+      }
+
+      // 30-day horizon filter: drop markets expiring more than 30 days out
+      // (e.g. the long-dated "When will Bitcoin hit $150k?" date-ladder).
+      // Already-expired markets fall outside this window by the same logic.
+      const expiryCheck = m.endDate ? new Date(m.endDate).getTime() : NaN;
+      if (Number.isFinite(expiryCheck) && expiryCheck > nowMs + MAX_HORIZON_MS) {
+        horizonSkipped += 1;
         continue;
       }
 
@@ -397,7 +413,7 @@ export async function fetchPolymarketMarkets(
     `[polymarket] summary: ${btcEventCount}/${events.length} BTC events, ` +
     `${totalMarketsSeen} markets seen, ` +
     `${closedSkipped} closed-skipped, ${noOutcomesSkipped} no-outcomes-skipped, ` +
-    `${noTagSkipped} no-bitcoin-tag-skipped`,
+    `${noTagSkipped} no-bitcoin-tag-skipped, ${horizonSkipped} horizon-skipped (>${MAX_HORIZON_DAYS}d)`,
   );
   console.log(
     `[polymarket] outcome rows: ${out.length} total ` +
@@ -419,4 +435,95 @@ export async function fetchPolymarketMarkets(
   }
 
   return out;
+}
+
+/**
+ * Range band width as a percentage of the band midpoint, used by the
+ * range card to display "±N%". Exported so callers (e.g. SearchResults)
+ * can recompute the same value without duplicating the formula.
+ */
+export function polymarketRangeBandPct(m: BinaryMarket): number {
+  if (
+    m.marketType === "RANGE" &&
+    m.floorStrikeUsd != null &&
+    m.capStrikeUsd != null
+  ) {
+    const mid = (m.floorStrikeUsd + m.capStrikeUsd) / 2;
+    if (mid > 0) {
+      return ((m.capStrikeUsd - m.floorStrikeUsd) / mid) * 100;
+    }
+  }
+  return 0;
+}
+
+/**
+ * A group of Polymarket markets that share the same (event, expiry).
+ * One group can carry BOTH an UP_DOWN ladder and a RANGE ladder for
+ * the same event+expiry, so the rendering can put the two card types
+ * side-by-side in a 2-col grid.
+ */
+export interface PolymarketGroup {
+  /** `${externalEventId}::${expiryMs}` */
+  key: string;
+  externalEventId: string | null;
+  externalId: string;
+  question: string;
+  expiryMs: number;
+  /** One row per strike in a multi-strike UP_DOWN ladder (empty if none). */
+  upDown: { strikeUsd: number; impliedProbUp: number }[];
+  /** One row per (floor, cap) band in a RANGE ladder (empty if none). */
+  range: {
+    floorStrikeUsd: number;
+    capStrikeUsd: number;
+    rangeBandPct: number;
+    impliedProbUp: number;
+  }[];
+}
+
+/**
+ * Group raw Polymarket BinaryMarket rows into render-ready PolymarketGroup
+ * objects. Drops OTHER (single YES/NO) markets, dedupes YES/UP rows
+ * (NO/DOWN rows are the complement and would double-count). UP_DOWN
+ * and RANGE markets for the same (event, expiry) share a group so the
+ * cards can be rendered side-by-side.
+ *
+ * Sort order: earliest expiry first.
+ */
+export function groupPolymarketMarkets(rows: BinaryMarket[]): PolymarketGroup[] {
+  const byKey = new Map<string, PolymarketGroup>();
+  for (const m of rows) {
+    if (m.marketType !== "UP_DOWN" && m.marketType !== "RANGE") continue;
+    // YES/UP row carries the implied prob; NO/DOWN row is the complement.
+    const isYes = m.outcome === "YES" || m.outcome === "UP";
+    if (!isYes) continue;
+    const expiry = m.expiryMs ?? 0;
+    const key = `${m.externalEventId ?? m.externalId}::${expiry}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = {
+        key,
+        externalEventId: m.externalEventId,
+        externalId: m.externalId,
+        question: m.question,
+        expiryMs: expiry,
+        upDown: [],
+        range: [],
+      };
+      byKey.set(key, group);
+    }
+    if (m.marketType === "UP_DOWN") {
+      group.upDown.push({
+        strikeUsd: m.strikeUsd ?? 0,
+        impliedProbUp: m.impliedProb,
+      });
+    } else {
+      group.range.push({
+        floorStrikeUsd: m.floorStrikeUsd ?? 0,
+        capStrikeUsd: m.capStrikeUsd ?? 0,
+        rangeBandPct: polymarketRangeBandPct(m),
+        impliedProbUp: m.impliedProb,
+      });
+    }
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.expiryMs - b.expiryMs);
 }
