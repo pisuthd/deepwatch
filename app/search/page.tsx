@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import Navbar from '@/components/shared/Navbar';
+import TopSearchBar from './TopSearchBar';
 import SearchFilters from './SearchFilters';
 import SearchResults from './SearchResults';
 
@@ -22,21 +23,15 @@ function SearchPageInner() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen pt-28 pb-16 px-4 md:px-6">
-        <div className="max-w-screen-2xl mx-auto">
-          <header className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-black mb-2">
-              <span className="text-white">Search </span>
-              <span className="bg-gradient-to-r from-accent-primary to-blue-400 bg-clip-text text-transparent">
-                Results
-              </span>
-            </h1>
-            <p className="text-sm text-gray-400">
-              Live odds from Polymarket, DeepBook Predict, and Kalshi. Switch the
-              source in the filter panel. Snapshots refresh every minute.
-            </p>
-          </header>
 
+      {/* Top search bar — full width with a divider underneath */}
+      <div className="pt-24 px-4 md:px-6 border-b border-white/10 pb-4">
+        <TopSearchBar />
+      </div>
+
+      {/* Below: sidebar + main, centered with max-w */}
+      <div className="px-4 md:px-6 pt-6 pb-16">
+        <div className="max-w-screen-2xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
             <aside>
               <SearchFilters />
@@ -53,7 +48,7 @@ function SearchPageInner() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen pt-28 px-6 text-gray-400">Loading…</div>}>
+    <Suspense fallback={<div className="min-h-screen pt-24 px-6 text-gray-400">Loading…</div>}>
       <SearchPageInner />
     </Suspense>
   );
