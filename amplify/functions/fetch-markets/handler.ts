@@ -120,35 +120,106 @@ function applyDeepBookFilters(rows: DeepBookMarket[]): { kept: DeepBookMarket[];
 }
 
 /** Structural type for the data-client model wrapper. Satisfied by both
- *  `client.models.BinaryMarket` and `client.models.DeepBookMarket`. */
+ *  `client.models.BinaryMarket` and `client.models.DeepBookMarket`. The
+ *  return type is `unknown` because the v6 client shape varies: the typed
+ *  surface says `data: T` (no null), but at runtime AppSync returns
+ *  `{ data: { updateX: null }, errors: [...] }` on NotFound. The TS type
+ *  system lies — see the comment on `upsertOne` for the full story. */
 type DataModel = {
   update: (input: unknown) => Promise<unknown>;
   create: (input: unknown) => Promise<unknown>;
 };
 
-/** Update-or-create one row. Updates hit on re-runs; creates fire on the first
- *  run for that id. Errors are caught and recorded in `stat`. */
+/** Shape of a data-client response. `data` may be null on failed mutations
+ *  (NotFound / ConditionalCheckFailed) even when the TS type says otherwise.
+ *  `errors` is set on the top-level GraphQL response when AppSync returns
+ *  error objects — the v6 client may or may not throw on these. */
+type DataClientResponse = {
+  data?: unknown;
+  errors?: Array<{ errorType?: string; message?: string }>;
+};
+
+/** Returns true when the response represents a successful write. A response
+ *  is "ok" if it has a non-null `data` field AND no errors. This catches both
+ *  the throwing case (the client throws before we even get here) and the
+ *  silent-failure case (data is null on NotFound, no exception thrown). */
+function isResponseOk(res: unknown): boolean {
+  if (res == null) return false;
+  const r = res as DataClientResponse;
+  if (Array.isArray(r.errors) && r.errors.length > 0) return false;
+  if (r.data == null) return false;
+  // data: { updateX: <row> | null } or { createX: <row> | null }
+  if (typeof r.data === "object") {
+    const inner = r.data as Record<string, unknown>;
+    for (const key of Object.keys(inner)) {
+      if (inner[key] == null) return false;
+    }
+  }
+  return true;
+}
+
+/** First error message in a response, if any. */
+function firstErrorMessage(res: unknown): string | null {
+  if (res == null) return null;
+  const r = res as DataClientResponse;
+  if (Array.isArray(r.errors) && r.errors.length > 0) {
+    return r.errors[0]?.message ?? "unknown GraphQL error";
+  }
+  return null;
+}
+
+/** Update-or-create one row.
+ *
+ *  The first Lambda runs we observed (15m schedule, ~1038 rows/run) reported
+ *  100% success but the AppSync table stayed empty. Root cause: the v6 data
+ *  client surfaces NotFound / ConditionalCheckFailed as `{ data: { updateX:
+ *  null } }` rather than throwing — so a `try { update }` block silently
+ *  passed through to `stat.written += 1` with no actual write happening.
+ *
+ *  The defensive check uses `isResponseOk` on both the update and the create
+ *  response: any non-null `errors` array OR any null inner value is treated
+ *  as failure and triggers the create-fallback (or a hard fail). */
 async function upsertOne(
   model: DataModel,
   row: unknown,
   stat: PlatformStat,
 ): Promise<void> {
+  // 1) Try update.
+  let updateRes: unknown;
   try {
-    await model.update(row);
-    stat.written += 1;
+    updateRes = await model.update(row);
   } catch (e) {
-    if (isNotFoundError(e)) {
-      try {
-        await model.create(row);
-        stat.written += 1;
-      } catch (e2) {
-        stat.failed += 1;
-        if (!stat.error) stat.error = summariseError(e2).message;
-      }
-    } else {
-      stat.failed += 1;
-      if (!stat.error) stat.error = summariseError(e).message;
+    // The v6 client DOES throw on some errors (network, auth). Treat all
+    // thrown errors as "update failed" and fall through to create.
+    if (!isNotFoundError(e) && !stat.error) {
+      stat.error = summariseError(e).message;
     }
+    updateRes = null;
+  }
+  if (isResponseOk(updateRes)) {
+    stat.written += 1;
+    return;
+  }
+
+  // 2) Update failed (NotFound or null data). Try create.
+  let createRes: unknown;
+  try {
+    createRes = await model.create(row);
+  } catch (e) {
+    stat.failed += 1;
+    if (!stat.error) stat.error = summariseError(e).message;
+    return;
+  }
+  if (isResponseOk(createRes)) {
+    stat.written += 1;
+    return;
+  }
+
+  // 3) Both failed.
+  stat.failed += 1;
+  if (!stat.error) {
+    const msg = firstErrorMessage(createRes) ?? firstErrorMessage(updateRes);
+    if (msg) stat.error = msg;
   }
 }
 
