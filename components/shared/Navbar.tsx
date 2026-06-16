@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Telescope, Menu, X, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import ConnectWallet from './ConnectWallet';
 
 export default function Navbar() {
@@ -29,23 +30,31 @@ export default function Navbar() {
             borderBottom: '1px solid var(--color-border-subtle)',
         }}>
             <div className="max-w-6xl mx-auto flex items-center justify-between">
-                {/* Logo - Scroll to top */}
-                <a href="/#" className="flex items-center gap-3 cursor-pointer">
+                {/* Logo - Link to home */}
+                <Link href="/" className="flex items-center gap-3 cursor-pointer">
                     <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center">
                         <Telescope size={20} className="text-[#0F1117]" strokeWidth={2} />
                     </div>
                     <span className={`text-lg font-black tracking-widest font-brand text-gradient-white`}>
                         DeepWatch
                     </span>
-                </a>
+                </Link>
 
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
-                    <a href="/search" className="text-gray-400 hover:text-white transition-colors">Search</a>
-                    <a href="/compare" className="text-gray-400 hover:text-white transition-colors">Compare</a>
-                    <a href="/stake" className="text-gray-400 hover:text-white transition-colors">Stake</a>
-                    <a href="/leaderboard" className="text-gray-400 hover:text-white transition-colors">Leaderboard</a>
-                     
+                    <Link href="/search" className="text-gray-400 hover:text-white transition-colors">
+                        Search
+                    </Link>
+                    <Link href="/compare" className="text-gray-400 hover:text-white transition-colors">
+                        Compare
+                    </Link>
+                    <Link href="/stake" className="text-gray-400 hover:text-white transition-colors">
+                        Stake
+                    </Link>
+                    <Link href="/leaderboard" className="text-gray-400 hover:text-white transition-colors">
+                        Leaderboard
+                    </Link>
+
                     {/* "More" dropdown (GitHub) */}
                     <div className="relative z-50" ref={moreRef}>
                         <button
@@ -109,11 +118,21 @@ export default function Navbar() {
                     className="md:hidden mt-4 pt-4 border-t border-white/10"
                 >
                     <nav className="flex flex-col gap-4">
-                        <a href="/search" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Search</a>
-                        <a href="/compare" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Compare</a>
-                        <a href="/stake" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Stake</a>
-                        <a href="/leaderboard" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Leaderboard</a>
-                        <a href="https://github.com/pisuthd/deepwatch" target='_blank' onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">GitHub</a>
+                        <Link href="/search" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
+                            Search
+                        </Link>
+                        <Link href="/compare" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
+                            Compare
+                        </Link>
+                        <Link href="/stake" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
+                            Stake
+                        </Link>
+                        <Link href="/leaderboard" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
+                            Leaderboard
+                        </Link>
+                        <a href="https://github.com/pisuthd/deepwatch" target='_blank' rel="noreferrer" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
+                            GitHub
+                        </a>
                         <div className="mt-2">
                             <ConnectWallet />
                         </div>

@@ -311,17 +311,13 @@ export async function fetchKalshiMarkets(
     BTC_SERIES.map((s) => `${s}=${seriesStats[s]}`).join(", ")
   }`);
 
-  // Step 2: batch event-metadata fetch (one per unique event_ticker
-  // instead of one per market — N+1 → 1+1).
+  // Step 2: batch event-metadata fetch.
   const uniqueEventTickers = [...new Set(allMarkets.map((m) => m.event_ticker))];
   const eventMetaMap = await fetchEventMetaBatch(uniqueEventTickers, signal);
   console.log(`[kalshi] event-meta: ${eventMetaMap.size}/${uniqueEventTickers.length} resolved`);
 
   // Step 3: emit rows.
   const now = new Date().toISOString();
-  // Markets expiring within this buffer (or already expired) are
-  // dropped — same value as DeepBook's EXPIRY_BUFFER_MS for cross-
-  // source consistency.
   const EXPIRY_BUFFER_MS = 60_000;
   const nowMs = Date.now();
   const out: BinaryMarket[] = [];
@@ -342,15 +338,12 @@ export async function fetchKalshiMarkets(
     const parsed = parseTicker(m.ticker);
     const expiryMs =
       parsed.expiryMs ?? toExpiryMs(m.close_time, m.expected_expiration_time);
-    // 60s expiry filter: drop markets that have already expired or are
-    // about to expire in the next 60s. Mirrors DeepBook's EXPIRY_BUFFER_MS.
+    // 60s expiry filter.
     if (expiryMs !== null && expiryMs <= nowMs + EXPIRY_BUFFER_MS) {
       expiredSkipped += 1;
       continue;
     }
     const { strikeUsd, floorStrikeUsd, capStrikeUsd } = resolveStrike(m);
-    // Fall back to ticker-parsed strike if structured fields are empty
-    // (shouldn't happen for KXBTC/KXBTCD but defensive).
     const finalStrike = strikeUsd ?? parsed.strikeUsd ?? null;
 
     const eventMeta = eventMetaMap.get(m.event_ticker) ?? null;
@@ -368,9 +361,18 @@ export async function fetchKalshiMarkets(
     const yesAsk = toNumber(m.yes_ask_dollars);
     const noBid = toNumber(m.no_bid_dollars);
     const noAsk = toNumber(m.no_ask_dollars);
-    // 24h volume (contracts) is the right field for the search UI.
-    // volume_fp is lifetime, volume_24h_fp is 24h.
     const volume24hUsd = toNumber(m.volume_24h_fp) ?? toNumber(m.volume_fp) ?? null;
+
+    // description = subtitle (e.g. "$55,500 or above", "$75,000 to $75,250").
+    // The YES/UP and NO/DOWN rows for the same market share the same
+    // subtitle — we just write it on both.
+    const description = m.subtitle ?? null;
+
+    // priceToBeatUsd is a Polymarket-specific concept (the open price of
+    // the 1-hour candle that "Up or Down" intraday markets cover).
+    // Kalshi markets use floor_strike / cap_strike / single threshold
+    // instead, so this is always null here.
+    const priceToBeatUsd: number | null = null;
 
     if (yesBid !== null || yesAsk !== null) {
       const implied = yesAsk !== null ? yesAsk : yesBid ?? 0.5;
@@ -380,7 +382,7 @@ export async function fetchKalshiMarkets(
         externalId: m.ticker,
         externalEventId: m.event_ticker,
         question: m.title,
-        description: m.subtitle ?? null,
+        description,
         category: finalCategory,
         subcategory: finalSubcategory,
         outcome: toOutcome("YES"),
@@ -391,6 +393,7 @@ export async function fetchKalshiMarkets(
         strikeUsd: finalStrike,
         floorStrikeUsd,
         capStrikeUsd,
+        priceToBeatUsd,
         expiryMs,
         marketType,
         url,
@@ -408,7 +411,7 @@ export async function fetchKalshiMarkets(
         externalId: m.ticker,
         externalEventId: m.event_ticker,
         question: m.title,
-        description: m.subtitle ?? null,
+        description,
         category: finalCategory,
         subcategory: finalSubcategory,
         outcome: toOutcome("NO"),
@@ -419,6 +422,7 @@ export async function fetchKalshiMarkets(
         strikeUsd: finalStrike,
         floorStrikeUsd,
         capStrikeUsd,
+        priceToBeatUsd,
         expiryMs,
         marketType,
         url,
@@ -436,28 +440,11 @@ export async function fetchKalshiMarkets(
     `(up/down=${typeCounts.UP_DOWN}, range=${typeCounts.RANGE}, other=${typeCounts.OTHER})`,
   );
 
-  if (out.length > 0) {
-    console.log(`[kalshi] first row sample:`, JSON.stringify({
-      platform: out[0].platform,
-      question: out[0].question.slice(0, 60),
-      outcome: out[0].outcome,
-      impliedProb: out[0].impliedProb,
-      marketType: out[0].marketType,
-      strikeUsd: out[0].strikeUsd,
-      floorStrikeUsd: out[0].floorStrikeUsd,
-      capStrikeUsd: out[0].capStrikeUsd,
-      volume24hUsd: out[0].volume24hUsd,
-      expiryMs: out[0].expiryMs,
-    }));
-  }
-
   return out;
 }
 
 /**
- * Range band width as a percentage of the band midpoint, used by the
- * range card to display "±N%". Exported so callers (e.g. SearchResults)
- * can recompute the same value without duplicating the formula.
+ * Range band width as a percentage of the band midpoint.
  */
 export function kalshiRangeBandPct(m: BinaryMarket): number {
   if (
@@ -474,27 +461,28 @@ export function kalshiRangeBandPct(m: BinaryMarket): number {
 }
 
 /**
- * A group of Kalshi markets that share the same (event, expiry).
- * One group can carry BOTH an UP_DOWN ladder (from KXBTCD or KXBTC's
- * greater/less tails) and a RANGE ladder (from KXBTC's between buckets),
- * so the rendering can put the two card types side-by-side in a 2-col
- * grid.
+ * A group of Kalshi markets that share the same expiry.
  */
 export interface KalshiGroup {
-  /** `${externalEventId}::${expiryMs}` */
+  /** `${expiryMs}` */
   key: string;
   externalEventId: string | null;
   externalId: string;
   question: string;
   expiryMs: number;
   /** One row per strike in an UP_DOWN ladder (empty if none). */
-  upDown: { strikeUsd: number; impliedProbUp: number }[];
+  upDown: {
+    strikeUsd: number;
+    impliedProbUp: number;
+    description: string | null;
+  }[];
   /** One row per (floor, cap) band in a RANGE ladder (empty if none). */
   range: {
     floorStrikeUsd: number;
     capStrikeUsd: number;
     rangeBandPct: number;
     impliedProbUp: number;
+    description: string | null;
   }[];
 }
 
@@ -502,8 +490,7 @@ export interface KalshiGroup {
  * Group raw Kalshi BinaryMarket rows into render-ready KalshiGroup
  * objects. Drops OTHER (single YES/NO) markets, dedupes YES/UP rows
  * (NO/DOWN rows are the complement and would double-count). UP_DOWN
- * and RANGE markets for the same (event, expiry) share a group so the
- * cards can be rendered side-by-side.
+ * and RANGE markets for the same expiry share a group.
  *
  * Sort order: earliest expiry first.
  */
@@ -511,14 +498,12 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
   const byKey = new Map<string, KalshiGroup>();
   for (const m of rows) {
     if (m.marketType !== "UP_DOWN" && m.marketType !== "RANGE") continue;
-    // YES/UP row carries the implied prob; NO/DOWN row is the complement.
     const isYes = m.outcome === "YES" || m.outcome === "UP";
     if (!isYes) continue;
     const expiry = m.expiryMs ?? 0;
     // Group by expiry only — KXBTC and KXBTCD markets for the same expiry
     // share a group, so the merged upDown[] ladder is large enough to
-    // survive the lowest/middle/highest trim in UpDownCard (otherwise
-    // KXBTC's bare 2 tails would render 2 rows while KXBTCD renders 3).
+    // survive the lowest/middle/highest trim in UpDownCard.
     const key = `${expiry}`;
     let group = byKey.get(key);
     if (!group) {
@@ -537,6 +522,7 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
       group.upDown.push({
         strikeUsd: m.strikeUsd ?? 0,
         impliedProbUp: m.impliedProb,
+        description: m.description ?? null,
       });
     } else {
       group.range.push({
@@ -544,6 +530,7 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
         capStrikeUsd: m.capStrikeUsd ?? 0,
         rangeBandPct: kalshiRangeBandPct(m),
         impliedProbUp: m.impliedProb,
+        description: m.description ?? null,
       });
     }
   }
