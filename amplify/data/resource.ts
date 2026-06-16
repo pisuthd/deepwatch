@@ -54,7 +54,7 @@ const schema = a.schema({
       // "low-high" (e.g. "54,000-56,000" → 54000, 56000).
       floorStrikeUsd: a.float(),
       capStrikeUsd: a.float(),
-      expiryMs: a.integer(),                    // null if no expiry
+      expiryMs: a.float(),                      // null if no expiry
       marketType: a.enum(["UP_DOWN", "RANGE", "OTHER"]),
       url: a.string(),
       rawJson: a.string(),
@@ -73,7 +73,7 @@ const schema = a.schema({
   DeepBookMarket: a
     .model({
       oracleId: a.string().required(),
-      expiryMs: a.integer().required(),
+      expiryMs: a.float().required(),
       // strikeUsd is required; for up/down rows it's the actual strike,
       // for range rows it's the band midpoint (floor+cap)/2.
       strikeUsd: a.float().required(),
