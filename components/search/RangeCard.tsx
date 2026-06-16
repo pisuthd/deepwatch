@@ -102,7 +102,16 @@ export default function RangeCard({
   question,
   onTrade,
 }: RangeCardProps) {
-  const sortedRows = [...rows].sort((a, b) => a.rangeBandPct - b.rangeBandPct);
+  // Sort by floor strike (ascending) so the lowest band is first.
+  // Same pattern as UpDownCard: cap to 3 rows (lowest / middle / highest)
+  // when the range ladder has more than 3 bands. Kalshi's 1¢-wide buckets
+  // can produce 50+ bands for a popular expiry; showing all of them makes
+  // the card overflow. For DeepBook there are only 3 bands (±1%, ±3%,
+  // ±5%) so the cap is a no-op.
+  const sortedAll = [...rows].sort((a, b) => a.floorStrikeUsd - b.floorStrikeUsd);
+  const sortedRows = sortedAll.length >= 3
+    ? [sortedAll[0], sortedAll[Math.floor(sortedAll.length / 2)], sortedAll[sortedAll.length - 1]]
+    : sortedAll;
   // Title: prefer the API's question (e.g. "Bitcoin price range on Jun 16, 2026?").
   // Fall back to the generated title for sources without an API question.
   const questionText =
@@ -151,7 +160,7 @@ export default function RangeCard({
                 : `${formatUsd(r.floorStrikeUsd)} to ${formatUsd(r.capStrikeUsd)}`;
             return (
               <div
-                key={r.rangeBandPct}
+                key={`${r.floorStrikeUsd}-${r.capStrikeUsd}`}
                 className="w-full flex items-center justify-between rounded-xl px-3 py-2 mb-1"
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -160,7 +169,7 @@ export default function RangeCard({
                     style={{ color: textPrimary }}
                   >
                     {rowLabel}
-                  </span> 
+                  </span>
                 </div>
                 <div className="flex gap-1.5">
                   <RangeButton
