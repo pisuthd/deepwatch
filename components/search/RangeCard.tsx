@@ -125,10 +125,10 @@ export default function RangeCard({
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
-                  className="text-sm font-semibold truncate"
+                  className="text-base font-semibold truncate"
                   style={{ color: textPrimary }}
                 >
-                  Between {formatUsd(r.floorStrikeUsd)} – {formatUsd(r.capStrikeUsd)}
+                  {formatUsd(r.floorStrikeUsd)} to {formatUsd(r.capStrikeUsd)}
                 </span>
                 <span
                   className="text-[10px] font-mono shrink-0"

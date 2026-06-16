@@ -135,10 +135,10 @@ export default function UpDownCard({
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span
-                    className="text-sm font-semibold truncate"
+                    className="text-base font-semibold truncate"
                     style={{ color: textPrimary }}
                   >
-                    above or below {formatUsd(r.strikeUsd)}
+                    {formatUsd(r.strikeUsd)} or above
                   </span>
                   {isCenter && (
                     <span
