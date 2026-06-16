@@ -11,7 +11,7 @@ import { defineFunction } from "@aws-amplify/backend";
  */
 export const fetchMarkets = defineFunction({
   name: "fetchMarkets",
-  schedule: "every 1h",
+  schedule: "every 12h",
   // resourceGroupName: "data",
   timeoutSeconds: 120,
   memoryMB: 1024,
