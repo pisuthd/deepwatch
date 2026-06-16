@@ -45,12 +45,18 @@ const PLATFORM_EYEBROW: Record<Platform, ReactNode> = {
   ),
 };
 
-type UpDownRow = { strikeUsd: number; impliedProbUp: number };
+type UpDownRow = {
+  strikeUsd: number;
+  impliedProbUp: number;
+  description: string | null;
+  priceToBeatUsd: number | null;
+};
 type RangeRow = {
   floorStrikeUsd: number;
   capStrikeUsd: number;
   rangeBandPct: number;
   impliedProbUp: number;
+  description: string | null;
 };
 
 interface CardProps {
@@ -58,12 +64,13 @@ interface CardProps {
   spotUsd: number | null;
   forwardUsd: number | null;
   expiryMs: number;
+  question: string | null;
   eyebrow: ReactNode;
 }
 
 type Entry =
-  | { kind: 'upDown'; key: string; expiryMs: number; rows: UpDownRow[] }
-  | { kind: 'range'; key: string; expiryMs: number; rows: RangeRow[] };
+  | { kind: 'upDown'; key: string; expiryMs: number; question: string | null; rows: UpDownRow[] }
+  | { kind: 'range'; key: string; expiryMs: number; question: string | null; rows: RangeRow[] };
 
 type SortOrder = 'expiry_asc' | 'expiry_desc';
 
@@ -73,10 +80,7 @@ type SortOrder = 'expiry_asc' | 'expiry_desc';
  * divider that spans both columns. The cards themselves use the
  * original GlassCard variants.
  */
-function renderEntries(
-  entries: Entry[],
-  cardPropsFor: (e: { expiryMs: number }) => CardProps,
-) {
+function renderEntries(entries: Entry[]) {
   if (entries.length === 0) return null;
 
   // Group entries into rows of 2. If the last row has only 1 entry,
@@ -99,15 +103,26 @@ function renderEntries(
                 : 'grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-white/10 pb-4 mb-4'
             }
           >
-            {row.map((e) => (
-              <div key={e.key}>
-                {e.kind === 'upDown' ? (
-                  <UpDownCard {...cardPropsFor(e)} rows={e.rows} />
-                ) : (
-                  <RangeCard {...cardPropsFor(e)} rows={e.rows} />
-                )}
-              </div>
-            ))}
+            {row.map((e) => {
+              // Card props common to all sources.
+              const cardProps: CardProps = {
+                asset: 'BTC',
+                spotUsd: null,
+                forwardUsd: null,
+                expiryMs: e.expiryMs,
+                question: e.question,
+                eyebrow: PLATFORM_EYEBROW[activeSourceForEntry(e)],
+              };
+              return (
+                <div key={e.key}>
+                  {e.kind === 'upDown' ? (
+                    <UpDownCard {...cardProps} rows={e.rows} />
+                  ) : (
+                    <RangeCard {...cardProps} rows={e.rows} />
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       })}
@@ -115,11 +130,20 @@ function renderEntries(
   );
 }
 
+// The eyebrow needs to reflect the source of the entry. Since we only
+// render entries from the active source in the loop above, we use the
+// module-level activeSource passed in via closure (defined below).
+let activeSourceForEntry = (_e: Entry): Platform => 'POLYMARKET';
+
 function readSort(params: URLSearchParams): SortOrder {
   return params.get('sort') === 'expiry_desc' ? 'expiry_desc' : 'expiry_asc';
 }
 
 export default function SearchResults({ activeSource }: Props) {
+  // Update the closure variable so renderEntries picks up the current
+  // active source for the eyebrow.
+  activeSourceForEntry = () => activeSource;
+
   const params = useSearchParams();
   const sort = readSort(new URLSearchParams(params.toString()));
 
@@ -152,7 +176,6 @@ export default function SearchResults({ activeSource }: Props) {
     [kalshiRows],
   );
 
-  const eyebrow = PLATFORM_EYEBROW[activeSource];
   const loading =
     activeSource === 'POLYMARKET'
       ? polyLoading
@@ -166,44 +189,60 @@ export default function SearchResults({ activeSource }: Props) {
         ? kalshiError
         : dbError;
 
-  // Normalize each source's groups to a common shape.
-  const commonGroups: Array<{
+  // Normalize each source's groups to a common shape, carrying both
+  // the per-group question (Polymarket/Kalshi) and per-row description
+  // (Polymarket/Kalshi) from the API. DeepBook groups carry null
+  // question + null description — its cards fall back to the generated
+  // text.
+  type CommonGroup = {
     key: string;
     expiryMs: number;
+    question: string | null;
     upDown: UpDownRow[];
     range: RangeRow[];
-  }> =
-    activeSource === 'POLYMARKET'
-      ? polyGroups.map((g) => ({
-          key: g.key,
-          expiryMs: g.expiryMs,
-          upDown: g.upDown,
-          range: g.range,
-        }))
-      : activeSource === 'KALSHI'
-        ? kalshiGroups.map((g) => ({
-            key: g.key,
-            expiryMs: g.expiryMs,
-            upDown: g.upDown,
-            range: g.range,
-          }))
-        : dbGroups.map((g) => ({
-            // DeepBook doesn't have a `key` field; synthesize one.
-            key: `${g.oracleId}::${g.expiryMs}`,
-            expiryMs: g.expiryMs,
-            upDown: g.upDown.map((r) => ({
-              strikeUsd: r.strikeUsd,
-              impliedProbUp: r.impliedProbUp,
-            })),
-            range: g.range.map((r) => ({
-              floorStrikeUsd: r.floorStrikeUsd ?? 0,
-              capStrikeUsd: r.capStrikeUsd ?? 0,
-              rangeBandPct: r.rangeBandPct,
-              impliedProbUp: r.impliedProbUp,
-            })),
-          }));
+  };
 
-  // Flatten into a single list of (kind, key, expiryMs, rows) entries.
+  let commonGroups: CommonGroup[];
+
+  if (activeSource === 'POLYMARKET') {
+    commonGroups = polyGroups.map((g) => ({
+      key: g.key,
+      expiryMs: g.expiryMs,
+      question: g.question,
+      upDown: g.upDown,
+      range: g.range,
+    }));
+  } else if (activeSource === 'KALSHI') {
+    commonGroups = kalshiGroups.map((g) => ({
+      key: g.key,
+      expiryMs: g.expiryMs,
+      question: g.question,
+      upDown: g.upDown,
+      range: g.range,
+    }));
+  } else {
+    // DEEPBOOK — synthesize a key and use generated question/description.
+    commonGroups = dbGroups.map((g) => ({
+      key: `${g.oracleId}::${g.expiryMs}`,
+      expiryMs: g.expiryMs,
+      question: null,
+      upDown: g.upDown.map((r) => ({
+        strikeUsd: r.strikeUsd,
+        impliedProbUp: r.impliedProbUp,
+        description: null,
+        priceToBeatUsd: null,
+      })),
+      range: g.range.map((r) => ({
+        floorStrikeUsd: r.floorStrikeUsd ?? 0,
+        capStrikeUsd: r.capStrikeUsd ?? 0,
+        rangeBandPct: r.rangeBandPct,
+        impliedProbUp: r.impliedProbUp,
+        description: null,
+      })),
+    }));
+  }
+
+  // Flatten into a single list of (kind, key, expiryMs, question, rows) entries.
   const entries: Entry[] = [];
   for (const g of commonGroups) {
     if (g.upDown.length > 0) {
@@ -211,6 +250,7 @@ export default function SearchResults({ activeSource }: Props) {
         kind: 'upDown',
         key: `${g.key}::upDown`,
         expiryMs: g.expiryMs,
+        question: g.question,
         rows: g.upDown,
       });
     }
@@ -219,6 +259,7 @@ export default function SearchResults({ activeSource }: Props) {
         kind: 'range',
         key: `${g.key}::range`,
         expiryMs: g.expiryMs,
+        question: g.question,
         rows: g.range,
       });
     }
@@ -235,26 +276,6 @@ export default function SearchResults({ activeSource }: Props) {
     if (a.kind === b.kind) return 0;
     return a.kind === 'upDown' ? -1 : 1;
   });
-
-  const cardPropsFor =
-    activeSource === 'DEEPBOOK'
-      ? (g: { expiryMs: number }): CardProps => {
-          const db = dbGroups.find((x) => x.expiryMs === g.expiryMs);
-          return {
-            asset: db?.asset ?? 'BTC',
-            spotUsd: db?.spotUsd ?? null,
-            forwardUsd: db?.forwardUsd ?? null,
-            expiryMs: g.expiryMs,
-            eyebrow,
-          };
-        }
-      : (g: { expiryMs: number }): CardProps => ({
-          asset: 'BTC',
-          spotUsd: null,
-          forwardUsd: null,
-          expiryMs: g.expiryMs,
-          eyebrow,
-        });
 
   return (
     <div className="space-y-6">
@@ -298,7 +319,7 @@ export default function SearchResults({ activeSource }: Props) {
           </div>
         )}
 
-      {renderEntries(entries, cardPropsFor)}
+      {renderEntries(entries)}
     </div>
   );
 }

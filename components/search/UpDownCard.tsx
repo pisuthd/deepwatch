@@ -14,6 +14,20 @@ import type { ReactNode } from 'react';
 interface UpDownRow {
   strikeUsd: number;
   impliedProbUp: number;
+  /**
+   * Per-row label from the source API (e.g. "$55,500 or above" for
+   * Polymarket/Kalshi). When present, the card uses it directly
+   * instead of generating "above or below $X" from the strike.
+   */
+  description?: string | null;
+  /**
+   * Polymarket "Up or Down" intraday markets: the BTC open price of
+   * the 1-hour candle at the market's eventStartTime (i.e. the
+   * "Price To Beat" shown on Polymarket's site). Only set for binary
+   * markets with no strike. Rendered as "$X or above" in the row
+   * label so the user knows the reference price.
+   */
+  priceToBeatUsd?: number | null;
 }
 
 interface UpDownCardProps {
@@ -25,6 +39,13 @@ interface UpDownCardProps {
   rows: UpDownRow[];
   /** Optional eyebrow (e.g. "Polymarket" or "DeepBook Predict"). */
   eyebrow?: ReactNode;
+  /**
+   * Question from the source API (e.g. "Bitcoin Up or Down - June 16, 8AM ET"
+   * for Polymarket, "Bitcoin price on Jun 19, 2026?" for Kalshi). When
+   * present, the card uses it as the title; otherwise it falls back to
+   * the generated `${asset} price on ${expiryLabel}?`.
+   */
+  question?: string | null;
   /** Optional click handler for the UP button. */
   onTrade?: (strike: number, direction: 'up' | 'down') => void;
 }
@@ -86,6 +107,7 @@ export default function UpDownCard({
   forwardUsd,
   rows,
   eyebrow,
+  question,
   onTrade,
 }: UpDownCardProps) {
   const centerStrike = spotUsd && spotUsd > 0 ? roundToTick(spotUsd, DISPLAY_TICK_USD) : 0;
@@ -95,10 +117,19 @@ export default function UpDownCard({
   const sortedRows = sortedAll.length >= 3
     ? [sortedAll[0], sortedAll[Math.floor(sortedAll.length / 2)], sortedAll[sortedAll.length - 1]]
     : sortedAll;
-  const expiryLabel = formatExpiryQuestion(expiryMs);
-  const question = expiryLabel
-    ? `${asset} price on ${expiryLabel}?`
-    : `${asset} price?`;
+  // Title: prefer the API's question (e.g. "Bitcoin Up or Down - June 16, 8AM ET"
+  // or "Bitcoin price on Jun 19, 2026?"). Fall back to the generated
+  // `${asset} price on ${expiryLabel}?` for sources without an API
+  // question (e.g. DeepBook).
+  const questionText =
+    question && question.trim().length > 0
+      ? question
+      : (() => {
+          const expiryLabel = formatExpiryQuestion(expiryMs);
+          return expiryLabel
+            ? `${asset} price on ${expiryLabel}?`
+            : `${asset} price?`;
+        })();
 
   return (
     <GlassCard>
@@ -112,7 +143,7 @@ export default function UpDownCard({
         className="text-base font-bold mb-3 leading-snug"
         style={{ color: textPrimary }}
       >
-        {question}
+        {questionText}
       </h2>
 
       <div className="border-t border-white/5 -mx-1" />
@@ -127,6 +158,30 @@ export default function UpDownCard({
           </div>
         ) : (
           sortedRows.map((r) => {
+            // Per-row label:
+            //   1. Prefer the API description (e.g. "$55,500 or above")
+            //   2. Otherwise, if the row has a strike, generate
+            //      "above or below $X" (multi-strike ladders)
+            //   3. Otherwise (binary "Up or Down" with no strike):
+            //      - if we have the Price To Beat, show "$X or above"
+            //        (the open price of the candle this market covers)
+            //      - otherwise show "Up from open" — a phrase that
+            //        describes what the market is betting on (the
+            //        close vs. the open) without needing the actual
+            //        price number
+            const rowLabel = (() => {
+              if (r.description && r.description.trim().length > 0) {
+                return r.description;
+              }
+              if (r.strikeUsd > 0) {
+                return `${formatUsd(r.strikeUsd)} or above`;
+              }
+              // Binary "Up or Down" market — no strike.
+              if (r.priceToBeatUsd && r.priceToBeatUsd > 0) {
+                return `${formatUsd(r.priceToBeatUsd)} or above`;
+              }
+              return 'Up from open';
+            })();
             const isCenter = r.strikeUsd === centerStrike;
             return (
               <div
@@ -138,7 +193,7 @@ export default function UpDownCard({
                     className="text-base font-semibold truncate"
                     style={{ color: textPrimary }}
                   >
-                    {formatUsd(r.strikeUsd)} or above
+                    {rowLabel}
                   </span>
                   {isCenter && (
                     <span

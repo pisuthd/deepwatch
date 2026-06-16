@@ -43,6 +43,14 @@ export interface BinaryMarket {
    */
   floorStrikeUsd: number | null;
   capStrikeUsd: number | null;
+  /**
+   * Polymarket "Up or Down" intraday markets: the BTC open price of
+   * the 1-hour candle at the event's start time (i.e. the "Price To
+   * Beat" shown on Polymarket's site). Fetched once per Lambda run
+   * from Binance's klines API. Null for non-Up-or-Down markets and
+   * for any Up-or-Down market whose price couldn't be fetched.
+   */
+  priceToBeatUsd: number | null;
   expiryMs: number | null;
   marketType: MarketType;
   url: string;

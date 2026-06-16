@@ -12,6 +12,12 @@ interface RangeRow {
   rangeBandPct: number;
   /** Implied probability that the asset lands INSIDE [floor, cap]. 0–1. */
   impliedProbUp: number;
+  /**
+   * Per-row label from the source API (e.g. "$75,000 to $75,250" for
+   * Polymarket/Kalshi). When present, the card uses it directly
+   * instead of generating "Between $X – $Y" from the floor/cap.
+   */
+  description?: string | null;
 }
 
 interface RangeCardProps {
@@ -23,6 +29,13 @@ interface RangeCardProps {
   rows: RangeRow[];
   /** Optional eyebrow (e.g. "Polymarket" or "DeepBook Predict"). */
   eyebrow?: ReactNode;
+  /**
+   * Question from the source API (e.g. "Bitcoin price range on Jun 16, 2026?"
+   * for Kalshi/Polymarket). When present, the card uses it as the title;
+   * otherwise it falls back to the generated `${asset} price on
+   * ${expiryLabel}?`.
+   */
+  question?: string | null;
   /** Optional click handler for the IN button. */
   onTrade?: (floor: number, cap: number, direction: 'in' | 'out') => void;
 }
@@ -86,9 +99,21 @@ export default function RangeCard({
   forwardUsd,
   rows,
   eyebrow,
+  question,
   onTrade,
 }: RangeCardProps) {
   const sortedRows = [...rows].sort((a, b) => a.rangeBandPct - b.rangeBandPct);
+  // Title: prefer the API's question (e.g. "Bitcoin price range on Jun 16, 2026?").
+  // Fall back to the generated title for sources without an API question.
+  const questionText =
+    question && question.trim().length > 0
+      ? question
+      : (() => {
+          const expiryLabel = formatExpiryQuestion(expiryMs);
+          return expiryLabel
+            ? `${asset} price on ${expiryLabel}?`
+            : `${asset} price?`;
+        })();
 
   return (
     <GlassCard>
@@ -102,9 +127,7 @@ export default function RangeCard({
         className="text-base font-bold mb-3 leading-snug"
         style={{ color: textPrimary }}
       >
-        {formatExpiryQuestion(expiryMs)
-          ? `${asset} price on ${formatExpiryQuestion(expiryMs)}?`
-          : `${asset} price?`}
+        {questionText}
       </h2>
 
       <div className="border-t border-white/5 -mx-1" />
@@ -118,39 +141,42 @@ export default function RangeCard({
             Awaiting oracle data…
           </div>
         ) : (
-          sortedRows.map((r) => (
-            <div
-              key={r.rangeBandPct}
-              className="w-full flex items-center justify-between rounded-xl px-3 py-2 mb-1"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="text-base font-semibold truncate"
-                  style={{ color: textPrimary }}
-                >
-                  {formatUsd(r.floorStrikeUsd)} to {formatUsd(r.capStrikeUsd)}
-                </span>
-                <span
-                  className="text-[10px] font-mono shrink-0"
-                  style={{ color: textSecondary }}
-                >
-                  ±{r.rangeBandPct / 2}%
-                </span>
+          sortedRows.map((r) => {
+            // Per-row label: prefer the API's description (e.g. "$75,000
+            // to $75,250"). Fall back to the generated label for
+            // sources that don't carry per-row text (DeepBook).
+            const rowLabel =
+              r.description && r.description.trim().length > 0
+                ? r.description
+                : `${formatUsd(r.floorStrikeUsd)} to ${formatUsd(r.capStrikeUsd)}`;
+            return (
+              <div
+                key={r.rangeBandPct}
+                className="w-full flex items-center justify-between rounded-xl px-3 py-2 mb-1"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="text-base font-semibold truncate"
+                    style={{ color: textPrimary }}
+                  >
+                    {rowLabel}
+                  </span> 
+                </div>
+                <div className="flex gap-1.5">
+                  <RangeButton
+                    direction="in"
+                    prob={r.impliedProbUp}
+                    onClick={() => onTrade?.(r.floorStrikeUsd, r.capStrikeUsd, 'in')}
+                  />
+                  <RangeButton
+                    direction="out"
+                    prob={1 - r.impliedProbUp}
+                    onClick={() => onTrade?.(r.floorStrikeUsd, r.capStrikeUsd, 'out')}
+                  />
+                </div>
               </div>
-              <div className="flex gap-1.5">
-                <RangeButton
-                  direction="in"
-                  prob={r.impliedProbUp}
-                  onClick={() => onTrade?.(r.floorStrikeUsd, r.capStrikeUsd, 'in')}
-                />
-                <RangeButton
-                  direction="out"
-                  prob={1 - r.impliedProbUp}
-                  onClick={() => onTrade?.(r.floorStrikeUsd, r.capStrikeUsd, 'out')}
-                />
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </GlassCard>
