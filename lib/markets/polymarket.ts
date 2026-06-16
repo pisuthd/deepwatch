@@ -294,6 +294,7 @@ export async function fetchPolymarketMarkets(
   let noOutcomesSkipped = 0;
   let noTagSkipped = 0;
   let horizonSkipped = 0;
+  let expiredSkipped = 0;
   let upDownRows = 0;
   let rangeRows = 0;
   let otherRows = 0;
@@ -302,6 +303,10 @@ export async function fetchPolymarketMarkets(
   // dropped — they're not actionable in the next trading window.
   const MAX_HORIZON_DAYS = 30;
   const MAX_HORIZON_MS = MAX_HORIZON_DAYS * 24 * 60 * 60 * 1000;
+  // Markets expiring within this buffer (or already expired) are
+  // dropped — same value as DeepBook's EXPIRY_BUFFER_MS for cross-
+  // source consistency.
+  const EXPIRY_BUFFER_MS = 60_000;
   const nowMs = Date.now();
 
   for (const e of events) {
@@ -323,10 +328,15 @@ export async function fetchPolymarketMarkets(
 
       // 30-day horizon filter: drop markets expiring more than 30 days out
       // (e.g. the long-dated "When will Bitcoin hit $150k?" date-ladder).
-      // Already-expired markets fall outside this window by the same logic.
       const expiryCheck = m.endDate ? new Date(m.endDate).getTime() : NaN;
       if (Number.isFinite(expiryCheck) && expiryCheck > nowMs + MAX_HORIZON_MS) {
         horizonSkipped += 1;
+        continue;
+      }
+      // 60s expiry filter: drop markets that have already expired or are
+      // about to expire in the next 60s. Mirrors DeepBook's EXPIRY_BUFFER_MS.
+      if (Number.isFinite(expiryCheck) && expiryCheck <= nowMs + EXPIRY_BUFFER_MS) {
+        expiredSkipped += 1;
         continue;
       }
 
@@ -413,7 +423,8 @@ export async function fetchPolymarketMarkets(
     `[polymarket] summary: ${btcEventCount}/${events.length} BTC events, ` +
     `${totalMarketsSeen} markets seen, ` +
     `${closedSkipped} closed-skipped, ${noOutcomesSkipped} no-outcomes-skipped, ` +
-    `${noTagSkipped} no-bitcoin-tag-skipped, ${horizonSkipped} horizon-skipped (>${MAX_HORIZON_DAYS}d)`,
+    `${noTagSkipped} no-bitcoin-tag-skipped, ${horizonSkipped} horizon-skipped (>${MAX_HORIZON_DAYS}d), ` +
+    `${expiredSkipped} expired-skipped (<= ${EXPIRY_BUFFER_MS / 1000}s)`,
   );
   console.log(
     `[polymarket] outcome rows: ${out.length} total ` +

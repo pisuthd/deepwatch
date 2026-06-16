@@ -319,8 +319,14 @@ export async function fetchKalshiMarkets(
 
   // Step 3: emit rows.
   const now = new Date().toISOString();
+  // Markets expiring within this buffer (or already expired) are
+  // dropped — same value as DeepBook's EXPIRY_BUFFER_MS for cross-
+  // source consistency.
+  const EXPIRY_BUFFER_MS = 60_000;
+  const nowMs = Date.now();
   const out: BinaryMarket[] = [];
   let skipped = 0;
+  let expiredSkipped = 0;
   const typeCounts = { UP_DOWN: 0, RANGE: 0, OTHER: 0 };
   const bumpTypeCount = (t: MarketType): void => {
     typeCounts[t] += 1;
@@ -336,6 +342,12 @@ export async function fetchKalshiMarkets(
     const parsed = parseTicker(m.ticker);
     const expiryMs =
       parsed.expiryMs ?? toExpiryMs(m.close_time, m.expected_expiration_time);
+    // 60s expiry filter: drop markets that have already expired or are
+    // about to expire in the next 60s. Mirrors DeepBook's EXPIRY_BUFFER_MS.
+    if (expiryMs !== null && expiryMs <= nowMs + EXPIRY_BUFFER_MS) {
+      expiredSkipped += 1;
+      continue;
+    }
     const { strikeUsd, floorStrikeUsd, capStrikeUsd } = resolveStrike(m);
     // Fall back to ticker-parsed strike if structured fields are empty
     // (shouldn't happen for KXBTC/KXBTCD but defensive).
@@ -419,7 +431,8 @@ export async function fetchKalshiMarkets(
 
   console.log(
     `[kalshi] summary: ${allMarkets.length} received across ${BTC_SERIES.length} series, ` +
-    `${skipped} skipped (closed), ${out.length} outcome rows written ` +
+    `${skipped} skipped (closed), ${expiredSkipped} expired-skipped (<= ${EXPIRY_BUFFER_MS / 1000}s), ` +
+    `${out.length} outcome rows written ` +
     `(up/down=${typeCounts.UP_DOWN}, range=${typeCounts.RANGE}, other=${typeCounts.OTHER})`,
   );
 
@@ -502,7 +515,11 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
     const isYes = m.outcome === "YES" || m.outcome === "UP";
     if (!isYes) continue;
     const expiry = m.expiryMs ?? 0;
-    const key = `${m.externalEventId ?? m.externalId}::${expiry}`;
+    // Group by expiry only — KXBTC and KXBTCD markets for the same expiry
+    // share a group, so the merged upDown[] ladder is large enough to
+    // survive the lowest/middle/highest trim in UpDownCard (otherwise
+    // KXBTC's bare 2 tails would render 2 rows while KXBTCD renders 3).
+    const key = `${expiry}`;
     let group = byKey.get(key);
     if (!group) {
       group = {
