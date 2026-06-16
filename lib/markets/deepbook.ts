@@ -18,6 +18,15 @@ export const PREDICT_OBJECT_ID =
 
 const PRICE_SCALE = 1e9;
 
+/**
+ * Frontend view-time filter for near-certain markets. The grouping
+ * function in this file drops any row whose impliedProbUp is outside
+ * this band. 2%–98% mirrors polymarket.ts and kalshi.ts so the
+ * "interesting markets" set is the same across sources.
+ */
+const MIN_IMPLIED_PROB = 0.02;
+const MAX_IMPLIED_PROB = 0.98;
+
 interface RawOracle {
   oracle_id: string;
   expiry: number;
@@ -81,13 +90,19 @@ export interface DeepBookGroup {
 /**
  * Group raw DeepBook rows into render-ready DeepBookGroup objects,
  * keyed by (oracleId, expiryMs). The latest non-null spot/forward
- * within a group is preserved on the group itself.
+ * within a group is preserved on the group itself. Rows whose
+ * impliedProbUp is outside the 2%–98% band are dropped — they are
+ * either near-certain (collapsing) or stale (zero/one fallback).
  *
  * Sort order: earliest expiry first.
  */
 export function groupDeepBookMarkets(rows: DeepBookMarket[]): DeepBookGroup[] {
   const map = new Map<string, DeepBookGroup>();
   for (const m of rows) {
+    // Drop near-certain rows. DeepBook's SVI+Black-76 model can
+    // collapse to 0/1 when the strike is far from spot, or when the
+    // SVI sigma is near zero — those rows are not tradeable.
+    if (m.impliedProbUp < MIN_IMPLIED_PROB || m.impliedProbUp > MAX_IMPLIED_PROB) continue;
     const k = `${m.oracleId}::${m.expiryMs}`;
     const entry: DeepBookGroup = map.get(k) ?? {
       oracleId: m.oracleId,

@@ -31,6 +31,17 @@ import { binaryMarketId } from "./id";
 const BASE = "https://external-api.kalshi.com/trade-api/v2";
 const BTC_SERIES = ["KXBTC", "KXBTCD"] as const;
 
+/**
+ * Frontend view-time filter for near-certain markets. The grouping
+ * function in this file drops any YES/UP row whose implied probability
+ * is outside this band. We only ever keep the YES/UP side of a market,
+ * so checking it alone is enough to catch both extremes (if YES is 99%,
+ * NO is 1%; both are dead). 2%–98% mirrors polymarket.ts so the
+ * "interesting markets" set is the same across sources.
+ */
+const MIN_IMPLIED_PROB = 0.02;
+const MAX_IMPLIED_PROB = 0.98;
+
 interface RawKalshiMarket {
   ticker: string;
   event_ticker: string;
@@ -489,8 +500,10 @@ export interface KalshiGroup {
 /**
  * Group raw Kalshi BinaryMarket rows into render-ready KalshiGroup
  * objects. Drops OTHER (single YES/NO) markets, dedupes YES/UP rows
- * (NO/DOWN rows are the complement and would double-count). UP_DOWN
- * and RANGE markets for the same expiry share a group.
+ * (NO/DOWN rows are the complement and would double-count), and
+ * drops near-certain rows (impliedProb outside the 2%–98% band) to
+ * remove the 99/1 / 100/0 noise. UP_DOWN and RANGE markets for the
+ * same expiry share a group.
  *
  * Sort order: earliest expiry first.
  */
@@ -500,6 +513,10 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
     if (m.marketType !== "UP_DOWN" && m.marketType !== "RANGE") continue;
     const isYes = m.outcome === "YES" || m.outcome === "UP";
     if (!isYes) continue;
+    // Drop near-certain markets. We only keep the YES/UP row, so
+    // checking it alone is enough — if YES is 99%, NO is 1%; both
+    // are dead and the market is un-tradeable.
+    if (m.impliedProb < MIN_IMPLIED_PROB || m.impliedProb > MAX_IMPLIED_PROB) continue;
     const expiry = m.expiryMs ?? 0;
     // Group by expiry only — KXBTC and KXBTCD markets for the same expiry
     // share a group, so the merged upDown[] ladder is large enough to

@@ -26,6 +26,20 @@ import { binaryMarketId } from "./id";
 const BASE = "https://gamma-api.polymarket.com";
 const BINANCE = "https://api.binance.com";
 
+/**
+ * Frontend view-time filter for near-certain markets. The grouping
+ * functions in this file (and kalshi.ts, deepbook.ts) drop any YES/UP
+ * row whose implied probability is outside this band. We only ever
+ * keep the YES/UP side of a market, so checking it alone is enough
+ * to catch both extremes (if YES is 99%, NO is 1%; both are dead).
+ *
+ * 2%–98% catches the user's "99% / 1%" and "100% / 0%" cases but
+ * keeps 3% / 97% markets (cheap lottery tickets on near-certain
+ * events, often a useful signal).
+ */
+export const MIN_IMPLIED_PROB = 0.02;
+export const MAX_IMPLIED_PROB = 0.98;
+
 interface RawEvent {
   id: string;
   ticker?: string;
@@ -399,6 +413,10 @@ export function groupPolymarketMarkets(rows: BinaryMarket[]): PolymarketGroup[] 
     if (m.marketType !== "UP_DOWN" && m.marketType !== "RANGE") continue;
     const isYes = m.outcome === "YES" || m.outcome === "UP";
     if (!isYes) continue;
+    // Drop near-certain markets. We only keep the YES/UP row, so
+    // checking it alone is enough — if YES is 99%, NO is 1%; both
+    // are dead and the market is un-tradeable.
+    if (m.impliedProb < MIN_IMPLIED_PROB || m.impliedProb > MAX_IMPLIED_PROB) continue;
     const expiry = m.expiryMs ?? 0;
     const key = `${m.externalEventId ?? m.externalId}::${expiry}`;
     let group = byKey.get(key);
