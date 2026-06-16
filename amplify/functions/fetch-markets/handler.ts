@@ -168,49 +168,56 @@ function firstErrorMessage(res: unknown): string | null {
   return null;
 }
 
-/** Update-or-create one row.
+/** Create-or-update one row. The classic DynamoDB upsert pattern:
+ *  create first (uses `attribute_not_exists(id)` condition by default,
+ *  fails with ConditionalCheckFailedException if the row already exists),
+ *  then update on the create-failure to refresh the row's data.
  *
- *  The first Lambda runs we observed (15m schedule, ~1038 rows/run) reported
- *  100% success but the AppSync table stayed empty. Root cause: the v6 data
- *  client surfaces NotFound / ConditionalCheckFailed as `{ data: { updateX:
- *  null } }` rather than throwing — so a `try { update }` block silently
- *  passed through to `stat.written += 1` with no actual write happening.
- *
- *  The defensive check uses `isResponseOk` on both the update and the create
- *  response: any non-null `errors` array OR any null inner value is treated
- *  as failure and triggers the create-fallback (or a hard fail). */
+ *  Why create-first instead of update-first?
+ *  - Update-first has a race: when the update silently fails (v6 client
+ *    sometimes returns `{ data: { updateX: null } }` instead of throwing),
+ *    the create fallback collides with the row we *just* failed to update
+ *    and the second mutation fails with the same conditional check error.
+ *    This was the source of the chunked partial-failure pattern we saw
+ *    (96/554 polymarket written, 458 failed) — chunks 1-4 all-fail,
+ *    5-10 mixed, 11-12 all-fail.
+ *  - Create-first is symmetric: the conditional check is well-defined
+ *    (id must not exist), and the create always succeeds on a fresh row
+ *    (1 API call/run on first deploy) and always falls through to update
+ *    on subsequent runs (2 API calls/run). No race, no false negatives. */
 async function upsertOne(
   model: DataModel,
   row: unknown,
   stat: PlatformStat,
 ): Promise<void> {
-  // 1) Try update.
-  let updateRes: unknown;
+  // 1) Try create first.
+  let createRes: unknown;
   try {
-    updateRes = await model.update(row);
+    createRes = await model.create(row);
   } catch (e) {
-    // The v6 client DOES throw on some errors (network, auth). Treat all
-    // thrown errors as "update failed" and fall through to create.
-    if (!isNotFoundError(e) && !stat.error) {
-      stat.error = summariseError(e).message;
-    }
-    updateRes = null;
+    // The v6 client throws on top-level GraphQL errors (network, auth,
+    // schema rejection). For conditional check failures it usually
+    // surfaces via the response.errors[] path below, but catch throws
+    // defensively.
+    if (!stat.error) stat.error = summariseError(e).message;
+    createRes = { errors: [{ message: summariseError(e).message }] };
   }
-  if (isResponseOk(updateRes)) {
+  if (isResponseOk(createRes)) {
     stat.written += 1;
     return;
   }
 
-  // 2) Update failed (NotFound or null data). Try create.
-  let createRes: unknown;
+  // 2) Create failed (row likely exists — ConditionalCheckFailedException
+  //    from `attribute_not_exists(id)`). Refresh the row via update.
+  let updateRes: unknown;
   try {
-    createRes = await model.create(row);
+    updateRes = await model.update(row);
   } catch (e) {
     stat.failed += 1;
     if (!stat.error) stat.error = summariseError(e).message;
     return;
   }
-  if (isResponseOk(createRes)) {
+  if (isResponseOk(updateRes)) {
     stat.written += 1;
     return;
   }
@@ -218,7 +225,7 @@ async function upsertOne(
   // 3) Both failed.
   stat.failed += 1;
   if (!stat.error) {
-    const msg = firstErrorMessage(createRes) ?? firstErrorMessage(updateRes);
+    const msg = firstErrorMessage(updateRes) ?? firstErrorMessage(createRes);
     if (msg) stat.error = msg;
   }
 }
