@@ -48,12 +48,15 @@ export default function Navbar() {
                     <Link href="/compare" className="text-gray-400 hover:text-white transition-colors">
                         Compare
                     </Link>
+                    <Link href="/allocate" className="text-gray-400 hover:text-white transition-colors">
+                        Allocate
+                    </Link>
                     <Link href="/stake" className="text-gray-400 hover:text-white transition-colors">
                         Stake
                     </Link>
-                    <Link href="/leaderboard" className="text-gray-400 hover:text-white transition-colors">
+                    {/* <Link href="/leaderboard" className="text-gray-400 hover:text-white transition-colors">
                         Leaderboard
-                    </Link>
+                    </Link> */}
 
                     {/* "More" dropdown (GitHub) */}
                     <div className="relative z-50" ref={moreRef}>
@@ -124,12 +127,15 @@ export default function Navbar() {
                         <Link href="/compare" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
                             Compare
                         </Link>
+                        <Link href="/allocate" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
+                            Allocate
+                        </Link>
                         <Link href="/stake" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
                             Stake
                         </Link>
-                        <Link href="/leaderboard" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
+                        {/* <Link href="/leaderboard" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
                             Leaderboard
-                        </Link>
+                        </Link> */}
                         <a href="https://github.com/pisuthd/deepwatch" target='_blank' rel="noreferrer" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">
                             GitHub
                         </a>

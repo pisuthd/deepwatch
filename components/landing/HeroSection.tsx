@@ -1,8 +1,10 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Search, ChevronDown, ArrowRight } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo } from 'react';
+import GlassCard from '@/components/shared/GlassCard';
 
 const categories = [
   { id: 'all', label: 'All' },
@@ -13,6 +15,7 @@ const categories = [
 ];
 
 const sourceOptions = [
+  { id: 'all' as const, label: 'All sources' },
   { id: 'deepbook' as const, label: 'DeepBook Predict' },
   { id: 'polymarket' as const, label: 'Polymarket' },
   { id: 'kalshi' as const, label: 'Kalshi' },
@@ -28,23 +31,93 @@ const trending = [
   'Solana flips ETH',
 ];
 
-export default function HeroSection() {
-  const [market, setMarket] = useState('');
-  const [category, setCategory] = useState('all');
-  const [enabledSources, setEnabledSources] = useState<Record<SourceId, boolean>>({
-    deepbook: true,
-    polymarket: true,
-    kalshi: true,
-  });
 
-  const toggleSource = (id: SourceId) => {
-    setEnabledSources((s) => ({ ...s, [id]: !s[id] }));
-  };
+const SOURCE_TO_PARAM: Record<SourceId, 'DEEPBOOK' | 'POLYMARKET' | 'KALSHI' | 'ALL'> = {
+  all: 'ALL',
+  deepbook: 'DEEPBOOK',
+  polymarket: 'POLYMARKET',
+  kalshi: 'KALSHI',
+};
+
+const CATEGORY_TO_PARAM: Record<string, 'ALL' | 'CRYPTO'> = {
+  all: 'ALL',
+  crypto: 'CRYPTO',
+  // politics, sports, tech aren't supported in Phase 1 — fall back to ALL
+  politics: 'ALL',
+  sports: 'ALL',
+  tech: 'ALL',
+};
+
+/**
+ * Format a Date as `YYYY-MM-DDTHH:MM` for the `<input type="datetime-local">`
+ * value and the URL `from` / `to` params. Matches the TopSearchBar's
+ * local-time format so the two pickers stay consistent. The search
+ * page parses with `new Date(...)` which accepts both this and the
+ * `Z`-suffixed ISO string the TopSearchBar sends on submit.
+ */
+function isoDateTime(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+/**
+ * "Next round 12-hour" — the next 12:00 boundary at or after `now`.
+ * Rounds to noon (12:00) or midnight (00:00), whichever is sooner.
+ * Examples:
+ *   10:33 AM → 12:00 (noon, same day)
+ *   14:00    → 00:00 (midnight, next day)
+ *   22:33    → 00:00 (midnight, next day)
+ *   00:00    → 12:00 (noon, same day — the next 12:00, never the current)
+ */
+function nextRoundTwelveHour(now: Date): Date {
+  const d = new Date(now);
+  const h = d.getHours();
+  if (h < 12) {
+    d.setHours(12, 0, 0, 0);
+  } else {
+    // Noon or later → next midnight. `setHours(24, …)` rolls over
+    // to 00:00 of the following day.
+    d.setHours(24, 0, 0, 0);
+  }
+  return d;
+}
+
+export default function HeroSection() {
+  const router = useRouter();
+
+  // Default from = the next 12:00 boundary (noon or midnight).
+  // Default to = 30 days from that, at the same 12:00 boundary.
+  const initialFrom = useMemo(() => {
+    return isoDateTime(nextRoundTwelveHour(new Date()));
+  }, []);
+  const initialTo = useMemo(() => {
+    const d = nextRoundTwelveHour(new Date());
+    d.setDate(d.getDate() + 30);
+    return isoDateTime(d);
+  }, []);
+
+  const [fromDate, setFromDate] = useState(initialFrom);
+  const [toDate, setToDate] = useState(initialTo);
+  const [category, setCategory] = useState('all');
+  // Default to "All sources" — the hero advertises the unified view.
+  const [activeSource, setActiveSource] = useState<SourceId>('all');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Wire to real search results route once the app is built out
-    window.location.href = '/app';
+    const usp = new URLSearchParams();
+    usp.set('source', SOURCE_TO_PARAM[activeSource]);
+    // Send the full datetime (matches TopSearchBar's `Z`-suffixed ISO
+    // string on submit). The search page's `readExpiryBounds` parses
+    // both formats via `new Date(...)`.
+    usp.set('from', new Date(fromDate).toISOString());
+    usp.set('to', new Date(toDate).toISOString());
+    usp.set('category', CATEGORY_TO_PARAM[category] ?? 'ALL');
+
+    router.push(`/search?${usp.toString()}`);
   };
 
   const [showScrollIndicator, setShowScrollIndicator] = useState(true);
@@ -82,46 +155,54 @@ export default function HeroSection() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="text-base sm:text-lg text-gray-400 mb-8 max-w-2xl mx-auto leading-relaxed"
         >
-          Compare DeepBook Predict, Polymarket, and Kalshi side by side. Spot pricing gaps, uncover opportunities, and trade with confidence.
+          Compare Polymarket, DeepBook Predict, and Kalshi side by side. Pick a
+          source, filter by expiry or type, and find the highest-conviction
+          market.
         </motion.p>
 
-        {/* Search Form (Skyscanner-style multi-field card) */}
+        {/* Search Form (Skyscanner-style multi-field card) — wrapped in GlassCard */}
         <motion.form
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
           onSubmit={handleSubmit}
-          className="rounded-2xl border border-white/10 p-2 md:p-3 mb-6"
-          style={{
-            background: 'rgba(26, 29, 46, 0.6)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-          }}
+          className="mb-6"
         >
-          <div className="flex flex-col md:flex-row md:items-stretch gap-2 md:gap-0">
-            {/* Market search */}
-            <label className="flex flex-col text-left flex-1 px-3 py-2 md:border-r md:border-white/10">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                Market
-              </span>
-              <div className="flex items-center gap-2">
-                <Search size={16} className="text-gray-500 shrink-0" />
+          <GlassCard>
+            <div className="flex flex-col md:flex-row md:items-stretch gap-2 md:gap-0">
+              {/* From date+time */}
+              <label className="flex flex-col text-left flex-1 px-3 py-2 md:border-r md:border-white/10">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  From
+                </span>
                 <input
-                  type="text"
-                  value={market}
-                  onChange={(e) => setMarket(e.target.value)}
-                  placeholder="e.g. BTC > 100k by EOY"
-                  className="bg-transparent text-white placeholder:text-gray-500 outline-none w-full text-sm"
+                  type="datetime-local"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="bg-transparent text-white outline-none w-full text-sm [color-scheme:dark]"
                 />
-              </div>
-            </label>
+              </label>
 
-            {/* Category */}
-            <label className="flex flex-col text-left md:w-44 px-3 py-2 md:border-r md:border-white/10">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                Category
-              </span>
-              <div className="flex items-center gap-2">
+              {/* To date+time */}
+              <label className="flex flex-col text-left flex-1 px-3 py-2 md:border-r md:border-white/10">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  To
+                </span>
+                <input
+                  type="datetime-local"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="bg-transparent text-white outline-none w-full text-sm [color-scheme:dark]"
+                />
+              </label>
+
+              {/* Category (kept for layout parity with the top bar;
+                  not wired through to the search page beyond the
+                  stub `category` param the user said isn't needed). */}
+              <label className="flex flex-col text-left md:w-44 px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  Category
+                </span>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
@@ -137,43 +218,40 @@ export default function HeroSection() {
                     </option>
                   ))}
                 </select>
-                <ChevronDown
-                  size={16}
-                  className="text-gray-500 shrink-0 pointer-events-none"
-                />
-              </div>
-            </label>
-
-            {/* Compare button */}
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-accent-primary text-black font-semibold hover:bg-accent-primary-hover transition-all text-sm"
-            >
-              Search
-              <ArrowRight size={16} />
-            </button>
-          </div>
-
-          {/* Sources row */}
-          <div className="flex flex-wrap items-center gap-3 md:gap-4 px-3 pt-3 mt-2 border-t border-white/10">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-              Sources
-            </span>
-            {sourceOptions.map((s) => (
-              <label
-                key={s.id}
-                className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={enabledSources[s.id]}
-                  onChange={() => toggleSource(s.id)}
-                  className="w-4 h-4 rounded border-white/20 bg-transparent accent-[var(--color-accent-primary)] cursor-pointer"
-                />
-                {s.label}
               </label>
-            ))}
-          </div>
+
+              {/* Search button */}
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-accent-primary text-black font-semibold hover:bg-accent-primary-hover transition-all text-sm"
+              >
+                Search
+                <ArrowRight size={16} />
+              </button>
+            </div>
+
+            {/* Source row — single-select radio, with "All sources" at the top */}
+            <div className="flex flex-wrap items-center gap-3 md:gap-4 px-3 pt-3 mt-2 border-t border-white/10">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                Source
+              </span>
+              {sourceOptions.map((s) => (
+                <label
+                  key={s.id}
+                  className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white transition-colors"
+                >
+                  <input
+                    type="radio"
+                    name="source"
+                    checked={activeSource === s.id}
+                    onChange={() => setActiveSource(s.id)}
+                    className="w-4 h-4 border-white/20 bg-transparent accent-[var(--color-accent-primary)] cursor-pointer"
+                  />
+                  {s.label}
+                </label>
+              ))}
+            </div>
+          </GlassCard>
         </motion.form>
 
         {/* Trending row */}

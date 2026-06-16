@@ -7,13 +7,14 @@ import TopSearchBar from './TopSearchBar';
 import SearchFilters from './SearchFilters';
 import SearchResults from './SearchResults';
 
-type Platform = 'DEEPBOOK' | 'POLYMARKET' | 'KALSHI';
+type Platform = 'DEEPBOOK' | 'POLYMARKET' | 'KALSHI' | 'ALL';
 
 function readSource(params: URLSearchParams): Platform {
   const s = params.get('source');
-  return s === 'DEEPBOOK' || s === 'KALSHI' || s === 'POLYMARKET'
-    ? s
-    : 'DEEPBOOK';
+  if (s === 'DEEPBOOK' || s === 'KALSHI' || s === 'POLYMARKET' || s === 'ALL') {
+    return s;
+  }
+  return 'ALL';
 }
 
 function SearchPageInner() {

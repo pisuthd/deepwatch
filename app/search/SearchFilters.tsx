@@ -5,7 +5,7 @@ import { useCallback, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 type MarketType = 'UP_DOWN' | 'RANGE' | 'OTHER';
-type Platform = 'DEEPBOOK' | 'POLYMARKET' | 'KALSHI';
+type Platform = 'DEEPBOOK' | 'POLYMARKET' | 'KALSHI' | 'ALL';
 type SortOrder = 'expiry_asc' | 'expiry_desc';
 
 interface SearchFilters {
@@ -21,6 +21,7 @@ const TYPE_OPTIONS: { id: MarketType | 'ALL'; label: string }[] = [
 ];
 
 const ALL_SOURCES: { id: Platform; label: string }[] = [
+  { id: 'ALL', label: 'All sources' },
   { id: 'POLYMARKET', label: 'Polymarket' },
   { id: 'DEEPBOOK', label: 'DeepBook Predict' },
   { id: 'KALSHI', label: 'Kalshi' },
@@ -34,9 +35,12 @@ const SORT_OPTIONS: { id: SortOrder; label: string }[] = [
 function readFilters(params: URLSearchParams): SearchFilters {
   const sourceParam = params.get('source');
   const source: Platform =
-    sourceParam === 'DEEPBOOK' || sourceParam === 'KALSHI' || sourceParam === 'POLYMARKET'
+    sourceParam === 'DEEPBOOK' ||
+    sourceParam === 'KALSHI' ||
+    sourceParam === 'POLYMARKET' ||
+    sourceParam === 'ALL'
       ? sourceParam
-      : 'DEEPBOOK';
+      : 'ALL';
   const sortParam = params.get('sort');
   const sort: SortOrder = sortParam === 'expiry_desc' ? 'expiry_desc' : 'expiry_asc';
   return {
