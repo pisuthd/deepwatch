@@ -64,3 +64,28 @@ export function generateStrikes(spotUsd: number, count: number, tick: number): n
   const half = Math.floor(count / 2)
   return Array.from({ length: count }, (_, i) => center + (i - half) * tick)
 }
+
+/**
+ * Three symmetric range widths centered on a trigger strike (USD).
+ * Used by Simple mode range choices. Advanced mode accepts any width
+ * (dragged), so the constant lives here but the Advanced range-mode UI
+ * does not consume it directly.
+ */
+export const SIMPLE_RANGE_WIDTHS_USD = [500, 1000, 2500] as const
+
+/**
+ * Generate `widths.length` symmetric range choices around a trigger.
+ * Caller decides whether to snap each bound to a tick — this helper
+ * returns the raw symmetric bands.
+ */
+export function generateRangeChoices(
+  triggerUsd: number,
+  widths: readonly number[] = SIMPLE_RANGE_WIDTHS_USD
+): { lower: number; upper: number; label: string }[] {
+  if (!triggerUsd || triggerUsd <= 0) return []
+  return widths.map((w) => ({
+    lower: triggerUsd - w,
+    upper: triggerUsd + w,
+    label: `±$${w.toLocaleString('en-US')}`,
+  }))
+}

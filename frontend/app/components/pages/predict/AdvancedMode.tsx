@@ -16,6 +16,7 @@ import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
 import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
+import RangeTradeModal from './RangeTradeModal';
 import PriceChart from './PriceChart';
 import StrikeGrid from './StrikeGrid';
 import { useSetCurrentMarket } from './CurrentMarketContext';
@@ -40,6 +41,14 @@ export default function PredictAdvancedMode() {
   }>({ open: false, strike: 0, direction: 'up' });
   const [showMarketDropdown, setShowMarketDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Range mode — local to Advanced. Defaults to `forward ± $1,000` per
+  // market. The chart's two drag handles drive `lower`/`upper` directly.
+  const [marketType, setMarketType] = useState<'binary' | 'range'>('binary');
+  const [lower, setLower] = useState(0);
+  const [upper, setUpper] = useState(0);
+  const [triggerStrike, setTriggerStrike] = useState(0);
+  const [rangeModalOpen, setRangeModalOpen] = useState(false);
 
   const { markets, loading: marketsLoading } = useMarkets(30_000);
   const activeMarkets = useMemo(
@@ -110,6 +119,21 @@ export default function PredictAdvancedMode() {
     }
   }, [currentMarket?.oracle_id, spotUsd]);
 
+  // Default range bounds when entering range mode for the first time per
+  // market: forward ± $1,000, rounded to the nearest $1,000 tick.
+  const rangeInitRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentMarket || marketType !== 'range') return;
+    if (rangeInitRef.current === currentMarket.oracle_id) return;
+    const fwd = market ? market.forward / 1e9 : 0;
+    if (fwd <= 0) return;
+    const f = Math.round(fwd / 1000) * 1000;
+    rangeInitRef.current = currentMarket.oracle_id;
+    setLower(f - 1000);
+    setUpper(f + 1000);
+    setTriggerStrike(f);
+  }, [currentMarket?.oracle_id, marketType, market?.forward]);
+
   // Live SVI probability for the currently-dragged strike (forward is RAW)
   const liveMint = useMemo(() => {
     if (!market || !spotUsd || !strike) return { up: 50, down: 50 };
@@ -161,7 +185,10 @@ export default function PredictAdvancedMode() {
   }
 
   const showSkeleton = marketLoading && !market;
-  const question = `Will ${asset} be above or below ${formatPrice(spotUsd)}?`;
+  const question =
+    marketType === 'range' && lower > 0 && upper > 0
+      ? `Will ${asset} settle between ${formatPrice(lower)} and ${formatPrice(upper)}?`
+      : `Will ${asset} be above or below ${formatPrice(spotUsd)}?`;
 
   return (
     <div
@@ -313,6 +340,33 @@ export default function PredictAdvancedMode() {
           )}
         </div>
 
+        {/* Binary / Range segmented toggle */}
+        <div
+          className="inline-flex items-center rounded-lg p-0.5 gap-0.5"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {(['binary', 'range'] as const).map((id) => {
+            const isActive = marketType === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMarketType(id)}
+                className="px-3 py-1 rounded-md text-[11px] font-semibold transition-colors"
+                style={{
+                  background: isActive ? green : 'transparent',
+                  color: isActive ? '#000' : textSecondary,
+                }}
+              >
+                {id === 'binary' ? 'Binary' : 'Range'}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Market carousel (prev/next + position) */}
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -356,94 +410,132 @@ export default function PredictAdvancedMode() {
               oracleId={currentOracleId}
               strike={strike}
               onStrikeChange={setStrike}
+              {...(marketType === 'range' && {
+                lower,
+                upper,
+                onRangeChange: (l: number, u: number) => {
+                  setLower(l);
+                  setUpper(u);
+                },
+              })}
             />
 
-            {/* ── UP / DOWN overlay (bottom-right) ─────────────────────── */}
+            {/* ── Overlay (bottom-right): UP/DOWN in binary, Range button in range ── */}
             <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2 pointer-events-none">
-              <div
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono"
-                style={{
-                  background: 'rgba(26, 29, 46, 0.6)',
-                  backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                }}
-              >
-                <span style={{ color: green }}>
-                  UP {(liveMint.up / 100).toFixed(2)}
-                </span>
-                <span style={{ color: textSecondary }}>·</span>
-                <span style={{ color: red }}>
-                  DOWN {(liveMint.down / 100).toFixed(2)}
-                </span>
-              </div>
-              <button
-                onClick={() => setModal({ open: true, strike, direction: 'up' })}
-                className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
-                style={{
-                  background: 'rgba(26, 29, 46, 0.6)',
-                  backdropFilter: 'blur(20px)',
-                }}
-              >
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-                <div
-                  className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
-                  style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
-                />
-                <span
-                  className="relative z-10 text-sm font-semibold"
-                  style={{ color: green }}
+              {marketType === 'binary' ? (
+                <>
+                  <div
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono"
+                    style={{
+                      background: 'rgba(26, 29, 46, 0.6)',
+                      backdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                    }}
+                  >
+                    <span style={{ color: green }}>
+                      UP {(liveMint.up / 100).toFixed(2)}
+                    </span>
+                    <span style={{ color: textSecondary }}>·</span>
+                    <span style={{ color: red }}>
+                      DOWN {(liveMint.down / 100).toFixed(2)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setModal({ open: true, strike, direction: 'up' })}
+                    className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
+                    style={{
+                      background: 'rgba(26, 29, 46, 0.6)',
+                      backdropFilter: 'blur(20px)',
+                    }}
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+                    <div
+                      className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                      style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
+                    />
+                    <span
+                      className="relative z-10 text-sm font-semibold"
+                      style={{ color: green }}
+                    >
+                      ▲ UP
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setModal({ open: true, strike, direction: 'down' })}
+                    className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
+                    style={{
+                      background: 'rgba(26, 29, 46, 0.6)',
+                      backdropFilter: 'blur(20px)',
+                    }}
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+                    <div
+                      className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                      style={{ background: red, filter: 'blur(30px)', opacity: 0.15 }}
+                    />
+                    <span
+                      className="relative z-10 text-sm font-semibold"
+                      style={{ color: red }}
+                    >
+                      ▼ DOWN
+                    </span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setRangeModalOpen(true)}
+                  disabled={lower <= 0 || upper <= lower}
+                  className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
+                  style={{
+                    background: 'rgba(26, 29, 46, 0.6)',
+                    backdropFilter: 'blur(20px)',
+                  }}
                 >
-                  ▲ UP
-                </span>
-              </button>
-              <button
-                onClick={() => setModal({ open: true, strike, direction: 'down' })}
-                className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
-                style={{
-                  background: 'rgba(26, 29, 46, 0.6)',
-                  backdropFilter: 'blur(20px)',
-                }}
-              >
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-                <div
-                  className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
-                  style={{ background: red, filter: 'blur(30px)', opacity: 0.15 }}
-                />
-                <span
-                  className="relative z-10 text-sm font-semibold"
-                  style={{ color: red }}
-                >
-                  ▼ DOWN
-                </span>
-              </button>
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                  <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+                  <div
+                    className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                    style={{ background: cyan, filter: 'blur(30px)', opacity: 0.15 }}
+                  />
+                  <span
+                    className="relative z-10 text-sm font-semibold"
+                    style={{ color: cyan }}
+                  >
+                    ⇋ Range {formatPrice(lower)}–{formatPrice(upper)}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         </GlassCard>
 
-        {/* Right-side strike ladder */}
-        <div className="w-80 shrink-0 min-h-0">
-          <GlassCard className="  p-0 overflow-hidden">
-            <StrikeGrid
-              market={
-                market
-                  ? {
-                      spot: market.spot,
-                      forward: market.forward,
-                      svi: market.svi,
-                      expiryMs: market.expiryMs,
-                    }
-                  : null
-              }
-              currentStrike={strike}
-              onStrikeChange={setStrike}
-            />
-          </GlassCard>
-        </div>
+        {/* Right-side strike ladder — hidden in range mode; the chart's two
+            drag handles are the entire control surface there. */}
+        {marketType === 'binary' && (
+          <div className="w-80 shrink-0 min-h-0">
+            <GlassCard className="  p-0 overflow-hidden">
+              <StrikeGrid
+                market={
+                  market
+                    ? {
+                        spot: market.spot,
+                        forward: market.forward,
+                        svi: market.svi,
+                        expiryMs: market.expiryMs,
+                      }
+                    : null
+                }
+                currentStrike={strike}
+                onStrikeChange={setStrike}
+              />
+            </GlassCard>
+          </div>
+        )}
       </div>
 
-      {currentMarket && (
+      {currentMarket && marketType === 'binary' && (
         <BinaryTradeModal
           open={modal.open}
           onClose={() => setModal((m) => ({ ...m, open: false }))}
@@ -455,6 +547,23 @@ export default function PredictAdvancedMode() {
           }}
           strike={modal.strike}
           initialDirection={modal.direction}
+        />
+      )}
+
+      {currentMarket && marketType === 'range' && lower > 0 && upper > lower && (
+        <RangeTradeModal
+          open={rangeModalOpen}
+          onClose={() => setRangeModalOpen(false)}
+          market={{
+            oracleId: currentMarket.oracle_id,
+            asset,
+            expiryMs,
+            spotUsd,
+          }}
+          lower={lower}
+          upper={upper}
+          triggerStrike={triggerStrike}
+          widthUsd={Math.round((upper - lower) / 2)}
         />
       )}
     </div>
