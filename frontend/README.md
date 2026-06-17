@@ -1,0 +1,185 @@
+# DeepWatch — The Intelligence Layer for DeepBook
+
+> DeepWatch uses live SVI oracle data, Polymarket & Kalshi odds via Tatum API — distilled into AI insights and published to Walrus for trading on all DeepBook markets (Spot, Margin, Predict).
+
+<img width="830" height="379" alt="Screenshot 2026-06-05 131223" src="https://github.com/user-attachments/assets/a53e86cc-b1c0-4f4b-bb4e-691dc7a6e517" />
+
+## What is DeepWatch
+
+**DeepWatch** is a unified trading terminal for all DeepBook markets — Spot, Margin, and Predict. We use AI to convert complex on-chain SVI data, enriched with Polymarket and Kalshi odds via Tatum API, into actionable insights for confident trading. All insights are shared on Walrus for the community to verify and reference.
+
+[DeepBook Predict](https://docs.sui.io/onchain-finance/deepbook-predict/) is Sui's institutional-grade prediction market with:
+
+- **Block Scholes oracle** for institutional pricing
+- **Sub-400ms settlement** — fast enough to feel like a game
+- **Internal market maker** provides liquidity from day one
+- **All positions composable** with deep shared liquidity
+
+The data is powerful but hard to understand. **DeepWatch** bridges that gap by turning those SVI signals into plain-language insights as well as enriches with real-time odds from other prediction markets, giving you the clarity to enter early and exit smarter.
+
+---
+
+## Highlight Features
+
+- **Unified DeepBook trading terminal** — A single interface for Spot, Margin, and Predict markets with live candlestick charts and real-time execution on DeepBook V3.
+- **Predict markets made readable** — DeepBook Predict’s Block Scholes–based pricing produces dense signals. DeepWatch translates them into clear, actionable insights for faster decision-making.
+- **AI-powered market intelligence on-chain** — Combines SVI oracle data, prediction market odds, and external signals into structured insights stored on Walrus via Tatum Storage API.
+- **Tatum-powered data layer** — Aggregates Polymarket, Kalshi, Sui gRPC, and Walrus into a single integration layer, reducing infrastructure complexity and accelerating development.
+
+## Quick Links
+
+- [3-min Video Demo](https://youtu.be/zuv1_9bVVFk)
+- [Live Dapp](https://www.deepbook.watch/)
+- [Example Insight on Walrus](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-id/2hCrRgzlRsfAuee_n7xn4ji_UeekbeqHTrSFMYM3RfU/insight-BTC-1780641231758.json)
+
+## Tech stack
+
+| Layer | What's used |
+| --- | --- |
+| Frontend | Next.js 16.2.6 · React 19.2.4 · TypeScript 5 · Tailwind v4 · `@mysten/dapp-kit-react` · `@mysten/deepbook-v3` · `@mysten/sui` (`SuiGrpcClient`) · framer-motion · lucide-react · lightweight-charts · react-markdown |
+| DeepBook | DeepBook V3 — Spot, Margin, and Predict markets on Sui |
+| Network | Sui mainnet (Spot) · Sui testnet (Spot, Predict) |
+| AI | Anthropic Claude 4.6 · MiniMax M3 (Anthropic-compatible) |
+| Tatum API | Sui gRPC endpoints · Storage API for Walrus · Prediction API · Price and Exchange Rate API |
+
+---
+
+## Quick start
+
+<img width="747" height="328" alt="Screenshot 2026-06-05 125554" src="https://github.com/user-attachments/assets/0961d34c-0bad-45ad-b154-a7eb332db62a" />
+
+### 1. Enter the app and pick your market
+
+Choose between two DeepBook products from the sidebar:
+
+**DeepBook Spot**
+- Available on both **Mainnet** and **Testnet**
+- Trade tokens on SUI with DeepBook V3 — capital-efficient, orderbook-based execution with an AMM-alike experience
+
+**DeepBook Predict**
+- Currently available on **Testnet**
+- Uses real-time Oracle Testnet data to generate insights on BTC price movements that you can trade on **Mainnet**
+- *Note: Predict requires **DUSD**, you can find a form to request tokens on the dapp.*
+
+<img width="758" height="328" alt="Screenshot 2026-06-05 130331" src="https://github.com/user-attachments/assets/4896e3f8-f577-43bd-bdbe-1f97727b6b49" />
+
+### 2. Pick a market view
+
+Each product has **Simple** and **Advanced** modes:
+
+**DeepBook Spot**
+- **Simple mode** — Uniswap-style UI for quick, easy swaps with deep liquidity
+- **Advanced mode** — Live candlestick chart with OHLC data from DeepBook's index server
+
+**DeepBook Predict**
+- **Simple mode** — Pre-defined strike prices for quick bets
+- **Advanced mode** — Live chart with real-time oracle price via index server, manual strike price selection with dynamic odds
+
+*Before trading on Predict, you need a trading account. Deposit DUSD via the **Overview** button on the Predict page to fund your account and view your P&L dashboard.*
+
+<img width="768" height="371" alt="Screenshot 2026-06-05 105351" src="https://github.com/user-attachments/assets/83d83a16-317b-4d6b-aa8c-dcd759601c81" />
+
+### 3. Read the latest insights
+
+Tap the **Insights** button on any market to get AI-generated analysis that helps you decide your trades (Up/Down for Predict, Buy/Sell for Spot). Insights are actionable — they combine SVI oracle data, Polymarket odds, and Kalshi tickers into clear signals.
+
+Insights are published to **Walrus Mainnet** via Tatum and remain active for **2 epochs (~4 weeks)**.
+
+<img width="752" height="320" alt="Screenshot 2026-06-05 130449" src="https://github.com/user-attachments/assets/8bc84748-acf4-4c5f-9bb7-dc76bf4f9136" />
+
+### 4. Trade
+
+Both Simple and Advanced modes share the same trade UI:
+
+**DeepBook Spot**
+- Choose your trading pair and view live rates
+- Tokens settle in the same block
+- Default trading fee: **0.5%**
+
+**DeepBook Predict**
+- Pick **Up** or **Down** on a strike price (default: current spot price)
+- Predict whether the price will be above or below at expiry
+- Odds are shown relative to $1 — e.g., if the mint price for Predict Up is $0.60 and you bet $1, you receive ~$0.40 profit if winning
+- A small spread is deducted for DeepBook fees, shared with liquidity providers
+
+<img width="591" height="301" alt="Screenshot 2026-06-05 130709" src="https://github.com/user-attachments/assets/bbf0902c-88c5-44fc-bc8c-d0cffe0d3946" />
+
+### 5. Create a new insight
+If no existing insight matches your window or asset, jump to **Add Insight**, pick your data sources (Oracle SVI, Polymarket odds, Kalshi tickers), and let the AI compose an analysis. Tatum handles the Walrus upload in the background — wait a few seconds, and your insight is published.
+
+<img width="757" height="334" alt="Screenshot 2026-06-05 130546" src="https://github.com/user-attachments/assets/a91319e2-b790-4741-a728-d0c69102f99c" />
+
+---
+
+## For developers
+
+### Local setup
+
+```bash
+git clone <your fork url>
+cd deepwatch
+npm install
+cp .env.example .env       # then fill in your keys
+npm run dev
+```
+
+Open `http://localhost:3000`. The dev server uses HMR.
+
+### Environment variables
+
+All values are placeholders. The canonical, runnable template lives in [`.env.example`](.env.example) (which is committed). Your real `.env` is gitignored.
+
+| Env var | Purpose |
+| --- | --- | 
+| `NEXT_PUBLIC_TESTNET_GRPC` | Sui testnet gRPC endpoint (Tatum gateway) | 
+| `NEXT_PUBLIC_MAINNET_GRPC` | Sui mainnet gRPC endpoint (Tatum gateway) |
+| `NEXT_PUBLIC_TATUM_API_KEY` | Tatum API key — used for Walrus upload/list and Polymarket/Kalshi search | 
+| `MINIMAX_API_KEY` | MiniMax Anthropic-compatible API key (insight generation) | 
+| `MINIMAX_BASE_URL` | MiniMax base URL — override only if you proxy | 
+| `MINIMAX_MODEL` | MiniMax model id. Default: `MiniMax-M3` | 
+| `MINIMAX_THINKING_BUDGET` | Optional extended-thinking budget in tokens. Set to `0` to disable. Default: `2048` |
+
+Notes:
+
+- `.env` is gitignored; the committed template is [`.env.example`](.env.example).
+- Tatum gRPC URLs and `NEXT_PUBLIC_TATUM_API_KEY` ship to the browser by design — Tatum is CORS-allowed for client-direct calls.
+- `MINIMAX_*` env vars must **never** be `NEXT_PUBLIC_*`. They are consumed only inside [`app/api/insights/generate/route.ts`](app/api/insights/generate/route.ts).
+
+### npm scripts
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Start the dev server (HMR) |
+| `npm run build` | Production build |
+| `npm run start` | Run the production build |
+| `npm run lint` | ESLint with `eslint-config-next` (core-web-vitals + typescript) |
+
+There is **no `typecheck` script**. Type-checking is available via `npx tsc --noEmit` (the `tsconfig.json` has `"noEmit": true`).
+
+### Project structure
+
+```
+deepwatch/
+├── app/
+│   ├── app/                # App Router pages — /app/spot, /app/predict, /app/margin, /app/add-insight, /app/recent-insights
+│   ├── components/         # Reusable UI (common, layout, per-page)
+│   ├── hooks/              # useDeepbook, usePredict, useSVI, useMarkets, ...
+│   ├── landing/            # Public marketing site (/)
+│   ├── lib/                # tatum, insights, polymarket, minimax, networkConfig
+│   └── api/insights/       # Server route — streaming MiniMax proxy
+├── .env.example            # Canonical env template (committed)
+├── next.config.ts          # Remote image patterns
+└── tsconfig.json           # Strict TS, paths @/* → ./*
+```
+
+---
+
+## Roadmap
+
+The dapp is **live on mainnet and fully functional** today.
+
+**Next up:** We're building toward a downloadable AI trading agent. The agent will read insights shared on Walrus and use them — combined with a locally fine-tuned model — to trade autonomously on DeepBook and beyond.
+
+## License
+
+MIT.
