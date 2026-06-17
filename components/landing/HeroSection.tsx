@@ -31,7 +31,6 @@ const trending = [
   'Solana flips ETH',
 ];
 
-
 const SOURCE_TO_PARAM: Record<SourceId, 'DEEPBOOK' | 'POLYMARKET' | 'KALSHI' | 'ALL'> = {
   all: 'ALL',
   deepbook: 'DEEPBOOK',
@@ -65,23 +64,34 @@ function isoDateTime(d: Date): string {
 }
 
 /**
- * "Next round 12-hour" — the next 12:00 boundary at or after `now`.
- * Rounds to noon (12:00) or midnight (00:00), whichever is sooner.
- * Examples:
- *   10:33 AM → 12:00 (noon, same day)
- *   14:00    → 00:00 (midnight, next day)
- *   22:33    → 00:00 (midnight, next day)
- *   00:00    → 12:00 (noon, same day — the next 12:00, never the current)
+ * "Next hour and round up" — round up to the next whole hour, then
+ * if the result would be less than 1 hour from `now`, push it out
+ * by one more hour so the user always lands at least 1 hour ahead.
+ *
+ * Special case for midnight: if rounding up gives 00:00, keep it
+ * even if it's less than 1 hour away — the user almost certainly
+ * wants "midnight tonight" rather than "1 AM tomorrow morning" for
+ * late-evening timestamps.
+ *
+ * Examples (Bangkok time):
+ *   08:15 → 10:00   (09:00 is only 45m away, push to 10:00)
+ *   09:00 → 10:00   (10:00 is exactly 1h away, keep)
+ *   10:00 → 11:00   (11:00 is exactly 1h away, keep)
+ *   10:30 → 12:00   (11:00 is only 30m away, push to 12:00)
+ *   14:01 → 16:00   (15:00 is only 59m away, push to 16:00)
+ *   23:30 → 00:00   (midnight, kept as the natural next-hour boundary)
  */
-function nextRoundTwelveHour(now: Date): Date {
+function nextHourRoundedUp(now: Date): Date {
   const d = new Date(now);
-  const h = d.getHours();
-  if (h < 12) {
-    d.setHours(12, 0, 0, 0);
-  } else {
-    // Noon or later → next midnight. `setHours(24, …)` rolls over
-    // to 00:00 of the following day.
-    d.setHours(24, 0, 0, 0);
+  // Step 1: round up to the next whole hour.
+  d.setHours(d.getHours() + 1, 0, 0, 0);
+  // Step 2: if the result is less than 1 hour from `now`, push by 1h.
+  // Special case: midnight (00:00) is kept even if it's < 1h away.
+  if (d.getTime() - now.getTime() < 60 * 60 * 1000) {
+    if (d.getHours() === 0) {
+      return d; // midnight — keep
+    }
+    d.setHours(d.getHours() + 1, 0, 0, 0);
   }
   return d;
 }
@@ -89,13 +99,13 @@ function nextRoundTwelveHour(now: Date): Date {
 export default function HeroSection() {
   const router = useRouter();
 
-  // Default from = the next 12:00 boundary (noon or midnight).
-  // Default to = 30 days from that, at the same 12:00 boundary.
+  // Default from = the next whole hour, at least 1h away (or midnight).
+  // Default to = 30 days from that.
   const initialFrom = useMemo(() => {
-    return isoDateTime(nextRoundTwelveHour(new Date()));
+    return isoDateTime(nextHourRoundedUp(new Date()));
   }, []);
   const initialTo = useMemo(() => {
-    const d = nextRoundTwelveHour(new Date());
+    const d = nextHourRoundedUp(new Date());
     d.setDate(d.getDate() + 30);
     return isoDateTime(d);
   }, []);
@@ -266,7 +276,7 @@ export default function HeroSection() {
             <span key={t}>
               <button
                 type="button"
-                onClick={() => setMarket(t)}
+                // onClick={() => setMarket(t)}
                 className="text-gray-300 hover:text-accent-primary transition-colors"
               >
                 {t}

@@ -86,6 +86,36 @@ export default function SearchFilters() {
       className="rounded-2xl border border-white/10 p-5 sticky top-28"
       style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
     >
+
+    
+      {/* Sort */}
+      <div className="mb-5">
+        <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+          Sort
+        </label>
+        <div className="relative">
+          <select
+            value={sort}
+            onChange={(e) => {
+              const v = e.target.value as SortOrder;
+              setSort(v);
+              push({ sort: v });
+            }}
+            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white appearance-none cursor-pointer outline-none focus:border-[var(--color-accent-primary)]"
+          >
+            {SORT_OPTIONS.map((s) => (
+              <option key={s.id} value={s.id} className="bg-[var(--color-bg-surface)]">
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
+          />
+        </div>
+      </div>
+
       {/* Source */}
       <div className="mb-5">
         <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
@@ -115,7 +145,7 @@ export default function SearchFilters() {
       </div>
 
       {/* Type */}
-      <div className="mb-5">
+      <div>
         <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
           Type
         </label>
@@ -142,33 +172,6 @@ export default function SearchFilters() {
         </div>
       </div>
 
-      {/* Sort */}
-      <div>
-        <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
-          Sort
-        </label>
-        <div className="relative">
-          <select
-            value={sort}
-            onChange={(e) => {
-              const v = e.target.value as SortOrder;
-              setSort(v);
-              push({ sort: v });
-            }}
-            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white appearance-none cursor-pointer outline-none focus:border-[var(--color-accent-primary)]"
-          >
-            {SORT_OPTIONS.map((s) => (
-              <option key={s.id} value={s.id} className="bg-[var(--color-bg-surface)]">
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
-          />
-        </div>
-      </div>
     </div>
   );
 }
