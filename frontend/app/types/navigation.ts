@@ -15,8 +15,8 @@ export const categories: NavCategory[] = [
   {
     title: 'Predict',
     items: [
-      { icon: 'Goal', label: 'Predict', pageId: 'predict' },
-      { icon: 'Sparkles', label: 'Insights', pageId: 'add-insight' },
+      { icon: 'LineChart', label: 'Predict', pageId: 'predict' },
+      { icon: 'Sparkles', label: 'Compare', pageId: 'add-insight' },
     ],
   },
   {
@@ -40,6 +40,6 @@ export const routeMeta: Record<PageId, { category: string; label: string }> = {
   'margin': { category: 'Trade', label: 'Margin' },
   'account-overview': { category: 'Account', label: 'Overview' },
   'positions': { category: 'Account', label: 'Positions' },
-  'add-insight': { category: 'Predict', label: 'Insights' },
+  'add-insight': { category: 'Predict', label: 'Compare' },
   'download-agent': { category: 'Tools', label: 'Download Agent' },
 };
