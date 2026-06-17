@@ -66,9 +66,32 @@ export interface DbOracleRef {
 /**
  * Live cross-venue data captured at insight-publish time. Either side
  * is `null` if no matching group was found within the matching tolerance.
+ *
+ * `dbComputed` carries the DeepBook Predict ladder synthesized from the
+ * oracle's SVI surface (5 strikes + 3 range bands). This is the same
+ * ladder the user sees in the LiveComparePanel — sending it to the AI
+ * means the model can do a real 3-way cross-venue comparison instead of
+ * just naming Polymarket vs Kalshi.
  */
 export interface LiveIncludes {
   db: DbOracleRef;
+  dbComputed?: {
+    spotUsd: number;
+    forwardUsd: number;
+    upDown: Array<{
+      strikeUsd: number;
+      impliedProbUp: number;
+      description: string | null;
+      priceToBeatUsd: number | null;
+    }>;
+    range: Array<{
+      floorStrikeUsd: number;
+      capStrikeUsd: number;
+      rangeBandPct: number;
+      impliedProbUp: number;
+      description: string | null;
+    }>;
+  } | null;
   poly: PolymarketGroup | null;
   kalshi: KalshiGroup | null;
 }

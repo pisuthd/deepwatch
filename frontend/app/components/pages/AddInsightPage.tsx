@@ -35,6 +35,7 @@ import {
   type PredictSnapshot,
 } from '../../lib/insights';
 import { formatDetailedExpiry } from '@/lib/markets/format';
+import { computeDeepBookLadder } from '@/lib/markets/deepbook';
 import type { PolymarketGroup } from '@/lib/markets/polymarket';
 import type { KalshiGroup } from '@/lib/markets/kalshi';
 import { generateInsightStream } from '../../lib/minimax';
@@ -87,6 +88,14 @@ export default function AddInsightPage() {
 
   const asset: InsightAsset = 'BTC';
 
+  // Project the SVI surface onto the same 5-strike + 3-band ladder
+  // the LiveComparePanel renders, so the AI sees the DeepBook side
+  // of the 3-way comparison in the same shape as Polymarket/Kalshi.
+  const dbComputed = useMemo(
+    () => (picked ? computeDeepBookLadder(picked.oracle) : null),
+    [picked],
+  );
+
   const includes: InsightBody['includes'] = useMemo(() => {
     const out: InsightBody['includes'] = {};
     if (predict) out.predict = predict;
@@ -97,12 +106,20 @@ export default function AddInsightPage() {
           expiryMs: picked.oracle.expiryMs,
           question: picked.oracle.name,
         },
+        dbComputed: dbComputed
+          ? {
+              spotUsd: dbComputed.spotUsd,
+              forwardUsd: dbComputed.forwardUsd,
+              upDown: dbComputed.upDown,
+              range: dbComputed.range,
+            }
+          : null,
         poly: picked.poly,
         kalshi: picked.kalshi,
       };
     }
     return out;
-  }, [predict, picked]);
+  }, [predict, picked, dbComputed]);
 
   const hasContext = !!picked;
 

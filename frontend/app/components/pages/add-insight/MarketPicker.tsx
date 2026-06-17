@@ -1,30 +1,37 @@
 'use client';
 
 /**
- * MarketPicker — the compact list of DeepBook Predict oracles that
- * drives the cross-venue compare panel.
+ * MarketPicker — random-pick chips that drive the cross-venue compare
+ * panel.
  *
- * Replaces the old Step 1 from the 3-step wizard. On the single-screen
- * Insights page this picker is always visible at the top of the
- * page; the 3-column compare (DeepBook / Polymarket / Kalshi) sits
- * directly below it and updates instantly on every selection — no
- * step transitions, no auto-advance.
+ * Replaces the old Step 1 from the 3-step wizard and the prior
+ * chip-and-grid design. On the single-screen Insights page this
+ * picker is the only thing above the compare panel — three horizon
+ * chips (1d / 3d / 7d) and a tiny caption that says which market was
+ * picked and where it lives in the chosen horizon. No grid, no
+ * scroll-to-see list.
  *
- * Three time-horizon chips (1d / 3d / 7d) above the picker narrow the
- * visible markets to those expiring within the window. Each chip
- * shows a count so the user knows what they're getting into. The
- * picker auto-selects the most-imminent market within the chosen
- * horizon — both on mount and on horizon change — so the compare
- * panel below is always populated.
+ * Behavior:
+ *  - On mount, auto-fallback: pick the first non-empty horizon
+ *    (1d → 3d → 7d) and random-pick one market inside it. The
+ *    compare panel is never empty on first paint unless every
+ *    horizon is empty.
+ *  - Clicking a chip random-picks a new market in that horizon
+ *    (the same horizon if you click the active chip — "shake the
+ *    dice").
+ *  - Chips with zero markets in their window render disabled.
+ *  - The parent's `selectedOracleId` is respected — once a pick is
+ *    in flight, plain dep changes (dbMarkets refetch, etc.) don't
+ *    re-roll it. Only a chip click re-rolls.
  *
  * `findMatchingGroups` is computed for the currently-selected oracle
- * so `onPick` can stamp the matches onto the picked payload (the
+ * so `onPick` can stamp the matches onto the payload (the
  * LiveComparePanel reads them off `picked`).
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { formatUsd } from '@/lib/markets/format';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatExpiryLabel } from '../../../lib/insights';
+import { formatDetailedExpiry } from '@/lib/markets/format';
 import {
   groupPolymarketMarkets,
   type PolymarketGroup,
@@ -38,10 +45,10 @@ import { useGlobalMarkets } from '../../../stores/markets-store';
 import { useMarkets as useDeepBookMarkets } from '../../../hooks/useMarkets';
 import type { Market as DbMarket } from '../../../hooks/useMarkets';
 
-const PRICE_SCALE = 1e9;
 const green = '#00E68A';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
+const red = '#ef4444';
 
 const HORIZONS = [
   { id: '1d', label: '1d', days: 1 },
@@ -60,19 +67,15 @@ interface Props {
   }) => void;
 }
 
-function findNearest(markets: DbMarket[]): DbMarket | null {
+function pickRandom(markets: DbMarket[]): DbMarket | null {
   if (markets.length === 0) return null;
+  return markets[Math.floor(Math.random() * markets.length)];
+}
+
+function marketsInHorizon(dbMarkets: DbMarket[], days: number): DbMarket[] {
   const now = Date.now();
-  let best = markets[0];
-  let bestDelta = Math.abs(markets[0].expiryMs - now);
-  for (let i = 1; i < markets.length; i++) {
-    const delta = Math.abs(markets[i].expiryMs - now);
-    if (delta < bestDelta) {
-      best = markets[i];
-      bestDelta = delta;
-    }
-  }
-  return best;
+  const cutoff = days * 24 * 60 * 60 * 1000;
+  return dbMarkets.filter((m) => m.expiryMs - now <= cutoff);
 }
 
 export default function MarketPicker({ selectedOracleId, onPick }: Props) {
@@ -80,89 +83,86 @@ export default function MarketPicker({ selectedOracleId, onPick }: Props) {
   const { polyRows, kalshiRows } = useGlobalMarkets();
 
   const [horizon, setHorizon] = useState<HorizonId>('1d');
+  // Increments on every chip click (including re-clicks of the active
+  // chip). Lets the pick effect distinguish "user clicked → re-roll"
+  // from "deps changed for an unrelated reason → keep selection".
+  const [nonce, setNonce] = useState(0);
+  const userClickedRef = useRef(false);
 
   const polyGroups = useMemo(() => groupPolymarketMarkets(polyRows ?? []), [polyRows]);
   const kalshiGroups = useMemo(() => groupKalshiMarkets(kalshiRows ?? []), [kalshiRows]);
 
   // Counts per horizon, so the chips show "1d · 6" / "3d · 12" / etc.
   const horizonCounts = useMemo(() => {
-    const now = Date.now();
     const map: Record<HorizonId, number> = { '1d': 0, '3d': 0, '7d': 0 };
     for (const h of HORIZONS) {
-      const cutoff = h.days * 24 * 60 * 60 * 1000;
-      map[h.id] = dbMarkets.filter((m) => m.expiryMs - now <= cutoff).length;
+      map[h.id] = marketsInHorizon(dbMarkets, h.days).length;
     }
     return map;
   }, [dbMarkets]);
 
-  // Markets visible in the current horizon, sorted by expiry ascending.
-  const visibleMarkets = useMemo(() => {
-    const now = Date.now();
-    const cutoff = HORIZONS.find((h) => h.id === horizon)!.days * 24 * 60 * 60 * 1000;
-    return [...dbMarkets]
-      .filter((m) => m.expiryMs - now <= cutoff)
-      .sort((a, b) => a.expiryMs - b.expiryMs);
-  }, [dbMarkets, horizon]);
+  // Sync `horizon` to the first non-empty bucket whenever the
+  // current one empties (mount with 1d=0, market count drops to 0,
+  // etc.). Only changes state — never picks — so the pick effect
+  // can stay pure.
+  useEffect(() => {
+    if (dbLoading) return;
+    if (horizonCounts[horizon] > 0) return;
+    const next = HORIZONS.find((h) => horizonCounts[h.id] > 0);
+    if (next && next.id !== horizon) setHorizon(next.id);
+  }, [dbLoading, horizonCounts, horizon]);
 
   const selected = useMemo(
     () => dbMarkets.find((m) => m.oracle_id === selectedOracleId) ?? null,
     [dbMarkets, selectedOracleId],
   );
 
-  // Cache the matches for the currently-selected oracle so `onPick`
-  // can stamp them onto the payload (LiveComparePanel reads them off
-  // `picked`).
-  const matches = useMemo(() => {
-    if (!selected) return { poly: null as PolymarketGroup | null, kalshi: null as KalshiGroup | null };
-    return findMatchingGroups(
-      { oracleId: selected.oracle_id, expiryMs: selected.expiryMs, question: selected.name },
-      polyGroups,
-      kalshiGroups,
-    );
-  }, [selected, polyGroups, kalshiGroups]);
-
-  // Auto-pick the most-imminent market within the chosen horizon
-  // whenever:
-  //   - nothing is selected yet (mount + re-entry)
-  //   - the selected market fell out of the new horizon
-  // Runs once per horizon/markets change. Skips while markets are
-  // still loading so we don't flicker an auto-pick then immediately
-  // overwrite it.
+  // Pick effect. Runs on:
+  //   - dbMarkets/dbLoading flip → auto-pick on mount with no selection
+  //   - horizon change → random pick inside the new horizon
+  //   - nonce change → random pick inside the current horizon (re-roll)
+  // Skipped when there's already a selection AND no user click has
+  // happened since the last pick (protects the user's pick from being
+  // overwritten by a 90s dbMarkets refetch).
   useEffect(() => {
     if (dbLoading) return;
-    if (visibleMarkets.length === 0) return;
-    const inHorizon = visibleMarkets.find((m) => m.oracle_id === selectedOracleId);
-    if (inHorizon) return;
-    const nearest = findNearest(visibleMarkets);
-    if (!nearest) return;
+    if (!userClickedRef.current && selectedOracleId !== null) return;
+    userClickedRef.current = false;
+
+    const days = HORIZONS.find((h) => h.id === horizon)!.days;
+    const inHorizon = marketsInHorizon(dbMarkets, days);
+    const pick = pickRandom(inHorizon);
+    if (!pick) return;
+
     const next = findMatchingGroups(
-      { oracleId: nearest.oracle_id, expiryMs: nearest.expiryMs, question: nearest.name },
+      { oracleId: pick.oracle_id, expiryMs: pick.expiryMs, question: pick.name },
       polyGroups,
       kalshiGroups,
     );
-    onPick({ oracle: nearest, poly: next.poly, kalshi: next.kalshi });
+    onPick({ oracle: pick, poly: next.poly, kalshi: next.kalshi });
     // Intentionally omit `onPick` from deps — it changes identity on
     // every parent render. We only want to react to the inputs that
-    // could change the auto-pick target.
+    // could change the pick target.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleMarkets, dbLoading, polyGroups, kalshiGroups, selectedOracleId]);
+  }, [dbMarkets, dbLoading, horizon, nonce, polyGroups, kalshiGroups, selectedOracleId]);
+
+  function handleChipClick(h: HorizonId) {
+    if (horizonCounts[h] === 0) return;
+    if (h !== horizon) setHorizon(h);
+    setNonce((n) => n + 1);
+    userClickedRef.current = true;
+  }
+
+  const activeHorizonLabel = HORIZONS.find((h) => h.id === horizon)?.label ?? horizon;
+  const allEmpty = !dbLoading && horizonCounts['1d'] === 0 && horizonCounts['3d'] === 0 && horizonCounts['7d'] === 0;
 
   return (
-    <div className="space-y-6">
-      <div
-        className="rounded-2xl border border-white/10 p-4"
-        style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
-      >
-        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-          <div>
-            <h2 className="text-base font-semibold" style={{ color: textPrimary }}>
-              Pick a DeepBook Predict market
-            </h2>
-            <p className="text-xs mt-0.5" style={{ color: textSecondary }}>
-              We&apos;ll match it to Polymarket and Kalshi markets with the same expiry.
-            </p>
-          </div>
-
+    <div
+      className="rounded-2xl border border-white/10 p-4"
+      style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
+    >
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Horizon chips */}
           <div
             className="inline-flex items-center rounded-lg p-0.5 gap-0.5"
@@ -170,16 +170,19 @@ export default function MarketPicker({ selectedOracleId, onPick }: Props) {
           >
             {HORIZONS.map((h) => {
               const isActive = horizon === h.id;
+              const isEmpty = horizonCounts[h.id] === 0;
               return (
                 <button
                   key={h.id}
                   type="button"
-                  onClick={() => setHorizon(h.id)}
+                  onClick={() => handleChipClick(h.id)}
+                  disabled={isEmpty}
                   className="px-3 py-1 rounded-md text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
                   style={{
                     background: isActive ? green : 'transparent',
-                    color: isActive ? '#000' : textSecondary,
-                    cursor: 'pointer',
+                    color: isActive ? '#000' : isEmpty ? 'rgba(156,163,175,0.4)' : textSecondary,
+                    cursor: isEmpty ? 'not-allowed' : 'pointer',
+                    opacity: isEmpty ? 0.55 : 1,
                   }}
                 >
                   {h.label}
@@ -196,65 +199,41 @@ export default function MarketPicker({ selectedOracleId, onPick }: Props) {
               );
             })}
           </div>
-        </div>
 
-        {dbLoading && (
-          <div className="text-sm py-6 text-center" style={{ color: textSecondary }}>
-            Loading markets…
-          </div>
-        )}
-
-        {dbError && (
-          <div
-            className="rounded-lg p-3 text-sm"
-            style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}
-          >
-            Failed to load markets: {dbError}
-          </div>
-        )}
-
-        {!dbLoading && !dbError && visibleMarkets.length === 0 && (
-          <div className="text-sm py-6 text-center" style={{ color: textSecondary }}>
-            {dbMarkets.length === 0
-              ? 'No active DeepBook Predict markets right now.'
-              : `No DeepBook Predict markets expiring within ${HORIZONS.find((h) => h.id === horizon)?.label}. Try a longer horizon.`}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {visibleMarkets.map((m) => {
-            const isSelected = m.oracle_id === selectedOracleId;
-            const remaining = formatExpiryLabel(m.expiryMs);
-            return (
-              <button
-                key={m.oracle_id}
-                type="button"
-                onClick={() => onPick({ oracle: m, poly: matches.poly, kalshi: matches.kalshi })}
-                className="text-left rounded-lg p-3 border transition-colors"
-                style={{
-                  background: isSelected ? 'rgba(0, 230, 138, 0.08)' : 'rgba(255,255,255,0.04)',
-                  borderColor: isSelected ? green : 'rgba(255,255,255,0.08)',
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold" style={{ color: textPrimary }}>
-                    {m.asset} · {formatUsd(m.spot / PRICE_SCALE)}
-                  </span>
-                  <span
-                    className="text-[10px] uppercase tracking-wider font-semibold"
-                    style={{ color: isSelected ? green : textSecondary }}
-                  >
-                    {isSelected ? 'Selected' : 'Select'}
-                  </span>
-                </div>
-                <div className="text-xs mt-1 font-mono" style={{ color: textSecondary }}>
-                  {remaining}
-                </div>
-              </button>
-            );
-          })}
+          {/* Tiny caption — what's currently picked */}
+          {selected && (
+            <span
+              className="text-xs font-mono"
+              style={{ color: textSecondary }}
+              title="Random pick inside the selected horizon"
+            >
+              {selected.asset} · {formatDetailedExpiry(selected.expiryMs)} · {formatExpiryLabel(selected.expiryMs)} ·{' '}
+              <span style={{ color: textPrimary }}>random pick inside {activeHorizonLabel}</span>
+            </span>
+          )}
         </div>
       </div>
+
+      {dbLoading && (
+        <div className="text-sm py-3 mt-3 text-center" style={{ color: textSecondary }}>
+          Loading markets…
+        </div>
+      )}
+
+      {dbError && (
+        <div
+          className="rounded-lg p-3 text-sm mt-3"
+          style={{ background: 'rgba(239, 68, 68, 0.1)', color: red }}
+        >
+          Failed to load markets: {dbError}
+        </div>
+      )}
+
+      {allEmpty && (
+        <div className="text-sm py-3 mt-3 text-center" style={{ color: textSecondary }}>
+          No active DeepBook Predict markets right now.
+        </div>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   Coins,
   Settings,
   TowerControl,
+  LineChart,
   List,
   RefreshCcw,
   ChartCandlestick,
@@ -43,7 +44,8 @@ const iconMap: Record<string, typeof TrendingUp> = {
   Archive,
   Sparkles,
   Sparkle,
-  Goal
+  Goal,
+  LineChart
 };
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
