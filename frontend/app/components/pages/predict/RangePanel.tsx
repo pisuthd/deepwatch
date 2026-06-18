@@ -62,12 +62,12 @@ export default function RangePanel({
         if (!cancelled) setQuoteLoading(false);
       }
     };
-    fetchQuote();
-    const id = setInterval(fetchQuote, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
+    // fetchQuote();
+    // const id = setInterval(fetchQuote, 5000);
+    // return () => {
+    //   cancelled = true;
+    //   clearInterval(id);
+    // };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteKey, getRangeQuote]);
 
