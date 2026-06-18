@@ -47,6 +47,37 @@ export function formatExpiryDate(ms: number): string {
 }
 
 /**
+ * Format expiry as "<Weekday> at <HH:MM> UTC" for the predict question
+ * copy (e.g. "Thursday at 11:45 UTC"). Used by the Simple mode header
+ * where the absolute date is less important than the day/time.
+ */
+export function formatExpiryDayTime(ms: number): string {
+  if (!ms) return ''
+  const d = new Date(ms)
+  const weekday = d.toLocaleString('en-US', { weekday: 'long', timeZone: 'UTC' })
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  return `${weekday} at ${hh}:${mm} UTC`
+}
+
+/**
+ * Ticker → full name for human-readable question copy. Falls back to the
+ * ticker itself if the asset is unknown so we never end up with "X price
+ * on …" in the UI.
+ */
+export const ASSET_FULL_NAME: Record<string, string> = {
+  BTC: 'Bitcoin',
+  ETH: 'Ethereum',
+  SUI: 'Sui',
+  SOL: 'Solana',
+  WAL: 'Walrus',
+}
+
+export function assetFullName(ticker: string): string {
+  return ASSET_FULL_NAME[ticker.toUpperCase()] ?? ticker
+}
+
+/**
  * Round a USD value to the nearest display tick.
  */
 export function roundToTick(spotUsd: number, tick: number): number {

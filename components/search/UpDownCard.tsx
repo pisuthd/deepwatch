@@ -104,7 +104,6 @@ export default function UpDownCard({
   asset,
   expiryMs,
   spotUsd,
-  forwardUsd,
   rows,
   eyebrow,
   question,

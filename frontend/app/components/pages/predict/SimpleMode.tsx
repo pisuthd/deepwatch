@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Goal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMarkets } from '../../../hooks/useMarkets';
 import { useMarket } from '../../../hooks/useMarket';
@@ -12,12 +12,11 @@ import Countdown from '../../common/Countdown';
 import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import RangeTradeModal from './RangeTradeModal';
-import LeveragedBetModal from './LeveragedBetModal';
 import { useSetCurrentMarket } from './CurrentMarketContext';
-import { formatPct } from '@/app/lib/format';
 import {
   DISPLAY_TICK_USD,
-  formatExpiryDate,
+  assetFullName,
+  formatExpiryDayTime,
   formatPrice,
   generateStrikes,
   roundToTick,
@@ -26,9 +25,14 @@ import {
 
 const green = '#00E68A';
 const red = '#ef4444';
-const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
+
+// Drop range bands whose inside-probability is at or below 2% / at or
+// above 98% — they are visually indistinguishable from 0/1 and not
+// tradeable. Strict bounds so 0.02 and 0.98 themselves are also dropped.
+const RANGE_MIN_PROB = 0.02;
+const RANGE_MAX_PROB = 0.98;
 
 export default function PredictSimpleMode() {
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -173,7 +177,11 @@ export default function PredictSimpleMode() {
   }
 
   const showSkeleton = marketLoading && !marketDetail;
-  const question = `Will ${asset} be above or below ${formatPrice(centerStrike)}?`;
+  const dayTime = formatExpiryDayTime(expiryMs);
+  const question =
+    marketType === 'range'
+      ? `${asset} price range on ${dayTime}?`
+      : `${asset} price on ${dayTime}?`;
 
   return (
     <div className="flex items-center justify-center gap-4">
@@ -214,35 +222,22 @@ export default function PredictSimpleMode() {
                   </span>
                 </div>
                 <span
-                  className="text-xs px-2 py-1 rounded shrink-0 font-mono"
-                  style={{ background: 'rgba(40, 44, 60, 0.5)', color: textSecondary }}
+                  className="text-xs shrink-0 font-mono"
+                  style={{ color: green }}
                 >
-                  <Countdown expiryMs={expiryMs} />
+                  {expiryMs > 0 ? (
+                    <>
+                      Expires in <Countdown expiryMs={expiryMs} />
+                    </>
+                  ) : (
+                    '—'
+                  )}
                 </span>
               </div>
 
-              <h2 className="text-base font-bold mb-3 leading-snug" style={{ color: textPrimary }}>
+              <h2 className="text-lg font-bold  leading-snug" style={{ color: textPrimary }}>
                 {showSkeleton ? '…' : question}
               </h2>
-
-              <div className="flex items-end justify-between gap-2">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: textSecondary }}>
-                    Spot
-                  </div>
-                  <div className="text-2xl font-bold" style={{ color: green }}>
-                    {showSkeleton ? '—' : formatPrice(spotUsd)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: textSecondary }}>
-                    Expires
-                  </div>
-                  <div className="text-xs font-mono" style={{ color: textSecondary }}>
-                    {showSkeleton ? '—' : formatExpiryDate(expiryMs)}
-                  </div>
-                </div>
-              </div>
             </GlassCard>
           </motion.div>
         </AnimatePresence>
@@ -256,11 +251,17 @@ export default function PredictSimpleMode() {
               {marketLoading ? 'Loading odds…' : 'Awaiting oracle data…'}
             </div>
           ) : marketType === 'binary' ? (
-            probs.map((p, i) => {
-              const isCenter = strikes[i] === centerStrike;
+            // Drop near-certain / near-zero strikes (UP prob ≤ 2% or ≥ 98%)
+            // — they're visually indistinguishable from 0/1 and not
+            // tradeable. Same strict bounds as the range-mode filter.
+            probs
+              .map((p, i) => ({ strike: strikes[i], p }))
+              .filter(({ p }) => p.upProb > 2 && p.upProb < 98)
+              .map(({ strike, p }) => {
+                const isCenter = strike === centerStrike;
               return (
                 <div
-                  key={strikes[i]}
+                  key={strike}
                   className="w-full flex items-center justify-between rounded-xl px-3 py-2 mb-1 transition-all"
                   style={{
                     background: isCenter ? 'rgba(0, 230, 138, 0.06)' : 'transparent',
@@ -271,11 +272,11 @@ export default function PredictSimpleMode() {
                       className="text-base font-semibold"
                       style={{ color: isCenter ? green : textPrimary }}
                     >
-                      {formatPrice(strikes[i])}
+                      {formatPrice(strike)}
                     </span>
                     {isCenter && (
                       <span className="text-[10px]" style={{ color: textSecondary }}>
-                        ATM
+                        SPOT
                       </span>
                     )}
                   </div>
@@ -283,7 +284,7 @@ export default function PredictSimpleMode() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setModal({ open: true, strike: strikes[i], direction: 'up' });
+                        setModal({ open: true, strike, direction: 'up' });
                       }}
                       className="relative rounded-2xl px-4 py-2.5 overflow-hidden border border-white/10"
                       style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
@@ -304,7 +305,7 @@ export default function PredictSimpleMode() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setModal({ open: true, strike: strikes[i], direction: 'down' });
+                        setModal({ open: true, strike, direction: 'down' });
                       }}
                       className="relative rounded-2xl px-4 py-2.5 overflow-hidden border border-white/10"
                       style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
@@ -330,13 +331,19 @@ export default function PredictSimpleMode() {
             // Range mode: 3 preset bands centered on the spot, each with
             // an IN button that opens RangeTradeModal directly. Matches
             // the RangeCard row layout (label + action button).
-            SIMPLE_RANGE_WIDTHS_USD.map((w, i) => {
-              const center = centerStrike > 0 ? centerStrike : Math.round(spotUsd);
-              const lo = Math.max(0, center - w);
-              const hi = center + w;
-              const canTrade = center > 0 && lo > 0;
-              const insideProb = rangeOdds[i]?.insideProb ?? 0;
-              return (
+            // Drop near-certain / near-zero bands — they're either
+            // collapsed (SVI sigma → 0) or not tradeable.
+            SIMPLE_RANGE_WIDTHS_USD
+              .map((w, i) => {
+                const center = centerStrike > 0 ? centerStrike : Math.round(spotUsd);
+                const lo = Math.max(0, center - w);
+                const hi = center + w;
+                const canTrade = center > 0 && lo > 0;
+                const insideProb = rangeOdds[i]?.insideProb ?? 0;
+                return { w, lo, hi, canTrade, insideProb };
+              })
+              .filter(({ insideProb }) => insideProb > RANGE_MIN_PROB && insideProb < RANGE_MAX_PROB)
+              .map(({ w, lo, hi, canTrade, insideProb }) => (
                 <div
                   key={w}
                   className="w-full flex items-center justify-between rounded-xl px-3 py-2 mb-1"
@@ -347,9 +354,6 @@ export default function PredictSimpleMode() {
                       style={{ color: textPrimary }}
                     >
                       {formatPrice(lo)} – {formatPrice(hi)}
-                    </span>
-                    <span className="text-[10px] shrink-0" style={{ color: textSecondary }}>
-                      ±${w.toLocaleString('en-US')}
                     </span>
                   </div>
                   <button
@@ -368,63 +372,46 @@ export default function PredictSimpleMode() {
                       style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
                     />
                     <span
-                      className="relative z-10 text-sm font-semibold inline-flex items-center gap-1.5"
+                      className="relative z-10 text-sm font-semibold"
                       style={{ color: green }}
                     >
-                      <Check size={14} strokeWidth={3} />
-                      {formatPct(insideProb, 2)}
+                      ↔ IN{` `}{(insideProb).toFixed(2)}
                     </span>
                   </button>
                 </div>
-              );
-            })
+              ))
           )}
         </div>
 
-        {/* Binary / Range segmented toggle — anchored at the bottom of
-            the card so the user finishes choosing their position before
-            deciding to flip modes. */}
-        <div
-          className="inline-flex items-center rounded-lg p-0.5 gap-0.5 mx-auto"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          {(['binary', 'range'] as const).map((id) => {
-            const isActive = marketType === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setMarketType(id)}
-                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                style={{
-                  background: isActive ? green : 'transparent',
-                  color: isActive ? '#000' : textSecondary,
-                }}
-              >
-                {id === 'binary' ? 'Binary' : 'Range'}
-              </button>
-            );
-          })}
+        <div className='flex'>
+          <div
+            className="inline-flex items-center  rounded-lg p-0.5 gap-0.5 mx-auto"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            {(['binary', 'range'] as const).map((id) => {
+              const isActive = marketType === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setMarketType(id)}
+                  className="px-4 py-1.5 rounded-md text-xs font-semibold transition-colors"
+                  style={{
+                    background: isActive ? green : 'transparent',
+                    color: isActive ? '#000' : textSecondary,
+                  }}
+                >
+                  {id === 'binary' ? 'Binary' : 'Range'}
+                </button>
+              );
+            })}
+          </div>
+
         </div>
 
-        {/* Leveraged Bet — opens the same LeveragedBetModal as Advanced mode
-            using the currently displayed market + selected mode/strike. */}
-        <button
-          type="button"
-          onClick={() => setLeveragedOpen(true)}
-          className="mx-auto mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-          style={{
-            background: 'rgba(62, 196, 192, 0.12)',
-            color: cyan,
-            border: '1px solid rgba(62, 196, 192, 0.35)',
-          }}
-          title="Open a leveraged bet on the current market (borrow DBUSDC from a Margin Manager)"
-        >
-          ⚡ Leveraged Bet
-        </button>
 
         <div className="text-center text-xs" style={{ color: textSecondary }}>
           {selectedIdx + 1} / {activeMarkets.length}
@@ -473,7 +460,7 @@ export default function PredictSimpleMode() {
         />
       )}
 
-      {currentMarket && leveragedOpen && (
+      {/* {currentMarket && leveragedOpen && (
         <LeveragedBetModal
           oracleId={currentMarket.oracle_id}
           expiryMs={expiryMs}
@@ -496,7 +483,7 @@ export default function PredictSimpleMode() {
           }
           onClose={() => setLeveragedOpen(false)}
         />
-      )}
+      )} */}
     </div>
   );
 }

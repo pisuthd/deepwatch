@@ -171,8 +171,14 @@ export async function listMarkets(signal?: AbortSignal): Promise<Market[]> {
     })
   )
 
+  // Drop oracles that have already expired or are about to — anything
+  // inside the 30s window has unreliable SVI/forward data (T → 0 makes
+  // Black-76 collapse to the fallback) and can't be traded anyway.
+  const EXPIRY_BUFFER_MS = 30_000
+  const nowMs = Date.now()
   return activeMarketList
     .filter((m): m is Market => m !== null)
+    .filter((m) => m.expiryMs >= nowMs + EXPIRY_BUFFER_MS)
     .sort((a, b) => a.expiryMs - b.expiryMs)
 }
 

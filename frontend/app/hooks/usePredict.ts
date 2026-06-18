@@ -272,15 +272,15 @@ export function usePredict(): UsePredictReturn {
 
         // Range positions — single endpoint per Phase 3.1. If the indexer
         // doesn't ship this yet, the empty list keeps the popover happy.
-        const rangesData = await safeJsonGet<RangePosition[]>(
-          `${SERVER}/managers/${userManager.manager_id}/ranges`,
-          'GET /ranges',
-        )
-        if (rangesData) {
-          setRanges(rangesData.filter((r) => Number(r.open_quantity) > 0))
-        } else {
-          setRanges([])
-        }
+        // const rangesData = await safeJsonGet<RangePosition[]>(
+        //   `${SERVER}/managers/${userManager.manager_id}/ranges`,
+        //   'GET /ranges',
+        // )
+        // if (rangesData) {
+        //   setRanges(rangesData.filter((r) => Number(r.open_quantity) > 0))
+        // } else {
+        //   setRanges([])
+        // }
       } else {
         setManager(null)
         setSummary(null)
