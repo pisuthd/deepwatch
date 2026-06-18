@@ -1,4 +1,4 @@
-export type PageId = 'predict' | 'spot' | 'margin' | 'account-overview' | 'positions' | 'add-insight' | 'download-agent';
+export type PageId = 'predict' | 'spot' | 'margin' | 'account-overview' | 'positions' | 'add-insight' | 'download-agent' | 'stake';
 
 export interface NavItem {
   icon: string;
@@ -16,21 +16,22 @@ export const categories: NavCategory[] = [
     title: 'Predict',
     items: [
       { icon: 'LineChart', label: 'Predict', pageId: 'predict' },
-      { icon: 'Sparkles', label: 'Compare', pageId: 'add-insight' },
+      { icon: 'List', label: 'Compare', pageId: 'add-insight' },
+      { icon: 'Sparkles', label: 'Stake', pageId: 'stake' }
     ],
   },
   {
     title: 'Trade',
     items: [
       { icon: 'RefreshCcw', label: 'Spot', pageId: 'spot' },
-      { icon: 'Layers', label: 'Margin', pageId: 'margin' },
+      { icon: 'ChartCandlestick', label: 'Margin', pageId: 'margin' },
     ],
   },
   {
     title: 'Account',
     items: [
       { icon: 'LayoutDashboard', label: 'Overview', pageId: 'account-overview' },
-      { icon: 'List', label: 'Positions', pageId: 'positions' },
+      // { icon: 'List', label: 'Positions', pageId: 'positions' },
     ],
   },
 ];
@@ -42,5 +43,6 @@ export const routeMeta: Record<PageId, { category: string; label: string }> = {
   'account-overview': { category: 'Account', label: 'Overview' },
   'positions': { category: 'Account', label: 'Positions' },
   'add-insight': { category: 'Predict', label: 'Compare' },
+  'stake': { category: 'Predict', label: 'Stake' },
   'download-agent': { category: 'Tools', label: 'Download Agent' },
 };

@@ -10,7 +10,8 @@ import {
   LayoutDashboard,
   Wallet,
   Coins,
-  Settings,
+  TableProperties,
+  CalendarClock,
   TowerControl,
   LineChart,
   List,
@@ -21,6 +22,7 @@ import {
   Sparkle,
   Goal,
   Download,
+  CheckLine,
   Layers
 } from 'lucide-react';
 import { categories, type PageId } from '../../types/navigation';
@@ -37,8 +39,10 @@ const iconMap: Record<string, typeof TrendingUp> = {
   ListTree,
   Clock,
   LayoutDashboard,
+  CheckLine,
   Wallet,
   Coins,
+  CalendarClock,
   List,
   RefreshCcw,
   ChartCandlestick,
@@ -47,6 +51,7 @@ const iconMap: Record<string, typeof TrendingUp> = {
   Sparkle,
   Goal,
   LineChart,
+  TableProperties,
   Layers
 };
 

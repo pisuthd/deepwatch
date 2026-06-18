@@ -8,25 +8,27 @@ import type { PageId } from '../types/navigation';
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  
+
   // Map pathname to pageId
   const getPageId = (): PageId => {
     const path = pathname.replace('/app/', '');
     const pageMap: Record<string, PageId> = {
       'predict': 'predict',
       'spot': 'spot',
+      'stake': 'stake',
       'margin': 'margin',
       'add-insight': 'add-insight',
       'account-overview': 'account-overview',
       'positions': 'positions',
       'download-agent': 'download-agent',
     };
-    return pageMap[path] || 'spot';
+    return pageMap[path] || 'stake';
   };
 
   // PageId to route mapping
   const pageToRoute: Record<PageId, string> = {
     'predict': '/app/predict',
+    'stake': '/app/stake',
     'spot': '/app/spot',
     'margin': '/app/margin',
     'add-insight': '/app/add-insight',
@@ -44,7 +46,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar activePage={getPageId()} onNavigate={handleNavigate} />
       <div className="flex flex-col flex-1 min-w-0">
         <TopBar activePage={getPageId()} />
-        <main className="flex-1 overflow-y-auto"> 
+        <main className="flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

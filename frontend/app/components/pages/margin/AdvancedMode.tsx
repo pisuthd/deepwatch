@@ -429,8 +429,8 @@ export default function MarginAdvancedMode() {
 
       {/* Orderbook + chart — orderbook next to the pool card on wide screens,
           chart sits beside it as a 2-col row. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <GlassCard>
+      <div className="grid grid-cols-1 md:grid-cols-1 gap-3">
+        {/* <GlassCard>
           <div className="text-[10px] uppercase tracking-wide mb-2" style={{ color: textSecondary }}>
             Orderbook (top 5)
           </div>
@@ -476,7 +476,7 @@ export default function MarginAdvancedMode() {
               </div>
             </div>
           </div>
-        </GlassCard>
+        </GlassCard> */}
 
         {/* Chart card — reuses the spot CandlestickChart component. Data
             comes from `useSpotPools().getOHLCV()` which is wallet-free and

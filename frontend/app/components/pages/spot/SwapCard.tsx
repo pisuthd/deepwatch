@@ -248,15 +248,16 @@ export default function SwapCard({ poolKey, baseAsset, quoteAsset }: SwapCardPro
 
         {/* Direction-flip button. Toggles between base→quote and quote→base
             and carries the previous output into the new input so the user
-            doesn't lose their number. */}
+            doesn't lose their number. Styled as a rounded square with the
+            same solid green "active" treatment as the Simple/Advanced
+            trigger in TradeWrapper. */}
         <div className="flex items-end pb-1">
           <button
             onClick={flipDirection}
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-white/10 active:scale-95"
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:opacity-80 active:scale-95"
             style={{
-              background: 'rgba(0, 230, 138, 0.10)',
-              border: '1px solid rgba(0, 230, 138, 0.35)',
-              color: green,
+              background: 'var(--color-accent-primary)',
+              color: '#000',
             }}
             title={`Switch to ${toAsset} → ${fromAsset}`}
             aria-label="Switch swap direction"

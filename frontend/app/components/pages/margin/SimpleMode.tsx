@@ -417,9 +417,9 @@ export default function MarginSimpleMode() {
                 Short
               </button>
             </div>
-            <p className="text-[10px] mt-3" style={{ color: textMuted }}>
-              Long borrows quote and swaps to base. Short borrows base and swaps to quote. Both are 1 PTB.
-            </p>
+            {/* <p className="text-[10px] mt-3" style={{ color: textMuted }}>
+              Long borrows quote and swaps to base. Short borrows base and swaps to quote.
+            </p> */}
           </>
         ) : null}
       </GlassCard>
