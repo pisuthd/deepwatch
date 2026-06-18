@@ -164,12 +164,12 @@ interface UsePredictReturn {
   deposit: (signAndExecute: any, amount: string) => Promise<void>
   withdraw: (signAndExecute: any, amount: string) => Promise<void>
   /**
-   * Mint a directional position. Smart-fallback flow:
+   * Mint a directional position. Single PTB: pull the full `amount` out of
+   * the wallet DBUSDC, deposit it into the user's PredictManager, then build
+   * the directional market key and call `predict::mint`. Atomic — the bet is
+   * always funded from the wallet, the manager is just the accounting layer.
    *  - No manager → returns `{ needsManager: true }`; caller must use
    *    `createManagerAndMint` instead.
-   *  - Manager exists, balance < amount → chains a `predict_manager::deposit`
-   *    from the wallet DBUSDC into the same PTB.
-   *  - Manager exists, balance ≥ amount → single `predict::mint`.
    */
   mint: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', amount: number) => Promise<{ needsManager: true } | { success: true }>
   /**
@@ -178,7 +178,12 @@ interface UsePredictReturn {
    * `predict::mint`. Single wallet signature.
    */
   createManagerAndMint: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', amount: number) => Promise<void>
-  /** Range-mode counterpart of `mint`. */
+  /**
+   * Mint a range position. Single PTB: wallet DBUSDC → deposit →
+   * `range_key::new` → `predict::mint_range`. Same atomic shape as `mint`.
+   *  - No manager → returns `{ needsManager: true }`; caller must use
+   *    `createManagerAndMintRange` instead.
+   */
   mintRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, amount: number) => Promise<{ needsManager: true } | { success: true }>
   /** Range-mode counterpart of `createManagerAndMint`. */
   createManagerAndMintRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, amount: number) => Promise<void>
@@ -370,6 +375,8 @@ export function usePredict(): UsePredictReturn {
       const { Transaction } = await import('@mysten/sui/transactions')
       const withdrawAmount = toDusdcUnits(amount)
 
+      console.log("withdrawAmount:", withdrawAmount)
+
       const tx = new Transaction()
       tx.moveCall({
         target: `${PREDICT_PACKAGE}::predict_manager::withdraw`,
@@ -389,23 +396,18 @@ export function usePredict(): UsePredictReturn {
     }
   }
 
-  // Shared smart-fallback logic: build a PTB that mints `amount` of DBUSDC
-  // positions, automatically chaining a wallet→manager deposit when the
-  // manager's trading balance is short of `amount`. Returns a tagged union
-  // indicating which path was taken.
-  //
-  // `buildKeyAndMint` is a callback that, given a tx, adds the market_key
-  // (binary) or range_key (range) call + the predict::mint call and returns
-  // nothing. The deposit leg is appended *before* the mint call, so the
-  // manager's balance is credited before the mint reads it.
-  //
-  // If `manager` is null, returns `{ needsManager: true }` and writes
-  // nothing to the transaction (caller is expected to use
-  // `createManagerAndMint` / `createManagerAndMintRange` instead).
-  const mintWithFallback = async (
+  // Mint a directional position. Single atomic PTB: pull the full bet amount
+  // out of the wallet DBUSDC, deposit it into the user's PredictManager, then
+  // build the directional market key + call `predict::mint`. The manager is
+  // treated as an accounting layer that the deposit flows through — we never
+  // draw down its `trading_balance` to pay for a bet.
+  const mint = async (
     signAndExecute: any,
+    oracleId: string,
+    expiryMs: number,
+    strike: number,
+    direction: 'up' | 'down',
     amount: number,
-    buildKeyAndMint: (tx: any) => Promise<void> | void,
   ): Promise<{ needsManager: true } | { success: true }> => {
     if (!account) return { needsManager: true as const }
     if (!manager) return { needsManager: true as const }
@@ -414,24 +416,46 @@ export function usePredict(): UsePredictReturn {
     try {
       const { Transaction } = await import('@mysten/sui/transactions')
       const tx = new Transaction()
+
       const qtyU6 = BigInt(Math.round(amount * 1e6))
+      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
 
-      // Compute shortfall: positive value means we need to deposit
-      // `shortfallU6` of DBUSDC from the wallet before the mint can read
-      // the credited balance.
-      const balanceU6 = summary ? BigInt(summary.trading_balance) : BigInt(0)
-      const shortfallU6 = qtyU6 > balanceU6 ? qtyU6 - balanceU6 : BigInt(0)
+      // 1. Split the full bet amount from the wallet DBUSDC.
+      const splitCoin = await addCoinMergeAndSplit(tx, account, RPC, DUSDC_TYPE, qtyU6)
 
-      if (shortfallU6 > BigInt(0)) {
-        const splitCoin = await addCoinMergeAndSplit(tx, account, RPC, DUSDC_TYPE, shortfallU6)
-        tx.moveCall({
-          target: `${PREDICT_PACKAGE}::predict_manager::deposit`,
-          typeArguments: [DUSDC_TYPE],
-          arguments: [tx.object(manager.manager_id), splitCoin],
-        })
-      }
+      // 2. Deposit it into the PredictManager. Always — regardless of the
+      //    manager's current `trading_balance`. This is what makes the flow
+      //    atomic: the deposit credits the manager before the mint reads it,
+      //    and the wallet pays the full bet amount.
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict_manager::deposit`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [tx.object(manager.manager_id), splitCoin],
+      })
 
-      await buildKeyAndMint(tx)
+      // 3. Build the directional market key.
+      const key = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::market_key::${direction}`,
+        arguments: [
+          tx.pure.id(oracleId),
+          tx.pure.u64(expiryMs),
+          tx.pure.u64(strikeScaled),
+        ],
+      })
+
+      // 4. Mint the binary position.
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::mint`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [
+          tx.object(PREDICT_OBJECT_ID),
+          tx.object(manager.manager_id),
+          tx.object(oracleId),
+          key,
+          tx.pure.u64(qtyU6),
+          tx.object(CLOCK),
+        ],
+      })
 
       const result = await signAndExecute({ transaction: tx })
       if (result.FailedTransaction) {
@@ -444,45 +468,6 @@ export function usePredict(): UsePredictReturn {
       setError(e.message)
       throw e
     }
-  }
-
-  const mint = async (
-    signAndExecute: any,
-    oracleId: string,
-    expiryMs: number,
-    strike: number,
-    direction: 'up' | 'down',
-    amount: number,
-  ) => {
-    if (!account) return { needsManager: true as const }
-    if (!manager) return { needsManager: true as const }
-
-    return mintWithFallback(signAndExecute, amount, (tx) => {
-      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
-      const qty = BigInt(Math.round(amount * 1e6))
-
-      const key = tx.moveCall({
-        target: `${PREDICT_PACKAGE}::market_key::${direction}`,
-        arguments: [
-          tx.pure.id(oracleId),
-          tx.pure.u64(expiryMs),
-          tx.pure.u64(strikeScaled),
-        ],
-      })
-
-      tx.moveCall({
-        target: `${PREDICT_PACKAGE}::predict::mint`,
-        typeArguments: [DUSDC_TYPE],
-        arguments: [
-          tx.object(PREDICT_OBJECT_ID),
-          tx.object(manager.manager_id),
-          tx.object(oracleId),
-          key,
-          tx.pure.u64(qty),
-          tx.object(CLOCK),
-        ],
-      })
-    })
   }
 
   // Single-PTB path: create_manager → deposit → key → mint. If the Move
@@ -556,6 +541,9 @@ export function usePredict(): UsePredictReturn {
     }
   }
 
+  // Range-mode counterpart of `mint`. Single atomic PTB: wallet DBUSDC →
+  // `predict_manager::deposit` → `range_key::new` → `predict::mint_range`.
+  // Same atomic shape — full bet amount always comes from the wallet.
   const mintRange = async (
     signAndExecute: any,
     oracleId: string,
@@ -563,15 +551,30 @@ export function usePredict(): UsePredictReturn {
     lower: number,
     higher: number,
     amount: number,
-  ) => {
+  ): Promise<{ needsManager: true } | { success: true }> => {
     if (!account) return { needsManager: true as const }
     if (!manager) return { needsManager: true as const }
 
-    return mintWithFallback(signAndExecute, amount, (tx) => {
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const tx = new Transaction()
+
+      const qtyU6 = BigInt(Math.round(amount * 1e6))
       const lowerScaled = BigInt(Math.round(lower)) * PRICE_SCALE
       const higherScaled = BigInt(Math.round(higher)) * PRICE_SCALE
-      const qty = BigInt(Math.round(amount * 1e6))
 
+      // 1. Split the full bet amount from the wallet DBUSDC.
+      const splitCoin = await addCoinMergeAndSplit(tx, account, RPC, DUSDC_TYPE, qtyU6)
+
+      // 2. Deposit it into the PredictManager (always).
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict_manager::deposit`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [tx.object(manager.manager_id), splitCoin],
+      })
+
+      // 3. Build the range key.
       const key = tx.moveCall({
         target: `${PREDICT_PACKAGE}::range_key::new`,
         arguments: [
@@ -582,6 +585,7 @@ export function usePredict(): UsePredictReturn {
         ],
       })
 
+      // 4. Mint the range position.
       tx.moveCall({
         target: `${PREDICT_PACKAGE}::predict::mint_range`,
         typeArguments: [DUSDC_TYPE],
@@ -590,11 +594,22 @@ export function usePredict(): UsePredictReturn {
           tx.object(manager.manager_id),
           tx.object(oracleId),
           key,
-          tx.pure.u64(qty),
+          tx.pure.u64(qtyU6),
           tx.object(CLOCK),
         ],
       })
-    })
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+      return { success: true as const }
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
   }
 
   const createManagerAndMintRange = async (

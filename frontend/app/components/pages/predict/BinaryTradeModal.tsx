@@ -47,7 +47,7 @@ export default function BinaryTradeModal({
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
   const { notify } = useToast();
-  const { mint, createManagerAndMint, getTradeQuote, manager, summary, walletDusdcBalance } = usePredict();
+  const { mint, createManagerAndMint, getTradeQuote, manager, walletDusdcBalance } = usePredict();
 
   const [direction, setDirection] = useState<'up' | 'down'>(initialDirection);
   const [amount, setAmount] = useState('1');
@@ -107,17 +107,14 @@ export default function BinaryTradeModal({
   const profitIfWin = payoutIfWin - roundedAmount;
   const hasQuote = activeQuote !== null;
 
-  // Predict-Manager trading balance (DBUSDC)
-  const balanceDusdc = summary ? Number(summary.trading_balance) / Number(DUSDC_SCALE) : 0;
-  const needsDeposit = !!manager && balanceDusdc <= 0;
-  const insufficient = !!manager && roundedAmount > balanceDusdc;
-
-  // Shortfall between manager balance and bet size. Used both for the
-  // "Sign · Deposit $X & Place Bet" label and to gate the submit when the
-  // user doesn't have enough wallet DBUSDC to cover the gap.
-  const shortfall = !!manager && roundedAmount > balanceDusdc ? roundedAmount - balanceDusdc : 0;
+  // Wallet DBUSDC balance — the actual funding source for the bet. The bet
+  // is paid by pulling the full amount out of the wallet and depositing it
+  // into the PredictManager in the same atomic PTB; the modal only needs to
+  // know how much the user has in their wallet, not the manager's accounting
+  // balance.
   const walletBalanceHuman = Number(walletDusdcBalance) / Number(DUSDC_SCALE);
-  const walletShortfall = shortfall > 0 && walletBalanceHuman < shortfall;
+  const insufficientWallet = walletBalanceHuman < roundedAmount;
+  const walletShortfall = Math.max(0, roundedAmount - walletBalanceHuman);
 
   const handleSubmit = async () => {
     if (!account || !dAppKit?.signAndExecuteTransaction || roundedAmount < 0.01) return;
@@ -125,8 +122,8 @@ export default function BinaryTradeModal({
     setSubmitError(null);
     try {
       if (manager) {
-        // Smart-fallback path. `mint` chains a wallet→manager deposit when
-        // the manager's balance is short, all inside one PTB.
+        // Single atomic PTB: pull the full bet from the wallet, deposit into
+        // the manager, mint the position. Wallet must cover the full amount.
         await mint(
           dAppKit.signAndExecuteTransaction,
           market.oracleId,
@@ -162,15 +159,14 @@ export default function BinaryTradeModal({
     }
   };
 
-  // Single submit-button label that adapts to manager + balance state.
+  // Single submit-button label. The deposit from wallet→PredictManager is
+  // always part of the PTB now, so we no longer show a separate "Deposit $X"
+  // step — just "Sign · Place …".
   const submitLabel = (() => {
     if (submitting) return 'Submitting…';
     if (!hasQuote) return 'Fetching quote…';
     if (!manager) return 'Sign · Create Account & Place Bet';
-    if (needsDeposit || shortfall > 0) {
-      return `Sign · Deposit $${shortfall.toFixed(2)} DBUSDC & Place Bet`;
-    }
-    return `Place ${direction === 'up' ? '▲ UP' : '▼ DOWN'} bet`;
+    return `Sign · Place ${direction === 'up' ? '▲ UP' : '▼ DOWN'} bet`;
   })();
 
   // Submit disabled state mirrors the label's pre-conditions.
@@ -178,7 +174,7 @@ export default function BinaryTradeModal({
     submitting ||
     roundedAmount < 0.01 ||
     !hasQuote ||
-    walletShortfall;
+    insufficientWallet;
 
   const question = `Will ${market.asset} be ${direction === 'up' ? 'above' : 'below'} ${formatPrice(strike)}?`;
 
@@ -328,8 +324,8 @@ export default function BinaryTradeModal({
                       );
                     })}
                     <button
-                      onClick={() => setAmount(balanceDusdc > 0 ? balanceDusdc.toFixed(6).replace(/\.?0+$/, '') : '0')}
-                      disabled={balanceDusdc <= 0}
+                      onClick={() => setAmount(walletBalanceHuman > 0 ? walletBalanceHuman.toFixed(6).replace(/\.?0+$/, '') : '0')}
+                      disabled={walletBalanceHuman <= 0}
                       className="py-1.5 rounded-md text-xs font-mono font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{
                         background: 'rgba(255, 255, 255, 0.04)',
@@ -340,11 +336,11 @@ export default function BinaryTradeModal({
                       MAX
                     </button>
                   </div>
-                  {!!manager && (
+                  {!!account && (
                     <div className="flex items-center justify-between mt-2 text-[10px]" style={{ color: textSecondary }}>
                       <span>Available</span>
                       <span className="font-mono" style={{ color: textPrimary }}>
-                        ${balanceDusdc.toFixed(2)} DBUSDC
+                        ${walletBalanceHuman.toFixed(2)} DBUSDC
                       </span>
                     </div>
                   )}
@@ -416,20 +412,21 @@ export default function BinaryTradeModal({
                       {submitting && <Loader2 size={14} className="animate-spin" />}
                       {submitLabel}
                     </button>
-                    {walletShortfall && (
+                    {insufficientWallet && (
                       <p
                         className="text-[11px] text-center"
                         style={{ color: red }}
                       >
-                        You need ${shortfall.toFixed(2)} DBUSDC in your wallet
-                      </p>
-                    )}
-                    {!walletShortfall && !!manager && shortfall > 0 && (
-                      <p
-                        className="text-[11px] text-center"
-                        style={{ color: textSecondary }}
-                      >
-                        We'll auto-deposit {shortfall.toFixed(2)} DBUSDC from your wallet
+                        Need ${walletShortfall.toFixed(2)} more DBUSDC in your wallet.{' '}
+                        <a
+                          href="https://tally.so/r/Xx102L"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline"
+                          style={{ color: red }}
+                        >
+                          Get from faucet
+                        </a>
                       </p>
                     )}
                   </div>
