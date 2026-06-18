@@ -1,4 +1,4 @@
-import { formatDetailedExpiry } from '@/lib/markets/format';
+import { formatDetailedExpiry } from '@/app/lib/format';
 import type { ReactNode } from 'react';
 
 interface OracleHeaderProps {

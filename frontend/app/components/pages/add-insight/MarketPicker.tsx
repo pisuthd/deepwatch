@@ -31,16 +31,16 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatExpiryLabel } from '../../../lib/insights';
-import { formatDetailedExpiry } from '@/lib/markets/format';
+import { formatDetailedExpiry } from '@/app/lib/format';
 import {
   groupPolymarketMarkets,
   type PolymarketGroup,
-} from '@/lib/markets/polymarket';
+} from '@/app/lib/polymarket';
 import {
   groupKalshiMarkets,
   type KalshiGroup,
-} from '@/lib/markets/kalshi';
-import { findMatchingGroups } from '@/lib/markets/match';
+} from '@/app/lib/kalshi';
+import { findMatchingGroups } from '@/app/lib/match';
 import { useGlobalMarkets } from '../../../stores/markets-store';
 import { useMarkets as useDeepBookMarkets } from '../../../hooks/useMarkets';
 import type { Market as DbMarket } from '../../../hooks/useMarkets';

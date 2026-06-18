@@ -14,7 +14,7 @@ import BinaryTradeModal from './BinaryTradeModal';
 import RangeTradeModal from './RangeTradeModal';
 import LeveragedBetModal from './LeveragedBetModal';
 import { useSetCurrentMarket } from './CurrentMarketContext';
-import { formatPct } from '@/lib/markets/format';
+import { formatPct } from '@/app/lib/format';
 import {
   DISPLAY_TICK_USD,
   formatExpiryDate,

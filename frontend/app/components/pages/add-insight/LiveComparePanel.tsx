@@ -19,10 +19,10 @@
 
 import { useMemo, useState } from 'react';
 import { formatExpiryLabel } from '../../../lib/insights';
-import type { PolymarketGroup } from '@/lib/markets/polymarket';
-import type { KalshiGroup } from '@/lib/markets/kalshi';
+import type { PolymarketGroup } from '@/app/lib/polymarket';
+import type { KalshiGroup } from '@/app/lib/kalshi';
 import type { Market as DbMarket } from '../../../hooks/useMarkets';
-import { computeDeepBookLadder } from '@/lib/markets/deepbook';
+import { computeDeepBookLadder } from '@/app/lib/deepbook';
 import UpDownCard from '@/components/compare/UpDownCard';
 import RangeCard from '@/components/compare/RangeCard';
 

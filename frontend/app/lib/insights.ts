@@ -15,8 +15,8 @@
  * directly with no blob fetch.
  */
 
-import type { PolymarketGroup } from '@/lib/markets/polymarket';
-import type { KalshiGroup } from '@/lib/markets/kalshi';
+import type { PolymarketGroup } from '@/app/lib/polymarket';
+import type { KalshiGroup } from '@/app/lib/kalshi';
 
 export type InsightAsset = 'BTC' | 'SUI' | 'WAL';
 export const INSIGHT_ASSETS: readonly InsightAsset[] = ['BTC', 'SUI', 'WAL'] as const;

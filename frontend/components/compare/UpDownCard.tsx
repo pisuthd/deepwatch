@@ -8,7 +8,7 @@ import {
   formatUsd,
   formatPct,
   roundToTick,
-} from '@/lib/markets/format';
+} from '@/app/lib/format';
 import type { ReactNode } from 'react';
 
 export interface UpDownRow {

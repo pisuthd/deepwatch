@@ -3,7 +3,7 @@
 import GlassCard from '@/app/components/common/GlassCard';
 import OracleHeader from './OracleHeader';
 import { Check, X } from 'lucide-react';
-import { formatExpiryQuestion, formatPct, formatUsd } from '@/lib/markets/format';
+import { formatExpiryQuestion, formatPct, formatUsd } from '@/app/lib/format';
 import type { ReactNode } from 'react';
 
 export interface RangeRow {

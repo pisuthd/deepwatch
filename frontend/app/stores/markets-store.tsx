@@ -1,24 +1,25 @@
 'use client';
 
 /**
- * Global markets store — Polymarket + Kalshi only.
+ * Global markets store — Polymarket + DeepBook Predict + Kalshi.
  *
- * Mirrors the root app's `stores/markets-store.tsx` with one important
- * difference: DeepBook Predict is NOT fetched here, because `/frontend`
- * already has its own `app/hooks/useMarkets.ts` hook for the DeepBook
- * oracle data (different return shape — `Market[]`, one row per oracle).
- * To avoid a name collision, the DeepBook hook is imported in callers
- * under the alias `useDeepBookMarkets` and this global store exports
- * `useGlobalMarkets` instead.
+ * Mirrors the root app's `stores/markets-store.tsx`: fetches all three
+ * prediction-market sources in parallel, refreshes every 90s, and exposes
+ * the latest rows + loading/error flags via `useGlobalMarkets()`.
  *
- * Loads Polymarket + Kalshi once on app mount (in parallel) and refreshes
- * every 90 s. Any page that needs live odds just calls `useGlobalMarkets()`
- * — no per-page fetching, no per-source controllers, no duplicate requests
- * on source switches.
+ * Note: `frontend/app/hooks/useMarkets.ts` is a separate hook with a
+ * different return shape (`Market[]`, one row per oracle with `odds`,
+ * `spot`, `forward`, …) and a faster 30s cadence. It powers the predict
+ * trading UI (SimpleMode / AdvancedMode / MarketPicker / PredictCard).
+ * That hook is untouched by this store — both can coexist because they
+ * expose different shapes for different consumers.
  *
  * `firstLoad` is true until every source has produced at least one
  * result (success OR error). After that, subsequent interval refreshes
- * update the rows silently.
+ * update the rows silently — pages that want a full-page spinner on
+ * the very first load read `firstLoad`; pages that just want the data
+ * read `polyLoading` / `deepbookLoading` / `kalshiLoading` (which stays
+ * true for the source being refetched).
  */
 
 import {
@@ -30,48 +31,55 @@ import {
   useRef,
 } from 'react';
 import type { ReactNode } from 'react';
-import { fetchPolymarketMarkets } from '@/lib/markets/polymarket';
-import { fetchKalshiMarkets } from '@/lib/markets/kalshi';
-import type { BinaryMarket } from '@/lib/markets/types';
+import { fetchDeepBookMarkets } from '@/app/lib/deepbook';
+import { fetchPolymarketMarkets } from '@/app/lib/polymarket';
+import { fetchKalshiMarkets } from '@/app/lib/kalshi';
+import type { BinaryMarket, DeepBookMarket } from '@/app/lib/types';
 
-type Source = 'polymarket' | 'kalshi';
+type Source = 'polymarket' | 'deepbook' | 'kalshi';
 
 interface MarketsState {
   polyRows: BinaryMarket[] | null;
+  deepbookRows: DeepBookMarket[] | null;
   kalshiRows: BinaryMarket[] | null;
   polyLoading: boolean;
+  deepbookLoading: boolean;
   kalshiLoading: boolean;
   polyError: string | null;
+  deepbookError: string | null;
   kalshiError: string | null;
-  lastFetched: { polymarket: number | null; kalshi: number | null };
-  everLoaded: { polymarket: boolean; kalshi: boolean };
+  lastFetched: { polymarket: number | null; deepbook: number | null; kalshi: number | null };
+  everLoaded: { polymarket: boolean; deepbook: boolean; kalshi: boolean };
   /** True until every source has produced at least one result. */
   firstLoad: boolean;
 }
 
 const initialState: MarketsState = {
   polyRows: null,
+  deepbookRows: null,
   kalshiRows: null,
   polyLoading: true,
+  deepbookLoading: true,
   kalshiLoading: true,
   polyError: null,
+  deepbookError: null,
   kalshiError: null,
-  lastFetched: { polymarket: null, kalshi: null },
-  everLoaded: { polymarket: false, kalshi: false },
+  lastFetched: { polymarket: null, deepbook: null, kalshi: null },
+  everLoaded: { polymarket: false, deepbook: false, kalshi: false },
   firstLoad: true,
 };
 
 type Action =
   | { type: 'FETCH_START'; source: Source }
-  | { type: 'FETCH_SUCCESS'; source: Source; data: BinaryMarket[] }
+  | { type: 'FETCH_SUCCESS'; source: Source; data: BinaryMarket[] | DeepBookMarket[] }
   | { type: 'FETCH_ERROR'; source: Source; error: string };
 
-const rowsKey = (s: Source): 'polyRows' | 'kalshiRows' =>
-  s === 'polymarket' ? 'polyRows' : 'kalshiRows';
-const loadingKey = (s: Source): 'polyLoading' | 'kalshiLoading' =>
-  s === 'polymarket' ? 'polyLoading' : 'kalshiLoading';
-const errorKey = (s: Source): 'polyError' | 'kalshiError' =>
-  s === 'polymarket' ? 'polyError' : 'kalshiError';
+const rowsKey = (s: Source): 'polyRows' | 'deepbookRows' | 'kalshiRows' =>
+  s === 'polymarket' ? 'polyRows' : s === 'deepbook' ? 'deepbookRows' : 'kalshiRows';
+const loadingKey = (s: Source): 'polyLoading' | 'deepbookLoading' | 'kalshiLoading' =>
+  s === 'polymarket' ? 'polyLoading' : s === 'deepbook' ? 'deepbookLoading' : 'kalshiLoading';
+const errorKey = (s: Source): 'polyError' | 'deepbookError' | 'kalshiError' =>
+  s === 'polymarket' ? 'polyError' : s === 'deepbook' ? 'deepbookError' : 'kalshiError';
 
 function reducer(state: MarketsState, action: Action): MarketsState {
   switch (action.type) {
@@ -84,7 +92,10 @@ function reducer(state: MarketsState, action: Action): MarketsState {
     }
     case 'FETCH_SUCCESS': {
       const updatedEverLoaded = { ...state.everLoaded, [action.source]: true };
-      const allLoaded = updatedEverLoaded.polymarket && updatedEverLoaded.kalshi;
+      const allLoaded =
+        updatedEverLoaded.polymarket &&
+        updatedEverLoaded.deepbook &&
+        updatedEverLoaded.kalshi;
       return {
         ...state,
         [rowsKey(action.source)]: action.data,
@@ -99,7 +110,10 @@ function reducer(state: MarketsState, action: Action): MarketsState {
       // firstLoad flips to false so the page stops showing the
       // first-load spinner even if one source is broken.
       const updatedEverLoaded = { ...state.everLoaded, [action.source]: true };
-      const allLoaded = updatedEverLoaded.polymarket && updatedEverLoaded.kalshi;
+      const allLoaded =
+        updatedEverLoaded.polymarket &&
+        updatedEverLoaded.deepbook &&
+        updatedEverLoaded.kalshi;
       return {
         ...state,
         [errorKey(action.source)]: action.error,
@@ -114,7 +128,7 @@ function reducer(state: MarketsState, action: Action): MarketsState {
 const MarketsContext = createContext<MarketsState | null>(null);
 
 const REFRESH_INTERVAL_MS = 90_000;
-const SOURCES: Source[] = ['polymarket', 'kalshi'];
+const SOURCES: Source[] = ['polymarket', 'deepbook', 'kalshi'];
 
 export function MarketsProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -131,6 +145,7 @@ export function MarketsProvider({ children }: { children: ReactNode }) {
 
     const results = await Promise.allSettled([
       fetchPolymarketMarkets(ctrl.signal),
+      fetchDeepBookMarkets(ctrl.signal),
       fetchKalshiMarkets(ctrl.signal),
     ]);
 
@@ -148,10 +163,12 @@ export function MarketsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Initial fetch on mount.
   useEffect(() => {
     refresh();
   }, [refresh]);
 
+  // Periodic refresh.
   useEffect(() => {
     const id = setInterval(() => {
       refresh();

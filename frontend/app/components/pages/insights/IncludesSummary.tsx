@@ -13,9 +13,9 @@
  */
 
 import { formatExpiryLabel, type PredictSnapshot } from '../../../lib/insights';
-import type { PolymarketGroup } from '@/lib/markets/polymarket';
-import type { KalshiGroup } from '@/lib/markets/kalshi';
-import { formatUsd, formatPct } from '@/lib/markets/format';
+import type { PolymarketGroup } from '@/app/lib/polymarket';
+import type { KalshiGroup } from '@/app/lib/kalshi';
+import { formatUsd, formatPct } from '@/app/lib/format';
 
 const green = '#00E68A';
 const red = '#ef4444';

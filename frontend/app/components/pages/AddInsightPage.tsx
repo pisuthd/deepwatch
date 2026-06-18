@@ -34,10 +34,10 @@ import {
   type InsightBody,
   type PredictSnapshot,
 } from '../../lib/insights';
-import { formatDetailedExpiry } from '@/lib/markets/format';
-import { computeDeepBookLadder } from '@/lib/markets/deepbook';
-import type { PolymarketGroup } from '@/lib/markets/polymarket';
-import type { KalshiGroup } from '@/lib/markets/kalshi';
+import { formatDetailedExpiry } from '@/app/lib/format';
+import { computeDeepBookLadder } from '@/app/lib/deepbook';
+import type { PolymarketGroup } from '@/app/lib/polymarket';
+import type { KalshiGroup } from '@/app/lib/kalshi';
 import { generateInsightStream } from '../../lib/minimax';
 import { useInsights } from '../../stores/insights-store';
 import type { Market as DbMarket } from '../../hooks/useMarkets';
