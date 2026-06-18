@@ -238,6 +238,9 @@ export default function PredictSimpleMode() {
               <h2 className="text-lg font-bold  leading-snug" style={{ color: textPrimary }}>
                 {showSkeleton ? '…' : question}
               </h2>
+              <p className="text-[11px] mt-1" style={{ color: textSecondary }}>
+                Prices below are estimated · click to display actual rates
+              </p>
             </GlassCard>
           </motion.div>
         </AnimatePresence>

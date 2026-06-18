@@ -164,8 +164,8 @@ export default function RangeTradeModal({
   const submitLabel = (() => {
     if (submitting) return 'Submitting…';
     if (!hasQuote) return 'Fetching quote…';
-    if (!manager) return 'Sign · Create Account & Place Bet';
-    return 'Sign · Place RANGE bet';
+    if (!manager) return 'Create Account & Place Bet';
+    return 'Place RANGE bet';
   })();
 
   // Submit disabled state mirrors the label's pre-conditions.
@@ -175,12 +175,8 @@ export default function RangeTradeModal({
     !hasQuote ||
     insufficientWallet;
 
-  const question = `Will ${market.asset} settle between ${formatPrice(lower)} and ${formatPrice(upper)}?`;
-  const rangeSummary =
-    widthUsd > 0
-      ? `±$${widthUsd.toLocaleString('en-US')} around ${formatPrice(triggerStrike)}`
-      : `${formatPrice(lower)}–${formatPrice(upper)}`;
-
+  const question = `${market.asset} price range ${formatPrice(lower)}-${formatPrice(upper)}?`;
+ 
   return (
     <AnimatePresence>
       {open && (
@@ -208,7 +204,7 @@ export default function RangeTradeModal({
 
               <div className="relative z-10">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-start gap-2.5 min-w-0">
                     <Image
                       src={getCoinIcon(market.asset)}
@@ -220,12 +216,9 @@ export default function RangeTradeModal({
                     <div className="min-w-0">
                       <h2 className="text-base font-bold leading-tight" style={{ color: textPrimary }}>
                         {question}
-                      </h2>
-                      <p className="text-xs mt-1" style={{ color: textSecondary }}>
-                        Range · {rangeSummary}
-                      </p>
+                      </h2> 
                       {market.expiryMs > 0 && (
-                        <p className="text-xs mt-0.5" style={{ color: textSecondary }}>
+                        <p className="text-[11px] mt-0.5" style={{ color: textSecondary }}>
                           Expires in <Countdown expiryMs={market.expiryMs} />
                         </p>
                       )}
@@ -243,16 +236,33 @@ export default function RangeTradeModal({
 
                 {/* Amount input */}
                 <div className="mb-3">
-                  <label className="text-xs mb-1.5 block" style={{ color: textSecondary }}>
-                    Amount (DBUSDC)
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs" style={{ color: textSecondary }}>
+                      Amount
+                    </label>
+                    {!!account && (
+                      <span className="text-[10px]" style={{ color: textSecondary }}>
+                        Available:{' '}
+                        <span className="font-mono" style={{ color: textPrimary }}>
+                          {walletBalanceHuman.toFixed(2)} DUSDC
+                        </span>
+                      </span>
+                    )}
+                  </div>
                   <div
-                    className="flex items-center rounded-lg overflow-hidden"
+                    className="flex items-center gap-2 rounded-lg overflow-hidden px-3"
                     style={{
                       background: 'rgba(255, 255, 255, 0.04)',
                       border: '1px solid rgba(255, 255, 255, 0.08)',
                     }}
                   >
+                    <Image
+                      src={getCoinIcon('USDC')}
+                      alt="USDC"
+                      width={16}
+                      height={16}
+                      className="rounded-full shrink-0"
+                    />
                     <input
                       type="number"
                       value={amount}
@@ -260,8 +270,11 @@ export default function RangeTradeModal({
                       placeholder="1"
                       step="0.01"
                       min="0.01"
-                      className="flex-1 px-3 py-2.5 bg-transparent text-sm font-mono text-white outline-none"
+                      className="flex-1 py-2.5 bg-transparent text-sm font-mono text-white outline-none"
                     />
+                    <span className="text-xs font-mono" style={{ color: textSecondary }}>
+                      DUSDC
+                    </span>
                   </div>
                   <div className="grid grid-cols-5 gap-1.5 mt-2">
                     {PRESETS.map((p) => {
@@ -277,7 +290,7 @@ export default function RangeTradeModal({
                             color: isActive ? green : textSecondary,
                           }}
                         >
-                          ${p}
+                          {p}
                         </button>
                       );
                     })}
@@ -294,14 +307,6 @@ export default function RangeTradeModal({
                       MAX
                     </button>
                   </div>
-                  {!!account && (
-                    <div className="flex items-center justify-between mt-2 text-[10px]" style={{ color: textSecondary }}>
-                      <span>Available</span>
-                      <span className="font-mono" style={{ color: textPrimary }}>
-                        ${walletBalanceHuman.toFixed(2)} DBUSDC
-                      </span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Payout details */}
@@ -384,7 +389,7 @@ export default function RangeTradeModal({
                         className="text-[11px] text-center"
                         style={{ color: red }}
                       >
-                        Need ${walletShortfall.toFixed(2)} more DBUSDC in your wallet.{' '}
+                        Need {walletShortfall.toFixed(2)} more DUSDC in your wallet.{' '}
                         <a
                           href="https://tally.so/r/Xx102L"
                           target="_blank"

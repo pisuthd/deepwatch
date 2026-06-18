@@ -168,7 +168,7 @@ export default function StrikeGrid({
         style={{ color: TEXT_SECONDARY }}
       >
         <span>Strike</span>
-        <span className="text-center">Signal</span>
+        <span className="text-center">Skew</span>
         <span className="text-right">%</span>
       </div>
 

@@ -17,7 +17,6 @@ import Countdown from '../../common/Countdown';
 import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import RangeTradeModal from './RangeTradeModal';
-import LeveragedBetModal from './LeveragedBetModal';
 import PriceChart from './PriceChart';
 import StrikeGrid from './StrikeGrid';
 import RangePanel from './RangePanel';
@@ -51,7 +50,6 @@ export default function PredictAdvancedMode() {
   const [upper, setUpper] = useState(0);
   const [triggerStrike, setTriggerStrike] = useState(0);
   const [rangeModalOpen, setRangeModalOpen] = useState(false);
-  const [leveragedOpen, setLeveragedOpen] = useState(false);
 
   const { markets, loading: marketsLoading } = useMarkets(30_000);
   const activeMarkets = useMemo(
@@ -405,10 +403,10 @@ export default function PredictAdvancedMode() {
         </div>
       </div>
 
-      {/* ── Chart + strike ladder ──────────────────────────────────────── */}
+      {/* ── Chart + right column ────────────────────────────────────────── */}
       <div className="flex items-stretch gap-2 flex-1 min-h-0">
         <GlassCard className="flex-1 min-h-0 overflow-hidden p-0">
-          <div className="relative w-full">
+          <div className="relative w-full h-full">
             <PriceChart
               oracleId={currentOracleId}
               strike={strike}
@@ -422,128 +420,101 @@ export default function PredictAdvancedMode() {
                 },
               })}
             />
-
-            {/* ── Overlay (bottom-right): UP/DOWN in binary; in range mode
-                the action button lives in the RangePanel on the right. ── */}
-            <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2 pointer-events-none">
-              {marketType === 'binary' && (
-                <>
-                  <div
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono"
-                    style={{
-                      background: 'rgba(26, 29, 46, 0.6)',
-                      backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
-                    }}
-                  >
-                    <span style={{ color: green }}>
-                      UP {(liveMint.up / 100).toFixed(2)}
-                    </span>
-                    <span style={{ color: textSecondary }}>·</span>
-                    <span style={{ color: red }}>
-                      DOWN {(liveMint.down / 100).toFixed(2)}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setModal({ open: true, strike, direction: 'up' })}
-                    className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
-                    style={{
-                      background: 'rgba(26, 29, 46, 0.6)',
-                      backdropFilter: 'blur(20px)',
-                    }}
-                  >
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-                    <div
-                      className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
-                      style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
-                    />
-                    <span
-                      className="relative z-10 text-sm font-semibold"
-                      style={{ color: green }}
-                    >
-                      ▲ UP
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setModal({ open: true, strike, direction: 'down' })}
-                    className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
-                    style={{
-                      background: 'rgba(26, 29, 46, 0.6)',
-                      backdropFilter: 'blur(20px)',
-                    }}
-                  >
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-                    <div
-                      className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
-                      style={{ background: red, filter: 'blur(30px)', opacity: 0.15 }}
-                    />
-                    <span
-                      className="relative z-10 text-sm font-semibold"
-                      style={{ color: red }}
-                    >
-                      ▼ DOWN
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setLeveragedOpen(true)}
-                    className="relative rounded-2xl px-3 py-2 overflow-hidden border border-white/10 pointer-events-auto"
-                    style={{
-                      background: 'rgba(26, 29, 46, 0.6)',
-                      backdropFilter: 'blur(20px)',
-                    }}
-                    title="Open a leveraged bet (borrow DBUSDC from a Margin Manager)"
-                  >
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-                    <div
-                      className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
-                      style={{ background: cyan, filter: 'blur(30px)', opacity: 0.15 }}
-                    />
-                    <span
-                      className="relative z-10 text-xs font-semibold"
-                      style={{ color: cyan }}
-                    >
-                      ⚡ Lev.
-                    </span>
-                  </button>
-                </>
-              )}
-            </div>
           </div>
         </GlassCard>
 
-        {/* Right-side column. Binary → StrikeGrid (ladder of odds).
-            Range → RangePanel (bounds summary + preview quote + action). */}
-        <div className="w-80 shrink-0 min-h-0">
-          <GlassCard className="p-0 overflow-hidden h-full">
-            {marketType === 'binary' ? (
-              <StrikeGrid
-                market={
-                  market
-                    ? {
-                        spot: market.spot,
-                        forward: market.forward,
-                        svi: market.svi,
-                        expiryMs: market.expiryMs,
-                      }
-                    : null
-                }
-                currentStrike={strike}
-                onStrikeChange={setStrike}
-              />
-            ) : (
-              <RangePanel
-                oracleId={currentOracleId}
-                expiryMs={expiryMs}
-                spotUsd={spotUsd}
-                lower={lower}
-                upper={upper}
-                onPlaceBet={() => setRangeModalOpen(true)}
-              />
-            )}
-          </GlassCard>
+        {/* Right-side column. Both modes place the action buttons on
+            top so the user always sees the trade entry point first, then
+            the ladder (binary) or bounds/spot summary (range) below. */}
+        <div className="w-80 shrink-0 min-h-0 flex flex-col gap-2">
+          {marketType === 'binary' ? (
+            <>
+              <div className="grid grid-cols-2 gap-2 shrink-0">
+                <button
+                  onClick={() => setModal({ open: true, strike, direction: 'up' })}
+                  className="relative rounded-2xl px-4 py-2.5 overflow-hidden border border-white/10 transition-all hover:border-white/20"
+                  style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
+                >
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent" />
+                  <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                  <div
+                    className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                    style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
+                  />
+                  <span
+                    className="relative z-10 text-sm font-semibold"
+                    style={{ color: green }}
+                  >
+                    ▲ UP {(liveMint.up / 100).toFixed(2)}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setModal({ open: true, strike, direction: 'down' })}
+                  className="relative rounded-2xl px-4 py-2.5 overflow-hidden border border-white/10 transition-all hover:border-white/20"
+                  style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
+                >
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent" />
+                  <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                  <div
+                    className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                    style={{ background: red, filter: 'blur(30px)', opacity: 0.15 }}
+                  />
+                  <span
+                    className="relative z-10 text-sm font-semibold"
+                    style={{ color: red }}
+                  >
+                    ▼ DOWN {(liveMint.down / 100).toFixed(2)}
+                  </span>
+                </button>
+              </div>
+              <GlassCard className="p-0 overflow-hidden flex-1 min-h-0">
+                <StrikeGrid
+                  market={
+                    market
+                      ? {
+                          spot: market.spot,
+                          forward: market.forward,
+                          svi: market.svi,
+                          expiryMs: market.expiryMs,
+                        }
+                      : null
+                  }
+                  currentStrike={strike}
+                  onStrikeChange={setStrike}
+                />
+              </GlassCard>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setRangeModalOpen(true)}
+                disabled={!(lower > 0 && upper > lower)}
+                className="w-full shrink-0 relative rounded-2xl px-4 py-2.5 overflow-hidden border border-white/10 transition-all hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-semibold"
+                style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
+              >
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent" />
+                <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                <div
+                  className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                  style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
+                />
+                <span className="relative z-10" style={{ color: green }}>
+                  {lower > 0 && upper > lower
+                    ? `↔ In · ${formatPrice(lower)}–${formatPrice(upper)}`
+                    : 'Set bounds to continue'}
+                </span>
+              </button>
+              <GlassCard className="p-0 overflow-hidden flex-1 min-h-0">
+                <RangePanel
+                  oracleId={currentOracleId}
+                  expiryMs={expiryMs}
+                  spotUsd={spotUsd}
+                  lower={lower}
+                  upper={upper}
+                />
+              </GlassCard>
+            </>
+          )}
         </div>
       </div>
 
@@ -576,19 +547,6 @@ export default function PredictAdvancedMode() {
           upper={upper}
           triggerStrike={triggerStrike}
           widthUsd={Math.round((upper - lower) / 2)}
-        />
-      )}
-
-      {currentMarket && leveragedOpen && (
-        <LeveragedBetModal
-          oracleId={currentMarket.oracle_id}
-          expiryMs={expiryMs}
-          spotUsd={spotUsd}
-          mode={marketType}
-          strike={marketType === 'binary' ? strike : undefined}
-          lower={marketType === 'range' ? lower : undefined}
-          higher={marketType === 'range' ? upper : undefined}
-          onClose={() => setLeveragedOpen(false)}
         />
       )}
     </div>

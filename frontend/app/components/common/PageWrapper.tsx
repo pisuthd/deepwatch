@@ -20,7 +20,7 @@ export default function PageWrapper({ title, children, className = '', action }:
   }, [title]);
 
   return (
-    <div className={`p-8 ${className}`} ref={topRef}>
+    <div className={`p-8 ${className} min-h-screen`} ref={topRef}>
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
