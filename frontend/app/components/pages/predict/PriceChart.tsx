@@ -19,14 +19,12 @@ const muted = 'rgba(180,200,255,0.6)';
 const cyan = '#3EC4C0';
 const upperColor = '#EC4899';
 const DRAG_THRESHOLD_PX = 8;
-const DRAG_TICK_USD = 1000;
+const MIN_RANGE_GAP_USD = 1;
 
 interface PriceChartProps {
   oracleId: string | null;
   strike: number;
   onStrikeChange: (s: number) => void;
-  // Range mode — optional. When provided (along with `upper`),
-  // the chart shows two draggable lines instead of one.
   lower?: number;
   upper?: number;
   onRangeChange?: (lower: number, upper: number) => void;
@@ -44,20 +42,14 @@ export default function PriceChart({
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  // Three independent line refs so we can switch modes without
-  // touching the others. Binary and range lines never coexist visually.
   const binaryLineRef = useRef<IPriceLine | null>(null);
   const lowerLineRef = useRef<IPriceLine | null>(null);
   const upperLineRef = useRef<IPriceLine | null>(null);
-  const binaryInitRef = useRef<boolean>(false);
-  const lowerInitRef = useRef<boolean>(false);
-  const upperInitRef = useRef<boolean>(false);
-  // Which line was hit on the current drag. Null = not dragging.
   type DragKind = 'binary' | 'lower' | 'upper';
   const dragKindRef = useRef<DragKind | null>(null);
   const pointerDownRef = useRef<boolean>(false);
 
-  // Keep latest callbacks / values in refs so the effect deps stay narrow.
+  // Latest callbacks / values in refs.
   const onStrikeChangeRef = useRef(onStrikeChange);
   onStrikeChangeRef.current = onStrikeChange;
   const onRangeChangeRef = useRef(onRangeChange);
@@ -69,8 +61,11 @@ export default function PriceChart({
   const upperRef = useRef<number>(upper ?? 0);
   upperRef.current = upper ?? 0;
 
+  console.log("lower:", lower)
+  console.log("upper:", upper)
+  console.log("strike:", strike)
+
   const { history, loading } = useMarketPrices(oracleId, 60, 15_000);
-  // Range mode is active when both bounds are present.
   const isRangeMode = typeof lower === 'number' && typeof upper === 'number';
 
   // ─── 1. Init chart (one-time) ────────────────────────────────────────────
@@ -88,7 +83,10 @@ export default function PriceChart({
         horzLines: { color: 'rgba(255,255,255,0.05)' },
       },
       crosshair: { mode: 0 },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
+      rightPriceScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        autoScale: true,
+      },
       timeScale: {
         borderColor: 'rgba(255,255,255,0.08)',
         timeVisible: true,
@@ -102,12 +100,38 @@ export default function PriceChart({
       lineWidth: 2,
       lastValueVisible: false,
       priceLineVisible: false,
+      // CRITICAL: lightweight-charts v5 does NOT include price lines in the
+      // default autoscale calculation. Without this provider, the chart
+      // zooms tightly onto the data range and our drag-handle lines
+      // disappear off-screen. We merge them in manually.
+      autoscaleInfoProvider: (original: () => unknown) => {
+        const res = original() as { priceRange?: { minValue: number; maxValue: number } } | null;
+        if (!res || !res.priceRange) return res;
+        let { minValue, maxValue } = res.priceRange;
+        const lines = series.priceLines();
+        for (const line of lines) {
+          try {
+            const p = line.options().price;
+            if (!Number.isFinite(p)) continue;
+            if (p < minValue) minValue = p;
+            if (p > maxValue) maxValue = p;
+          } catch {
+            // ignore
+          }
+        }
+        if (minValue === maxValue) {
+          // Avoid zero-range which makes the chart angry.
+          const pad = Math.max(1, Math.abs(minValue) * 0.01);
+          minValue -= pad;
+          maxValue += pad;
+        }
+        return { ...res, priceRange: { minValue, maxValue } };
+      },
     });
     chartRef.current = chart;
     seriesRef.current = series;
     chart.timeScale().fitContent();
 
-    // Track parent size so the chart fills the available area.
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry || !chartRef.current) return;
@@ -127,9 +151,6 @@ export default function PriceChart({
       binaryLineRef.current = null;
       lowerLineRef.current = null;
       upperLineRef.current = null;
-      binaryInitRef.current = false;
-      lowerInitRef.current = false;
-      upperInitRef.current = false;
     };
   }, []);
 
@@ -137,9 +158,6 @@ export default function PriceChart({
   useEffect(() => {
     const series = seriesRef.current;
     if (!series || !history?.prices?.length) return;
-    // Dedupe by timestamp (last-write-wins) then sort asc — lightweight-charts
-    // requires strictly increasing unique times, and the server may return
-    // multiple points that share a second.
     const deduped = new Map<number, number>();
     for (const p of history.prices) {
       deduped.set(Math.floor(p.time / 1000), Number(p.spot));
@@ -151,19 +169,19 @@ export default function PriceChart({
     chartRef.current?.timeScale().fitContent();
   }, [history]);
 
-  // ─── 3a. Create the binary line on first valid data ─────────────────────
-  // Re-runs when EITHER history or strike changes, so the line is created
-  // as soon as either is available (avoids first-load race when parent
-  // strike is 0 until spot resolves).
+  // ─── 3. Price lines — always recreate from current state. ────────────────
+  // No init-flag, no mode-change effect. Just: tear down everything, then
+  // recreate exactly what the current props say. This is the simplest
+  // possible logic that matches what the user wants to see.
+  //
+  // Skip recreation while the user is dragging (pointerDownRef) so the
+  // line being dragged doesn't get torn down mid-gesture.
   useEffect(() => {
-    if (isRangeMode) return;
     const series = seriesRef.current;
     if (!series) return;
-    if (binaryInitRef.current) return;
-    if (!history?.prices?.length && (!strikeRef.current || strikeRef.current <= 0)) {
-      return;
-    }
+    if (pointerDownRef.current) return;
 
+    // Tear down every existing line first.
     if (binaryLineRef.current) {
       try {
         series.removePriceLine(binaryLineRef.current);
@@ -172,106 +190,96 @@ export default function PriceChart({
       }
       binaryLineRef.current = null;
     }
+    if (lowerLineRef.current) {
+      try {
+        series.removePriceLine(lowerLineRef.current);
+      } catch {
+        // ignore
+      }
+      lowerLineRef.current = null;
+    }
+    if (upperLineRef.current) {
+      try {
+        series.removePriceLine(upperLineRef.current);
+      } catch {
+        // ignore
+      }
+      upperLineRef.current = null;
+    }
 
-    let useStrike = strikeRef.current;
-    if (!useStrike || useStrike <= 0) {
-      const prices = history?.prices ?? [];
-      const midIdx = Math.floor(prices.length / 2);
-      const mid = prices[midIdx]?.spot ?? 0;
-      useStrike = parseFloat((mid * 0.99).toFixed(2));
+    if (isRangeMode) {
+      // Range mode — two dashed lines.
+      let lo = typeof lower === 'number' && lower > 0 ? lower : 0;
+      let hi = typeof upper === 'number' && upper > 0 ? upper : 0;
+
+      // Fallback if bounds not yet supplied by parent. Use the middle
+      // of the visible price history, snap to nearest $1k.
+      if ((lo <= 0 || hi <= 0) && history?.prices?.length) {
+        const midIdx = Math.floor(history.prices.length / 2);
+        const mid = Number(history.prices[midIdx]?.spot ?? 0);
+        const fallback = parseFloat((mid * 0.99).toFixed(2));
+        if (fallback > 0) {
+          lo = Math.max(1, Math.round((fallback - 1000) / 1000) * 1000);
+          hi = lo + 2000;
+          onRangeChangeRef.current?.(lo, hi);
+        }
+      }
+
+      if (lo > 0 && hi > lo) {
+        lowerLineRef.current = series.createPriceLine({
+          price: lo,
+          color: cyan,
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: 'Lower',
+        });
+        upperLineRef.current = series.createPriceLine({
+          price: hi,
+          color: upperColor,
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: 'Upper',
+        });
+      }
+    } else {
+      // Binary mode — single dashed line at the strike.
+      let useStrike =
+        typeof strike === 'number' && strike > 0 ? strike : 0;
+      if (useStrike <= 0 && history?.prices?.length) {
+        const midIdx = Math.floor(history.prices.length / 2);
+        const mid = Number(history.prices[midIdx]?.spot ?? 0);
+        const fallback = parseFloat((mid * 0.99).toFixed(2));
+        if (fallback > 0) {
+          useStrike = fallback;
+          onStrikeChangeRef.current(useStrike);
+        }
+      }
       if (useStrike > 0) {
-        onStrikeChangeRef.current(useStrike);
+        binaryLineRef.current = series.createPriceLine({
+          price: useStrike,
+          color: cyan,
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: 'Strike',
+        });
       }
     }
-    if (useStrike <= 0) return;
 
-    binaryLineRef.current = series.createPriceLine({
-      price: useStrike,
-      color: cyan,
-      lineWidth: 2,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: 'Strike',
-    });
-    binaryInitRef.current = true;
-    // Force a redraw so the dashed line shows up immediately
+    // Force autoscale so newly-added lines are visible.
+    try {
+      series.applyOptions({ autoscale: true } as never);
+      const ps = chartRef.current?.priceScale('right');
+      ps?.applyOptions({ autoScale: true });
+    } catch {
+      // ignore
+    }
     chartRef.current?.timeScale().fitContent();
-  }, [history, strike, isRangeMode]);
+  }, [history, isRangeMode, strike, lower, upper]);
 
-  // ─── 3b. Create the lower + upper range lines ───────────────────────────
-  // Same first-load race guard as the binary init effect.
-  useEffect(() => {
-    if (!isRangeMode) return;
-    const series = seriesRef.current;
-    if (!series) return;
-
-    if (!history?.prices?.length && (lowerRef.current <= 0 || upperRef.current <= 0)) {
-      return;
-    }
-
-    // Tear down binary line if it exists from a previous mode.
-    if (binaryLineRef.current) {
-      try {
-        series.removePriceLine(binaryLineRef.current);
-      } catch {
-        // ignore
-      }
-      binaryLineRef.current = null;
-      binaryInitRef.current = false;
-    }
-
-    // Ensure we have valid bounds before drawing.
-    if (lowerRef.current <= 0 || upperRef.current <= 0) return;
-
-    if (!lowerInitRef.current) {
-      lowerLineRef.current = series.createPriceLine({
-        price: lowerRef.current,
-        color: cyan,
-        lineWidth: 2,
-        lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: 'Lower',
-      });
-      lowerInitRef.current = true;
-    }
-    if (!upperInitRef.current) {
-      upperLineRef.current = series.createPriceLine({
-        price: upperRef.current,
-        color: upperColor,
-        lineWidth: 2,
-        lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: 'Upper',
-      });
-      upperInitRef.current = true;
-    }
-
-    chartRef.current?.timeScale().fitContent();
-  }, [history, isRangeMode]);
-
-  // ─── 4a. Sync binary line from prop changes (e.g. market switch) ────────
-  useEffect(() => {
-    if (isRangeMode) return;
-    if (!binaryInitRef.current) return;
-    if (pointerDownRef.current) return;
-    if (!binaryLineRef.current) return;
-    if (!strike || strike <= 0) return;
-    binaryLineRef.current.applyOptions({ price: strike });
-  }, [strike, isRangeMode]);
-
-  // ─── 4b. Sync range lines from prop changes ─────────────────────────────
-  useEffect(() => {
-    if (!isRangeMode) return;
-    if (pointerDownRef.current) return;
-    if (lowerInitRef.current && lowerLineRef.current && typeof lower === 'number' && lower > 0) {
-      lowerLineRef.current.applyOptions({ price: lower });
-    }
-    if (upperInitRef.current && upperLineRef.current && typeof upper === 'number' && upper > 0) {
-      upperLineRef.current.applyOptions({ price: upper });
-    }
-  }, [lower, upper, isRangeMode]);
-
-  // ─── 5. Drag handlers on the wrapper ─────────────────────────────────────
+  // ─── 4. Drag handlers ────────────────────────────────────────────────────
   useEffect(() => {
     const wrapper = wrapperRef.current;
     const container = chartContainerRef.current;
@@ -287,9 +295,6 @@ export default function PriceChart({
       }
     };
 
-    // Returns whichever visible line is closest to the cursor within
-    // DRAG_THRESHOLD_PX, or null. Binary and range lines never coexist
-    // visually — the unused refs are null while the other mode is active.
     const hitTest = (clientY: number): DragKind | null => {
       const series = seriesRef.current;
       if (!series) return null;
@@ -298,13 +303,22 @@ export default function PriceChart({
 
       const candidates: { kind: DragKind; price: number }[] = [];
       if (binaryLineRef.current) {
-        candidates.push({ kind: 'binary', price: getLinePrice(binaryLineRef.current) ?? NaN });
+        candidates.push({
+          kind: 'binary',
+          price: getLinePrice(binaryLineRef.current) ?? NaN,
+        });
       }
       if (lowerLineRef.current) {
-        candidates.push({ kind: 'lower', price: getLinePrice(lowerLineRef.current) ?? NaN });
+        candidates.push({
+          kind: 'lower',
+          price: getLinePrice(lowerLineRef.current) ?? NaN,
+        });
       }
       if (upperLineRef.current) {
-        candidates.push({ kind: 'upper', price: getLinePrice(upperLineRef.current) ?? NaN });
+        candidates.push({
+          kind: 'upper',
+          price: getLinePrice(upperLineRef.current) ?? NaN,
+        });
       }
 
       let best: { kind: DragKind; dist: number } | null = null;
@@ -320,10 +334,11 @@ export default function PriceChart({
       return best?.kind ?? null;
     };
 
-    // Snap a raw pixel→price coordinate to the nearest $1,000 tick so
-    // the lines land on round numbers and the band math stays clean.
-    const snapToTick = (v: number): number =>
-      Math.max(0, Math.round(v / DRAG_TICK_USD) * DRAG_TICK_USD);
+    const snap = (v: number): number | null => {
+      if (!Number.isFinite(v)) return null;
+      if (v <= 0) return null;
+      return parseFloat(v.toFixed(2));
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       const kind = hitTest(e.clientY);
@@ -349,8 +364,8 @@ export default function PriceChart({
       const rect = container.getBoundingClientRect();
       const y = e.clientY - rect.top;
       const rawPrice = series.coordinateToPrice(y);
-      if (rawPrice === null) return;
-      const rounded = snapToTick(rawPrice);
+      const rounded = snap(Number(rawPrice));
+      if (rounded === null) return;
 
       const kind = dragKindRef.current;
       if (kind === 'binary') {
@@ -359,16 +374,14 @@ export default function PriceChart({
           onStrikeChangeRef.current(rounded);
         }
       } else if (kind === 'lower') {
-        // Clamp so the lower line can never meet or exceed the upper.
-        const maxLower = upperRef.current - DRAG_TICK_USD;
+        const maxLower = Math.max(0, upperRef.current - MIN_RANGE_GAP_USD);
         const next = Math.min(rounded, maxLower);
         if (lowerLineRef.current) {
           lowerLineRef.current.applyOptions({ price: next });
           onRangeChangeRef.current?.(next, upperRef.current);
         }
       } else if (kind === 'upper') {
-        // Clamp so the upper line can never meet or drop below the lower.
-        const minUpper = lowerRef.current + DRAG_TICK_USD;
+        const minUpper = lowerRef.current + MIN_RANGE_GAP_USD;
         const next = Math.max(rounded, minUpper);
         if (upperLineRef.current) {
           upperLineRef.current.applyOptions({ price: next });
@@ -404,7 +417,11 @@ export default function PriceChart({
   const dimmed = loading || !history?.prices?.length;
 
   return (
-    <div ref={wrapperRef} className="relative select-none">
+    <div
+      ref={wrapperRef}
+      className="relative select-none"
+      style={{ width: '100%', height: '100%', minHeight: 320 }}
+    >
       {loading && (
         <div
           className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
@@ -429,7 +446,7 @@ export default function PriceChart({
         style={{
           width: '100%',
           height: '100%',
-          minHeight: 280,
+           minHeight: 280,
           opacity: dimmed ? 0.3 : 1,
           transition: 'opacity 200ms',
           touchAction: 'none',

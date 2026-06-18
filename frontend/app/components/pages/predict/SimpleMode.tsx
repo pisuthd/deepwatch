@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMarkets } from '../../../hooks/useMarkets';
 import { useMarket } from '../../../hooks/useMarket';
@@ -13,6 +13,7 @@ import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import RangeTradeModal from './RangeTradeModal';
 import { useSetCurrentMarket } from './CurrentMarketContext';
+import { formatPct } from '@/lib/markets/format';
 import {
   DISPLAY_TICK_USD,
   formatExpiryDate,
@@ -35,13 +36,16 @@ export default function PredictSimpleMode() {
     direction: 'up' | 'down';
   }>({ open: false, strike: 0, direction: 'up' });
 
-  // Range mode — local to Simple. The 5-strike ladder acts as the
-  // trigger picker; one of three preset widths (SIMPLE_RANGE_WIDTHS_USD)
-  // sets the band. Center strike is the default trigger on market change.
+  // Range mode — local to Simple. Range rows are always centered on the
+  // spot (no trigger picker); picking a band opens RangeTradeModal with
+  // those bounds. Binary keeps the existing UP/DOWN ladder.
   const [marketType, setMarketType] = useState<'binary' | 'range'>('binary');
-  const [triggerIdx, setTriggerIdx] = useState(0);
-  const [chosenWidth, setChosenWidth] = useState<number>(1000);
-  const [rangeModalOpen, setRangeModalOpen] = useState(false);
+  const [rangeModal, setRangeModal] = useState<{
+    open: boolean;
+    lower: number;
+    upper: number;
+    widthUsd: number;
+  }>({ open: false, lower: 0, upper: 0, widthUsd: 0 });
 
   // Live markets list
   const { markets, loading: marketsLoading } = useMarkets(30_000);
@@ -62,21 +66,6 @@ export default function PredictSimpleMode() {
   const currentMarket = activeMarkets[selectedIdx] ?? null;
   const currentOracleId = currentMarket?.oracle_id ?? null;
 
-  // Reset triggerIdx to center when the market switches, so the page
-  // always opens with a sensible band around the current oracle's spot.
-  const lastOracleIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const id = currentMarket?.oracle_id ?? null;
-    if (id === null) {
-      lastOracleIdRef.current = null;
-      setTriggerIdx(0);
-      return;
-    }
-    if (lastOracleIdRef.current !== id) {
-      lastOracleIdRef.current = id;
-      setTriggerIdx(2); // 5-strike ladder: indices 0..4, center = 2
-    }
-  }, [currentMarket?.oracle_id]);
   const { market: marketDetail, loading: marketLoading } = useMarket(
     currentOracleId,
     30_000
@@ -114,6 +103,36 @@ export default function PredictSimpleMode() {
       svi ?? undefined
     );
   }, [marketDetail, strikes, expiryMs, svi, spotUsd]);
+
+  // Range-mode odds: compute the implied probability that the final price
+  // lands INSIDE each preset band. We reuse the same SVI distribution as
+  // the binary ladder — insideProb(lo, hi) = downProb(hi) - downProb(lo).
+  // Returns the band widths with their inside probabilities (0–1).
+  const rangeOdds = useMemo(() => {
+    if (!marketDetail || !centerStrike) {
+      return SIMPLE_RANGE_WIDTHS_USD.map((w) => ({ width: w, insideProb: 0 }));
+    }
+    // 2 strikes per band (lo, hi). Guard lo > 0 to keep SVI happy.
+    const boundaryStrikes: number[] = [];
+    SIMPLE_RANGE_WIDTHS_USD.forEach((w) => {
+      boundaryStrikes.push(Math.max(1, centerStrike - w));
+      boundaryStrikes.push(centerStrike + w);
+    });
+    const boundaryProbs = calculateStrikeProbabilities(
+      boundaryStrikes,
+      marketDetail.forward,
+      expiryMs,
+      svi ?? undefined
+    );
+    return SIMPLE_RANGE_WIDTHS_USD.map((w, i) => {
+      const loIdx = i * 2;
+      const hiIdx = i * 2 + 1;
+      const lo = boundaryProbs[loIdx]?.downProb ?? 0;
+      const hi = boundaryProbs[hiIdx]?.downProb ?? 0;
+      // downProb is 0–100; formatPct wants 0–1
+      return { width: w, insideProb: Math.max(0, (hi - lo) / 100) };
+    });
+  }, [marketDetail, centerStrike, expiryMs, svi]);
 
   const go = (delta: number) => {
     if (activeMarkets.length < 2) return;
@@ -225,33 +244,6 @@ export default function PredictSimpleMode() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Binary / Range segmented toggle */}
-        <div
-          className="inline-flex items-center rounded-lg p-0.5 gap-0.5 mx-auto"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          {(['binary', 'range'] as const).map((id) => {
-            const isActive = marketType === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setMarketType(id)}
-                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                style={{
-                  background: isActive ? green : 'transparent',
-                  color: isActive ? '#000' : textSecondary,
-                }}
-              >
-                {id === 'binary' ? 'Binary' : 'Range'}
-              </button>
-            );
-          })}
-        </div>
-
         <div className="max-h-[450px] overflow-y-auto pr-1">
           {probs.length === 0 ? (
             <div
@@ -260,51 +252,31 @@ export default function PredictSimpleMode() {
             >
               {marketLoading ? 'Loading odds…' : 'Awaiting oracle data…'}
             </div>
-          ) : (
+          ) : marketType === 'binary' ? (
             probs.map((p, i) => {
               const isCenter = strikes[i] === centerStrike;
-              const isTrigger = i === triggerIdx;
-              // Range mode: row is a tap target (selects trigger).
-              // Binary mode: row is informational; UP/DOWN buttons inside drive.
               return (
                 <div
                   key={strikes[i]}
-                  onClick={() => {
-                    if (marketType === 'range') setTriggerIdx(i);
-                  }}
                   className="w-full flex items-center justify-between rounded-xl px-3 py-2 mb-1 transition-all"
                   style={{
-                    background:
-                      marketType === 'binary'
-                        ? isCenter
-                          ? 'rgba(0, 230, 138, 0.06)'
-                          : 'transparent'
-                        : isTrigger
-                          ? 'rgba(0, 230, 138, 0.10)'
-                          : 'transparent',
-                    cursor: marketType === 'range' ? 'pointer' : 'default',
+                    background: isCenter ? 'rgba(0, 230, 138, 0.06)' : 'transparent',
                   }}
                 >
                   <div className="flex items-baseline gap-1.5">
                     <span
                       className="text-base font-semibold"
-                      style={{ color: marketType === 'range' && isTrigger ? green : isCenter ? green : textPrimary }}
+                      style={{ color: isCenter ? green : textPrimary }}
                     >
                       {formatPrice(strikes[i])}
                     </span>
-                    {marketType === 'binary' && isCenter && (
+                    {isCenter && (
                       <span className="text-[10px]" style={{ color: textSecondary }}>
                         ATM
                       </span>
                     )}
-                    {marketType === 'range' && isTrigger && (
-                      <span className="text-[10px]" style={{ color: green }}>
-                        Trigger
-                      </span>
-                    )}
                   </div>
-                  {marketType === 'binary' && (
-                    <div className="flex gap-1.5">
+                  <div className="flex gap-1.5">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -348,59 +320,92 @@ export default function PredictSimpleMode() {
                       </span>
                     </button>
                   </div>
-                  )}
+                </div>
+              );
+            })
+          ) : (
+            // Range mode: 3 preset bands centered on the spot, each with
+            // an IN button that opens RangeTradeModal directly. Matches
+            // the RangeCard row layout (label + action button).
+            SIMPLE_RANGE_WIDTHS_USD.map((w, i) => {
+              const center = centerStrike > 0 ? centerStrike : Math.round(spotUsd);
+              const lo = Math.max(0, center - w);
+              const hi = center + w;
+              const canTrade = center > 0 && lo > 0;
+              const insideProb = rangeOdds[i]?.insideProb ?? 0;
+              return (
+                <div
+                  key={w}
+                  className="w-full flex items-center justify-between rounded-xl px-3 py-2 mb-1"
+                >
+                  <div className="flex items-baseline gap-1.5 min-w-0">
+                    <span
+                      className="text-base font-semibold truncate"
+                      style={{ color: textPrimary }}
+                    >
+                      {formatPrice(lo)} – {formatPrice(hi)}
+                    </span>
+                    <span className="text-[10px] shrink-0" style={{ color: textSecondary }}>
+                      ±${w.toLocaleString('en-US')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!canTrade}
+                    onClick={() =>
+                      setRangeModal({ open: true, lower: lo, upper: hi, widthUsd: w })
+                    }
+                    className="relative rounded-2xl px-3 py-2 overflow-hidden border border-white/10 disabled:opacity-40 disabled:cursor-not-allowed min-w-[5.5rem]"
+                    style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+                    <div
+                      className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                      style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
+                    />
+                    <span
+                      className="relative z-10 text-sm font-semibold inline-flex items-center gap-1.5"
+                      style={{ color: green }}
+                    >
+                      <Check size={14} strokeWidth={3} />
+                      {formatPct(insideProb, 2)}
+                    </span>
+                  </button>
                 </div>
               );
             })
           )}
         </div>
 
-        {/* Range mode: 3 preset widths + Place Range Bet button */}
-        {marketType === 'range' && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-              {SIMPLE_RANGE_WIDTHS_USD.map((w) => {
-                const isActive = chosenWidth === w;
-                return (
-                  <button
-                    key={w}
-                    type="button"
-                    onClick={() => setChosenWidth(w)}
-                    className="rounded-xl py-2.5 text-xs font-semibold transition-all"
-                    style={{
-                      background: isActive ? 'rgba(0, 230, 138, 0.12)' : 'rgba(255, 255, 255, 0.04)',
-                      border: `1px solid ${isActive ? 'rgba(0, 230, 138, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
-                      color: isActive ? green : textSecondary,
-                    }}
-                  >
-                    ±${w.toLocaleString('en-US')}
-                  </button>
-                );
-              })}
-            </div>
-            {(() => {
-              const t = strikes[triggerIdx] ?? centerStrike;
-              const lo = t - chosenWidth;
-              const hi = t + chosenWidth;
-              const canPlace = t > 0 && lo > 0;
-              return (
-                <button
-                  type="button"
-                  onClick={() => setRangeModalOpen(true)}
-                  disabled={!canPlace}
-                  className="w-full py-3 rounded-xl text-sm font-bold transition-all"
-                  style={{
-                    background: canPlace ? green : 'rgba(255, 255, 255, 0.08)',
-                    color: canPlace ? '#000' : textSecondary,
-                    cursor: canPlace ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  ⇋ Place Range Bet · {formatPrice(lo)}–{formatPrice(hi)}
-                </button>
-              );
-            })()}
-          </div>
-        )}
+        {/* Binary / Range segmented toggle — anchored at the bottom of
+            the card so the user finishes choosing their position before
+            deciding to flip modes. */}
+        <div
+          className="inline-flex items-center rounded-lg p-0.5 gap-0.5 mx-auto"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {(['binary', 'range'] as const).map((id) => {
+            const isActive = marketType === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMarketType(id)}
+                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-colors"
+                style={{
+                  background: isActive ? green : 'transparent',
+                  color: isActive ? '#000' : textSecondary,
+                }}
+              >
+                {id === 'binary' ? 'Binary' : 'Range'}
+              </button>
+            );
+          })}
+        </div>
 
         <div className="text-center text-xs" style={{ color: textSecondary }}>
           {selectedIdx + 1} / {activeMarkets.length}
@@ -432,28 +437,22 @@ export default function PredictSimpleMode() {
         />
       )}
 
-      {currentMarket && marketType === 'range' && (() => {
-        const t = strikes[triggerIdx] ?? centerStrike;
-        const lo = t - chosenWidth;
-        const hi = t + chosenWidth;
-        if (t <= 0 || lo <= 0) return null;
-        return (
-          <RangeTradeModal
-            open={rangeModalOpen}
-            onClose={() => setRangeModalOpen(false)}
-            market={{
-              oracleId: currentMarket.oracle_id,
-              asset,
-              expiryMs,
-              spotUsd,
-            }}
-            lower={lo}
-            upper={hi}
-            triggerStrike={t}
-            widthUsd={chosenWidth}
-          />
-        );
-      })()}
+      {currentMarket && marketType === 'range' && rangeModal.lower > 0 && rangeModal.upper > rangeModal.lower && (
+        <RangeTradeModal
+          open={rangeModal.open}
+          onClose={() => setRangeModal((m) => ({ ...m, open: false }))}
+          market={{
+            oracleId: currentMarket.oracle_id,
+            asset,
+            expiryMs,
+            spotUsd,
+          }}
+          lower={rangeModal.lower}
+          upper={rangeModal.upper}
+          triggerStrike={centerStrike}
+          widthUsd={rangeModal.widthUsd}
+        />
+      )}
     </div>
   );
 }

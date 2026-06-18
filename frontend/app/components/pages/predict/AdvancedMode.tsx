@@ -120,19 +120,19 @@ export default function PredictAdvancedMode() {
   }, [currentMarket?.oracle_id, spotUsd]);
 
   // Default range bounds when entering range mode for the first time per
-  // market: forward ± $1,000, rounded to the nearest $1,000 tick.
+  // market: spot ± $250 (total width $500). Tight enough that both lines
+  // visibly hug the current price on first render — the user can drag
+  // wider from there.
   const rangeInitRef = useRef<string | null>(null);
   useEffect(() => {
     if (!currentMarket || marketType !== 'range') return;
     if (rangeInitRef.current === currentMarket.oracle_id) return;
-    const fwd = market ? market.forward / 1e9 : 0;
-    if (fwd <= 0) return;
-    const f = Math.round(fwd / 1000) * 1000;
+    if (spotUsd <= 0) return;
     rangeInitRef.current = currentMarket.oracle_id;
-    setLower(f - 1000);
-    setUpper(f + 1000);
-    setTriggerStrike(f);
-  }, [currentMarket?.oracle_id, marketType, market?.forward]);
+    setLower(parseFloat((spotUsd - 250).toFixed(2)));
+    setUpper(parseFloat((spotUsd + 250).toFixed(2)));
+    setTriggerStrike(parseFloat(spotUsd.toFixed(2)));
+  }, [currentMarket?.oracle_id, marketType, spotUsd]);
 
   // Live SVI probability for the currently-dragged strike (forward is RAW)
   const liveMint = useMemo(() => {
