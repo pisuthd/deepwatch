@@ -395,8 +395,15 @@ export function groupPolymarketMarkets(rows: BinaryMarket[]): PolymarketGroup[] 
   for (const m of rows) {
     if (m.marketType !== "UP_DOWN" && m.marketType !== "RANGE") continue;
     const isYes = m.outcome === "YES" || m.outcome === "UP";
-    if (!isYes) continue;
-    if (m.impliedProb < MIN_IMPLIED_PROB || m.impliedProb > MAX_IMPLIED_PROB) continue;
+    const isNo = m.outcome === "NO" || m.outcome === "DOWN";
+    if (!isYes && !isNo) continue;
+    // Compute the YES-equivalent prob BEFORE applying the
+    // near-certain filter. For NO/DOWN rows m.impliedProb is the NO
+    // cost, so a near-zero NO cost means a near-certain YES outcome
+    // — exactly the case we want to keep. The filter must operate
+    // on the YES prob, not the raw value.
+    const yesProb = isYes ? m.impliedProb : 1 - m.impliedProb;
+    if (yesProb < MIN_IMPLIED_PROB || yesProb > MAX_IMPLIED_PROB) continue;
     const expiry = m.expiryMs ?? 0;
     const key = `${m.externalEventId ?? m.externalId}::${expiry}`;
     let group = byKey.get(key);
@@ -413,20 +420,45 @@ export function groupPolymarketMarkets(rows: BinaryMarket[]): PolymarketGroup[] 
       byKey.set(key, group);
     }
     if (m.marketType === "UP_DOWN") {
-      group.upDown.push({
-        strikeUsd: m.strikeUsd ?? 0,
-        impliedProbUp: m.impliedProb,
-        description: m.description ?? null,
-        priceToBeatUsd: m.priceToBeatUsd ?? null,
-      });
+      // Polymarket "Up or Down" intraday markets (e.g. "Bitcoin Up
+      // or Down - June 18, 1:00PM-1:05PM ET") have no `groupItemTitle`
+      // so the fetcher leaves `strikeUsd = 0` and the YES/NO contract
+      // is settled against the candle open. The implicit strike IS
+      // the candle open — `priceToBeatUsd`. Without this substitution
+      // the markets get filtered out of any strike-based comparison
+      // (modal table, range matching) and the Polymarket column reads
+      // all "—" even though Polymarket has 90%+ of the active strikes.
+      let strike = m.strikeUsd ?? 0;
+      if (strike <= 0 && m.priceToBeatUsd && m.priceToBeatUsd > 0) {
+        strike = m.priceToBeatUsd;
+      }
+      // Prefer the YES row if both YES and NO exist for the same
+      // strike (they're complements, so picking either gives the same
+      // number up to spread — pick YES as the source of truth).
+      const existing = group.upDown.find((u) => u.strikeUsd === strike);
+      if (!existing) {
+        group.upDown.push({
+          strikeUsd: strike,
+          impliedProbUp: yesProb,
+          description: m.description ?? null,
+          priceToBeatUsd: m.priceToBeatUsd ?? null,
+        });
+      }
     } else {
-      group.range.push({
-        floorStrikeUsd: m.floorStrikeUsd ?? 0,
-        capStrikeUsd: m.capStrikeUsd ?? 0,
-        rangeBandPct: polymarketRangeBandPct(m),
-        impliedProbUp: m.impliedProb,
-        description: m.description ?? null,
-      });
+      const floor = m.floorStrikeUsd ?? 0;
+      const cap = m.capStrikeUsd ?? 0;
+      const existing = group.range.find(
+        (r) => r.floorStrikeUsd === floor && r.capStrikeUsd === cap,
+      );
+      if (!existing) {
+        group.range.push({
+          floorStrikeUsd: floor,
+          capStrikeUsd: cap,
+          rangeBandPct: polymarketRangeBandPct(m),
+          impliedProbUp: yesProb,
+          description: m.description ?? null,
+        });
+      }
     }
   }
   return Array.from(byKey.values()).sort((a, b) => a.expiryMs - b.expiryMs);

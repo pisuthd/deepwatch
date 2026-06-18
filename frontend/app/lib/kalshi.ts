@@ -439,8 +439,15 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
   for (const m of rows) {
     if (m.marketType !== "UP_DOWN" && m.marketType !== "RANGE") continue;
     const isYes = m.outcome === "YES" || m.outcome === "UP";
-    if (!isYes) continue;
-    if (m.impliedProb < MIN_IMPLIED_PROB || m.impliedProb > MAX_IMPLIED_PROB) continue;
+    const isNo = m.outcome === "NO" || m.outcome === "DOWN";
+    if (!isYes && !isNo) continue;
+    // Compute the YES-equivalent prob BEFORE applying the
+    // near-certain filter. For NO/DOWN rows m.impliedProb is the NO
+    // cost, so a near-zero NO cost means a near-certain YES outcome
+    // — exactly the case we want to keep. The filter must operate
+    // on the YES prob, not the raw value.
+    const yesProb = isYes ? m.impliedProb : 1 - m.impliedProb;
+    if (yesProb < MIN_IMPLIED_PROB || yesProb > MAX_IMPLIED_PROB) continue;
     const expiry = m.expiryMs ?? 0;
     const key = `${expiry}`;
     let group = byKey.get(key);
@@ -457,19 +464,30 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
       byKey.set(key, group);
     }
     if (m.marketType === "UP_DOWN") {
-      group.upDown.push({
-        strikeUsd: m.strikeUsd ?? 0,
-        impliedProbUp: m.impliedProb,
-        description: m.description ?? null,
-      });
+      const strike = m.strikeUsd ?? 0;
+      const existing = group.upDown.find((u) => u.strikeUsd === strike);
+      if (!existing) {
+        group.upDown.push({
+          strikeUsd: strike,
+          impliedProbUp: yesProb,
+          description: m.description ?? null,
+        });
+      }
     } else {
-      group.range.push({
-        floorStrikeUsd: m.floorStrikeUsd ?? 0,
-        capStrikeUsd: m.capStrikeUsd ?? 0,
-        rangeBandPct: kalshiRangeBandPct(m),
-        impliedProbUp: m.impliedProb,
-        description: m.description ?? null,
-      });
+      const floor = m.floorStrikeUsd ?? 0;
+      const cap = m.capStrikeUsd ?? 0;
+      const existing = group.range.find(
+        (r) => r.floorStrikeUsd === floor && r.capStrikeUsd === cap,
+      );
+      if (!existing) {
+        group.range.push({
+          floorStrikeUsd: floor,
+          capStrikeUsd: cap,
+          rangeBandPct: kalshiRangeBandPct(m),
+          impliedProbUp: yesProb,
+          description: m.description ?? null,
+        });
+      }
     }
   }
   return Array.from(byKey.values()).sort((a, b) => a.expiryMs - b.expiryMs);

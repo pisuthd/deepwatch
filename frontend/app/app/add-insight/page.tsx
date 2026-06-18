@@ -1,5 +1,5 @@
-import AddInsightPage from '../../components/pages/AddInsightPage';
+import ComparePageClient from '../../components/pages/compare/ComparePageClient';
 
 export default function Page() {
-  return <AddInsightPage />;
+  return <ComparePageClient />;
 }
