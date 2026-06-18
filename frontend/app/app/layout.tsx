@@ -22,7 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       'positions': 'positions',
       'download-agent': 'download-agent',
     };
-    return pageMap[path] || 'stake';
+    return pageMap[path] || 'predict';
   };
 
   // PageId to route mapping

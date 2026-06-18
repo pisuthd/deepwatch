@@ -6,6 +6,7 @@ import StatCard from '../common/StatCard';
 import WelcomeCard from '../common/WelcomeCard';
 import PageWrapper from '../common/PageWrapper';
 import PredictManagerPanel from './overview/PredictManagerPanel';
+import PositionsPanel from './overview/PositionsPanel';
 
 
  
@@ -77,6 +78,10 @@ export default function OverviewPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <PositionsPanel />
       </div>
     </PageWrapper>
   );

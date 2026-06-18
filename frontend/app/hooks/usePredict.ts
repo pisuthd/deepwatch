@@ -267,25 +267,90 @@ export function usePredict(): UsePredictReturn {
         )
         if (summaryData) setSummary(summaryData)
 
+        // 2. Directional (binary) positions — aggregated by the indexer.
+        //    Expose ALL positions (open, redeemable, lost, awaiting_settlement,
+        //    redeemed) and let the UI filter — the popover already has a
+        //    status filter, and filtering at this layer would hide historical
+        //    positions from the user.
         const posData = await safeJsonGet<Position[]>(
           `${SERVER}/managers/${userManager.manager_id}/positions/summary`,
           'GET /positions/summary',
         )
         if (posData) {
-          setPositions(posData.filter((p: Position) => Number(p.open_quantity) > 0))
+          setPositions(posData)
+        } else {
+          setPositions([])
         }
 
-        // Range positions — single endpoint per Phase 3.1. If the indexer
-        // doesn't ship this yet, the empty list keeps the popover happy.
-        // const rangesData = await safeJsonGet<RangePosition[]>(
-        //   `${SERVER}/managers/${userManager.manager_id}/ranges`,
-        //   'GET /ranges',
-        // )
-        // if (rangesData) {
-        //   setRanges(rangesData.filter((r) => Number(r.open_quantity) > 0))
-        // } else {
-        //   setRanges([])
-        // }
+        // 3. Range positions — the predict indexer does not expose a
+        //    per-manager aggregated "open range positions" endpoint.
+        //    Mirrors predict_workshop/listPositions.ts (the official Mysten
+        //    reference): pull the raw mint + redeem event streams filtered
+        //    by manager_id, then net the quantities client-side to
+        //    reconstruct currently-open range positions.
+        type RangeEvent = {
+          oracle_id: string
+          underlying_asset?: string
+          expiry: number | string
+          lower_strike: number | string
+          higher_strike: number | string
+          quantity: number | string
+          checkpoint_timestamp_ms?: number | string
+        }
+        const mintsData = await safeJsonGet<RangeEvent[]>(
+          `${SERVER}/ranges/minted?manager_id=${userManager.manager_id}`,
+          'GET /ranges/minted',
+        )
+        const redeemsData = await safeJsonGet<RangeEvent[]>(
+          `${SERVER}/ranges/redeemed?manager_id=${userManager.manager_id}`,
+          'GET /ranges/redeemed',
+        )
+
+        const netRanges = new Map<
+          string,
+          { row: RangeEvent; qty: bigint; firstMintedAt: number }
+        >()
+        const keyOf = (e: RangeEvent) =>
+          `${e.oracle_id}|${e.expiry}|${e.lower_strike}|${e.higher_strike}`
+
+        if (mintsData) {
+          for (const m of mintsData) {
+            const k = keyOf(m)
+            const cur = netRanges.get(k)
+            const delta = BigInt(m.quantity)
+            const ts = Number(m.checkpoint_timestamp_ms ?? 0)
+            if (cur) {
+              cur.qty += delta
+              if (ts && (!cur.firstMintedAt || ts < cur.firstMintedAt)) {
+                cur.firstMintedAt = ts
+              }
+            } else {
+              netRanges.set(k, { row: m, qty: delta, firstMintedAt: ts })
+            }
+          }
+        }
+        if (redeemsData) {
+          for (const r of redeemsData) {
+            const k = keyOf(r)
+            const cur = netRanges.get(k)
+            if (cur) cur.qty -= BigInt(r.quantity)
+          }
+        }
+
+        const openRanges: RangePosition[] = [...netRanges.values()]
+          .filter((r) => r.qty > BigInt(0))
+          .map((r) => ({
+            oracle_id: r.row.oracle_id,
+            underlying_asset: r.row.underlying_asset,
+            expiry: Number(r.row.expiry),
+            lower_strike: String(r.row.lower_strike),
+            higher_strike: String(r.row.higher_strike),
+            open_quantity: r.qty.toString(),
+            status: 'active' as const,
+            first_minted_at: r.firstMintedAt || undefined,
+          }))
+
+        setRanges(openRanges)
       } else {
         setManager(null)
         setSummary(null)
