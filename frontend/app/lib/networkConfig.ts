@@ -35,6 +35,18 @@ export interface NetworkConfig {
     DBUSDC: string | null;
     DEEP: string;
   };
+  /**
+   * Predict protocol wiring. All three fields are `null` on mainnet because
+   * Mysten has not (yet) published a public mainnet predict server/package.
+   * `packageId` is the Move package; `objectId` is the shared `PREDICT`
+   * object; `dusdcType` is the `0x...::dusdc::DUSDC` coin type. `usePredict`
+   * falls back to a "testnet only" error when any of these is null.
+   */
+  predict: {
+    packageId: string | null;
+    objectId: string | null;
+    dusdcType: string | null;
+  };
   /** Pool keys to feature by default in the simple-mode pair selector. */
   defaultPools: string[];
 }
@@ -55,6 +67,11 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
       DBUSDC: '0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC',
       DEEP: '0x36dbef866a1d62bf7328989a10fb2f07d769f4ee587c0de4a0a256e57e0a58a8::deep::DEEP',
     },
+    predict: {
+      packageId: '0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138',
+      objectId: '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a',
+      dusdcType: '0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC',
+    },
     defaultPools: ['SUI_DBUSDC', 'DEEP_USDC', 'SUI_USDC'],
   },
   mainnet: {
@@ -72,6 +89,11 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
       // DBUSDC is a testnet-only token; no mainnet equivalent in v1.
       DBUSDC: null,
       DEEP: '0x36dbef866a1d62bf7328989a10fb2f07d769f4ee587c0de4a0a256e57e0a58a8::deep::DEEP',
+    },
+    predict: {
+      packageId: null,
+      objectId: null,
+      dusdcType: null,
     },
     defaultPools: ['SUI_USDC', 'DEEP_SUI', 'DEEP_USDC', 'WUSDT_USDC', 'BETH_USDC'],
   },

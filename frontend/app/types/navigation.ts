@@ -23,6 +23,7 @@ export const categories: NavCategory[] = [
     title: 'Trade',
     items: [
       { icon: 'RefreshCcw', label: 'Spot', pageId: 'spot' },
+      { icon: 'Layers', label: 'Margin', pageId: 'margin' },
     ],
   },
   {

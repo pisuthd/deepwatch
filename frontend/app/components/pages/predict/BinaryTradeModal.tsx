@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import Link from 'next/link';
 import { X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
 import { usePredict, DUSDC_SCALE } from '../../../hooks/usePredict';
+import { useToast } from '../../../context/ToastContext';
 import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
 import { formatPrice } from './utils';
@@ -23,7 +23,6 @@ const green = '#00E68A';
 const red = '#ef4444';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
-const cyan = '#3EC4C0';
 
 interface BinaryTradeModalProps {
   open: boolean;
@@ -47,7 +46,8 @@ export default function BinaryTradeModal({
 }: BinaryTradeModalProps) {
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
-  const { mint, getTradeQuote, manager, summary } = usePredict();
+  const { notify } = useToast();
+  const { mint, createManagerAndMint, getTradeQuote, manager, summary, walletDusdcBalance } = usePredict();
 
   const [direction, setDirection] = useState<'up' | 'down'>(initialDirection);
   const [amount, setAmount] = useState('1');
@@ -112,19 +112,48 @@ export default function BinaryTradeModal({
   const needsDeposit = !!manager && balanceDusdc <= 0;
   const insufficient = !!manager && roundedAmount > balanceDusdc;
 
+  // Shortfall between manager balance and bet size. Used both for the
+  // "Sign · Deposit $X & Place Bet" label and to gate the submit when the
+  // user doesn't have enough wallet DBUSDC to cover the gap.
+  const shortfall = !!manager && roundedAmount > balanceDusdc ? roundedAmount - balanceDusdc : 0;
+  const walletBalanceHuman = Number(walletDusdcBalance) / Number(DUSDC_SCALE);
+  const walletShortfall = shortfall > 0 && walletBalanceHuman < shortfall;
+
   const handleSubmit = async () => {
     if (!account || !dAppKit?.signAndExecuteTransaction || roundedAmount < 0.01) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await mint(
-        dAppKit.signAndExecuteTransaction,
-        market.oracleId,
-        market.expiryMs,
-        strike,
-        direction,
-        roundedAmount
-      );
+      if (manager) {
+        // Smart-fallback path. `mint` chains a wallet→manager deposit when
+        // the manager's balance is short, all inside one PTB.
+        await mint(
+          dAppKit.signAndExecuteTransaction,
+          market.oracleId,
+          market.expiryMs,
+          strike,
+          direction,
+          roundedAmount
+        );
+        notify(
+          `Bet placed · ${direction === 'up' ? '▲ UP' : '▼ DOWN'} @ ${formatPrice(strike)}`,
+          { variant: 'success', duration: 4000 }
+        );
+      } else {
+        // No manager yet. Single-PTB create_manager + deposit + mint.
+        await createManagerAndMint(
+          dAppKit.signAndExecuteTransaction,
+          market.oracleId,
+          market.expiryMs,
+          strike,
+          direction,
+          roundedAmount
+        );
+        notify(
+          `Account created · ${direction === 'up' ? '▲ UP' : '▼ DOWN'} @ ${formatPrice(strike)}`,
+          { variant: 'success', duration: 4000 }
+        );
+      }
       onClose();
     } catch (e: any) {
       setSubmitError(e?.message ?? 'Transaction failed');
@@ -132,6 +161,24 @@ export default function BinaryTradeModal({
       setSubmitting(false);
     }
   };
+
+  // Single submit-button label that adapts to manager + balance state.
+  const submitLabel = (() => {
+    if (submitting) return 'Submitting…';
+    if (!hasQuote) return 'Fetching quote…';
+    if (!manager) return 'Sign · Create Account & Place Bet';
+    if (needsDeposit || shortfall > 0) {
+      return `Sign · Deposit $${shortfall.toFixed(2)} DBUSDC & Place Bet`;
+    }
+    return `Place ${direction === 'up' ? '▲ UP' : '▼ DOWN'} bet`;
+  })();
+
+  // Submit disabled state mirrors the label's pre-conditions.
+  const submitDisabled =
+    submitting ||
+    roundedAmount < 0.01 ||
+    !hasQuote ||
+    walletShortfall;
 
   const question = `Will ${market.asset} be ${direction === 'up' ? 'above' : 'below'} ${formatPrice(strike)}?`;
 
@@ -271,9 +318,9 @@ export default function BinaryTradeModal({
                           onClick={() => setAmount(String(p))}
                           className="py-1.5 rounded-md text-xs font-mono font-semibold transition-colors"
                           style={{
-                            background: isActive ? 'rgba(62, 196, 192, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                            border: `1px solid ${isActive ? 'rgba(62, 196, 192, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
-                            color: isActive ? cyan : textSecondary,
+                            background: isActive ? 'rgba(0, 230, 138, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                            border: `1px solid ${isActive ? 'rgba(0, 230, 138, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
+                            color: isActive ? green : textSecondary,
                           }}
                         >
                           ${p}
@@ -316,7 +363,7 @@ export default function BinaryTradeModal({
                         </div>
                         <div
                           className="text-base font-mono font-bold mt-0.5"
-                          style={{ color: cyan }}
+                          style={{ color: green }}
                         >
                           ${payoutIfWin.toFixed(2)}
                         </div>
@@ -353,58 +400,39 @@ export default function BinaryTradeModal({
                       Connect wallet to place a bet
                     </p>
                   </div>
-                ) : !manager ? (
-                  <Link
-                    href="/overview"
-                    onClick={onClose}
-                    className="block text-center py-3 rounded-lg text-xs font-semibold transition-colors hover:bg-white/[0.06]"
-                    style={{
-                      background: 'rgba(62, 196, 192, 0.12)',
-                      border: '1px solid rgba(62, 196, 192, 0.35)',
-                      color: cyan,
-                    }}
-                  >
-                    Create your Predict account at Overview →
-                  </Link>
-                ) : needsDeposit ? (
+                ) : (
                   <div className="flex flex-col gap-2">
-                    <Link
-                      href="/overview"
-                      onClick={onClose}
-                      className="block text-center py-3 rounded-lg text-xs font-semibold transition-colors hover:bg-white/[0.06]"
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitDisabled}
+                      className="w-full py-3 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
                       style={{
-                        background: 'rgba(62, 196, 192, 0.12)',
-                        border: '1px solid rgba(62, 196, 192, 0.35)',
-                        color: cyan,
+                        background: !submitDisabled ? green : 'rgba(255, 255, 255, 0.08)',
+                        color: !submitDisabled ? '#000' : textSecondary,
+                        opacity: submitting ? 0.6 : 1,
+                        cursor: submitDisabled ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      Deposit DBUSDC at Overview →
-                    </Link>
-                    <p className="text-[11px] text-center" style={{ color: textSecondary }}>
-                      Your Predict account has no balance. Deposit DBUSDC to start betting.
-                    </p>
+                      {submitting && <Loader2 size={14} className="animate-spin" />}
+                      {submitLabel}
+                    </button>
+                    {walletShortfall && (
+                      <p
+                        className="text-[11px] text-center"
+                        style={{ color: red }}
+                      >
+                        You need ${shortfall.toFixed(2)} DBUSDC in your wallet
+                      </p>
+                    )}
+                    {!walletShortfall && !!manager && shortfall > 0 && (
+                      <p
+                        className="text-[11px] text-center"
+                        style={{ color: textSecondary }}
+                      >
+                        We'll auto-deposit {shortfall.toFixed(2)} DBUSDC from your wallet
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting || roundedAmount < 0.01 || !hasQuote || insufficient}
-                    className="w-full py-3 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
-                    style={{
-                      background: hasQuote && roundedAmount >= 0.01 && !insufficient ? green : 'rgba(255, 255, 255, 0.08)',
-                      color: hasQuote && roundedAmount >= 0.01 && !insufficient ? '#000' : textSecondary,
-                      opacity: submitting ? 0.6 : 1,
-                      cursor: submitting || !hasQuote || insufficient ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {submitting && <Loader2 size={14} className="animate-spin" />}
-                    {submitting
-                      ? 'Submitting…'
-                      : !hasQuote
-                        ? 'Fetching quote…'
-                        : insufficient
-                          ? 'Insufficient balance'
-                          : `Place ${direction === 'up' ? '▲ UP' : '▼ DOWN'} bet`}
-                  </button>
                 )}
               </div>
             </div>

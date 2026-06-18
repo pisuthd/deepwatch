@@ -17,8 +17,10 @@ import Countdown from '../../common/Countdown';
 import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import RangeTradeModal from './RangeTradeModal';
+import LeveragedBetModal from './LeveragedBetModal';
 import PriceChart from './PriceChart';
 import StrikeGrid from './StrikeGrid';
+import RangePanel from './RangePanel';
 import { useSetCurrentMarket } from './CurrentMarketContext';
 import {
   formatExpiryDate,
@@ -49,6 +51,7 @@ export default function PredictAdvancedMode() {
   const [upper, setUpper] = useState(0);
   const [triggerStrike, setTriggerStrike] = useState(0);
   const [rangeModalOpen, setRangeModalOpen] = useState(false);
+  const [leveragedOpen, setLeveragedOpen] = useState(false);
 
   const { markets, loading: marketsLoading } = useMarkets(30_000);
   const activeMarkets = useMemo(
@@ -420,9 +423,10 @@ export default function PredictAdvancedMode() {
               })}
             />
 
-            {/* ── Overlay (bottom-right): UP/DOWN in binary, Range button in range ── */}
+            {/* ── Overlay (bottom-right): UP/DOWN in binary; in range mode
+                the action button lives in the RangePanel on the right. ── */}
             <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2 pointer-events-none">
-              {marketType === 'binary' ? (
+              {marketType === 'binary' && (
                 <>
                   <div
                     className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono"
@@ -482,40 +486,39 @@ export default function PredictAdvancedMode() {
                       ▼ DOWN
                     </span>
                   </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setRangeModalOpen(true)}
-                  disabled={lower <= 0 || upper <= lower}
-                  className="relative rounded-2xl px-4 py-2 overflow-hidden border border-white/10 pointer-events-auto"
-                  style={{
-                    background: 'rgba(26, 29, 46, 0.6)',
-                    backdropFilter: 'blur(20px)',
-                  }}
-                >
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-                  <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-                  <div
-                    className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
-                    style={{ background: cyan, filter: 'blur(30px)', opacity: 0.15 }}
-                  />
-                  <span
-                    className="relative z-10 text-sm font-semibold"
-                    style={{ color: cyan }}
+                  <button
+                    onClick={() => setLeveragedOpen(true)}
+                    className="relative rounded-2xl px-3 py-2 overflow-hidden border border-white/10 pointer-events-auto"
+                    style={{
+                      background: 'rgba(26, 29, 46, 0.6)',
+                      backdropFilter: 'blur(20px)',
+                    }}
+                    title="Open a leveraged bet (borrow DBUSDC from a Margin Manager)"
                   >
-                    ⇋ Range {formatPrice(lower)}–{formatPrice(upper)}
-                  </span>
-                </button>
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+                    <div
+                      className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+                      style={{ background: cyan, filter: 'blur(30px)', opacity: 0.15 }}
+                    />
+                    <span
+                      className="relative z-10 text-xs font-semibold"
+                      style={{ color: cyan }}
+                    >
+                      ⚡ Lev.
+                    </span>
+                  </button>
+                </>
               )}
             </div>
           </div>
         </GlassCard>
 
-        {/* Right-side strike ladder — hidden in range mode; the chart's two
-            drag handles are the entire control surface there. */}
-        {marketType === 'binary' && (
-          <div className="w-80 shrink-0 min-h-0">
-            <GlassCard className="  p-0 overflow-hidden">
+        {/* Right-side column. Binary → StrikeGrid (ladder of odds).
+            Range → RangePanel (bounds summary + preview quote + action). */}
+        <div className="w-80 shrink-0 min-h-0">
+          <GlassCard className="p-0 overflow-hidden h-full">
+            {marketType === 'binary' ? (
               <StrikeGrid
                 market={
                   market
@@ -530,9 +533,18 @@ export default function PredictAdvancedMode() {
                 currentStrike={strike}
                 onStrikeChange={setStrike}
               />
-            </GlassCard>
-          </div>
-        )}
+            ) : (
+              <RangePanel
+                oracleId={currentOracleId}
+                expiryMs={expiryMs}
+                spotUsd={spotUsd}
+                lower={lower}
+                upper={upper}
+                onPlaceBet={() => setRangeModalOpen(true)}
+              />
+            )}
+          </GlassCard>
+        </div>
       </div>
 
       {currentMarket && marketType === 'binary' && (
@@ -564,6 +576,19 @@ export default function PredictAdvancedMode() {
           upper={upper}
           triggerStrike={triggerStrike}
           widthUsd={Math.round((upper - lower) / 2)}
+        />
+      )}
+
+      {currentMarket && leveragedOpen && (
+        <LeveragedBetModal
+          oracleId={currentMarket.oracle_id}
+          expiryMs={expiryMs}
+          spotUsd={spotUsd}
+          mode={marketType}
+          strike={marketType === 'binary' ? strike : undefined}
+          lower={marketType === 'range' ? lower : undefined}
+          higher={marketType === 'range' ? upper : undefined}
+          onClose={() => setLeveragedOpen(false)}
         />
       )}
     </div>

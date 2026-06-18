@@ -9,6 +9,7 @@ import { useCurrentMarket } from './CurrentMarketContext';
 import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
 import { formatExpiryDate, formatPrice } from './utils';
+import RangePositionsTab from './RangePositionsTab';
 
 const green = '#00E68A';
 const red = '#ef4444';
@@ -32,6 +33,7 @@ function fmtQty(n: number): string {
 }
 
 type StatusFilter = 'all' | 'active' | 'redeemable' | 'lost' | 'awaiting_settlement';
+type Tab = 'binary' | 'range';
 
 const STATUS_LABEL: Record<NonNullable<Position['status']>, string> = {
   active: 'Active',
@@ -50,9 +52,10 @@ const STATUS_COLOR: Record<NonNullable<Position['status']>, string> = {
 export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
-  const { positions, redeem } = usePredict();
+  const { positions, ranges, redeem } = usePredict();
   const { oracleId: currentOracleId, asset: currentAsset } = useCurrentMarket();
 
+  const [tab, setTab] = useState<Tab>('binary');
   const [marketFilter, setMarketFilter] = useState<string>(
     currentOracleId ?? 'all'
   );
@@ -75,6 +78,15 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
       return true;
     });
   }, [sorted, marketFilter, statusFilter]);
+
+  // Range positions honour the same market filter but ignore the binary
+  // status filter — the indexer has its own range status vocabulary.
+  const filteredRanges = useMemo(() => {
+    return ranges.filter((r) => {
+      if (marketFilter !== 'all' && r.oracle_id !== marketFilter) return false;
+      return true;
+    });
+  }, [ranges, marketFilter]);
 
   // Distinct (oracle_id, asset, expiry) tuples present in positions for the dropdown
   const marketOptions = useMemo(() => {
@@ -135,8 +147,35 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
             className="text-[10px] font-mono px-1.5 py-px rounded"
             style={{ background: 'rgba(255,255,255,0.06)', color: textSecondary }}
           >
-            {filtered.length}
+            {tab === 'binary' ? filtered.length : filteredRanges.length}
           </span>
+
+          {/* Binary / Range tab toggle */}
+          <div
+            className="inline-flex items-center rounded-md p-0.5 gap-0.5 ml-2"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            {(['binary', 'range'] as const).map((id) => {
+              const isActive = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTab(id)}
+                  className="px-2.5 py-0.5 rounded text-[11px] font-semibold transition-colors"
+                  style={{
+                    background: isActive ? green : 'transparent',
+                    color: isActive ? '#000' : textSecondary,
+                  }}
+                >
+                  {id === 'binary' ? 'Binary' : 'Range'}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -159,19 +198,21 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
             ))}
           </select>
 
-          {/* Status filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="text-xs px-2 py-1 rounded-md outline-none border border-white/10"
-            style={{ background: 'rgba(40, 44, 60, 0.5)', color: textPrimary }}
-          >
-            <option value="all">All status</option>
-            <option value="active">Active</option>
-            <option value="redeemable">Redeemable</option>
-            <option value="lost">Lost</option>
-            <option value="awaiting_settlement">Awaiting</option>
-          </select>
+          {/* Status filter — only meaningful for binary positions */}
+          {tab === 'binary' && (
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="text-xs px-2 py-1 rounded-md outline-none border border-white/10"
+              style={{ background: 'rgba(40, 44, 60, 0.5)', color: textPrimary }}
+            >
+              <option value="all">All status</option>
+              <option value="active">Active</option>
+              <option value="redeemable">Redeemable</option>
+              <option value="lost">Lost</option>
+              <option value="awaiting_settlement">Awaiting</option>
+            </select>
+          )}
 
           <button
             onClick={onClose}
@@ -190,6 +231,8 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
           <div className="px-4 py-8 text-center text-xs" style={{ color: textSecondary }}>
             Connect your wallet to view positions.
           </div>
+        ) : tab === 'range' ? (
+          <RangePositionsTab ranges={filteredRanges} />
         ) : filtered.length === 0 ? (
           <div className="px-4 py-8 text-center text-xs" style={{ color: textSecondary }}>
             {positions.length === 0

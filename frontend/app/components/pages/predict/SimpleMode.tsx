@@ -12,6 +12,7 @@ import Countdown from '../../common/Countdown';
 import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import RangeTradeModal from './RangeTradeModal';
+import LeveragedBetModal from './LeveragedBetModal';
 import { useSetCurrentMarket } from './CurrentMarketContext';
 import { formatPct } from '@/lib/markets/format';
 import {
@@ -25,6 +26,7 @@ import {
 
 const green = '#00E68A';
 const red = '#ef4444';
+const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 
@@ -46,6 +48,7 @@ export default function PredictSimpleMode() {
     upper: number;
     widthUsd: number;
   }>({ open: false, lower: 0, upper: 0, widthUsd: 0 });
+  const [leveragedOpen, setLeveragedOpen] = useState(false);
 
   // Live markets list
   const { markets, loading: marketsLoading } = useMarkets(30_000);
@@ -407,6 +410,22 @@ export default function PredictSimpleMode() {
           })}
         </div>
 
+        {/* Leveraged Bet — opens the same LeveragedBetModal as Advanced mode
+            using the currently displayed market + selected mode/strike. */}
+        <button
+          type="button"
+          onClick={() => setLeveragedOpen(true)}
+          className="mx-auto mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+          style={{
+            background: 'rgba(62, 196, 192, 0.12)',
+            color: cyan,
+            border: '1px solid rgba(62, 196, 192, 0.35)',
+          }}
+          title="Open a leveraged bet on the current market (borrow DBUSDC from a Margin Manager)"
+        >
+          ⚡ Leveraged Bet
+        </button>
+
         <div className="text-center text-xs" style={{ color: textSecondary }}>
           {selectedIdx + 1} / {activeMarkets.length}
         </div>
@@ -451,6 +470,31 @@ export default function PredictSimpleMode() {
           upper={rangeModal.upper}
           triggerStrike={centerStrike}
           widthUsd={rangeModal.widthUsd}
+        />
+      )}
+
+      {currentMarket && leveragedOpen && (
+        <LeveragedBetModal
+          oracleId={currentMarket.oracle_id}
+          expiryMs={expiryMs}
+          spotUsd={spotUsd}
+          mode={marketType}
+          strike={marketType === 'binary' ? spotUsd : undefined}
+          lower={
+            marketType === 'range' && rangeModal.lower > 0
+              ? rangeModal.lower
+              : spotUsd > 0
+                ? spotUsd * 0.99
+                : undefined
+          }
+          higher={
+            marketType === 'range' && rangeModal.upper > 0
+              ? rangeModal.upper
+              : spotUsd > 0
+                ? spotUsd * 1.01
+                : undefined
+          }
+          onClose={() => setLeveragedOpen(false)}
         />
       )}
     </div>

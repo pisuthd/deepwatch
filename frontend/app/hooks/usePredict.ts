@@ -7,6 +7,7 @@ import { useNetworkConfig } from './useNetworkConfig'
 
 export const PRICE_SCALE = BigInt('1000000000')
 export const DUSDC_SCALE = BigInt('1000000')
+const CLOCK = '0x6'
 
 export interface ManagerData {
   manager_id: string
@@ -39,6 +40,23 @@ export interface Position {
   underlying_asset: string
   first_minted_at?: number
   status?: 'active' | 'redeemable' | 'lost' | 'awaiting_settlement'
+}
+
+export interface RangePosition {
+  oracle_id: string
+  underlying_asset?: string
+  expiry: number
+  /** PRICE_SCALE = 1e9 scaled integer string. */
+  lower_strike: string
+  /** PRICE_SCALE = 1e9 scaled integer string. */
+  higher_strike: string
+  /** DUSDC_SCALE = 1e6 scaled integer string. */
+  open_quantity: string
+  average_entry_price?: string
+  mark_price?: string | null
+  unrealized_pnl?: string
+  status?: 'active' | 'redeemable' | 'lost' | 'awaiting_settlement'
+  first_minted_at?: number
 }
 
 export interface AskBounds {
@@ -110,10 +128,34 @@ function toDusdcUnits(amount: string): bigint {
   return BigInt(whole || '0') * DUSDC_SCALE + BigInt(fracPadded || '0')
 }
 
+// Helper: fetch + merge the user's DUSDC coins into a single primary object
+// inside an existing PTB. Returns [splitCoin, primaryCoin]. Throws if the
+// wallet has no DBUSDC. Used by every path that deposits or merges.
+async function addCoinMergeAndSplit(
+  tx: any,
+  account: { address: string },
+  rpcUrl: string,
+  dusdcType: string,
+  amount: bigint,
+) {
+  const coinsResult = await suiRpcCall(rpcUrl, 'suix_getCoins', [account.address, dusdcType])
+  if (!coinsResult.result?.data?.length) {
+    throw new Error('No DBUSDC found in wallet')
+  }
+  const coins = coinsResult.result.data
+  const primaryCoin = tx.object(coins[0].coinObjectId)
+  if (coins.length > 1) {
+    tx.mergeCoins(primaryCoin, coins.slice(1).map((c: any) => tx.object(c.coinObjectId)))
+  }
+  const [splitCoin] = tx.splitCoins(primaryCoin, [tx.pure.u64(amount)])
+  return splitCoin
+}
+
 interface UsePredictReturn {
   manager: ManagerData | null
   summary: ManagerSummary | null
   positions: Position[]
+  ranges: RangePosition[]
   mintPrice: { up: number; down: number } | null
   walletDusdcBalance: bigint
   loading: boolean
@@ -121,9 +163,28 @@ interface UsePredictReturn {
   createManager: (signAndExecute: any) => Promise<void>
   deposit: (signAndExecute: any, amount: string) => Promise<void>
   withdraw: (signAndExecute: any, amount: string) => Promise<void>
-  mint: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', amount: number) => Promise<void>
-  mintRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, amount: number) => Promise<void>
+  /**
+   * Mint a directional position. Smart-fallback flow:
+   *  - No manager → returns `{ needsManager: true }`; caller must use
+   *    `createManagerAndMint` instead.
+   *  - Manager exists, balance < amount → chains a `predict_manager::deposit`
+   *    from the wallet DBUSDC into the same PTB.
+   *  - Manager exists, balance ≥ amount → single `predict::mint`.
+   */
+  mint: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', amount: number) => Promise<{ needsManager: true } | { success: true }>
+  /**
+   * Mint a directional position when no manager exists yet. Single PTB:
+   * `create_manager` → `predict_manager::deposit` → `market_key::up|down` →
+   * `predict::mint`. Single wallet signature.
+   */
+  createManagerAndMint: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', amount: number) => Promise<void>
+  /** Range-mode counterpart of `mint`. */
+  mintRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, amount: number) => Promise<{ needsManager: true } | { success: true }>
+  /** Range-mode counterpart of `createManagerAndMint`. */
+  createManagerAndMintRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, amount: number) => Promise<void>
   redeem: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', quantity: number, settled: boolean) => Promise<void>
+  /** Redeem a range position. `settled=true` switches to the permissionless variant. */
+  redeemRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, quantity: number, settled: boolean) => Promise<void>
   fetchMintPrice: (oracleId: string, strike: number) => void
   refreshData: () => Promise<void>
   getTradeQuote: (oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', quantity: number) => Promise<TradeQuote | null>
@@ -140,13 +201,15 @@ export function usePredict(): UsePredictReturn {
   const [manager, setManager] = useState<ManagerData | null>(null)
   const [summary, setSummary] = useState<ManagerSummary | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
+  const [ranges, setRanges] = useState<RangePosition[]>([])
   const [mintPrice, setMintPrice] = useState<{ up: number; down: number } | null>(null)
   const [walletDusdc, setWalletDusdc] = useState<bigint>(BigInt(0))
   // const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const DUSDC_TYPE = '0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC'
-  const PREDICT_PACKAGE = '0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138'
+  const DUSDC_TYPE = cfg.predict.dusdcType ?? '0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC'
+  const PREDICT_PACKAGE = cfg.predict.packageId ?? '0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138'
+  const PREDICT_OBJECT_ID = cfg.predict.objectId ?? '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a'
 
   // Fetch manager and summary
   const refreshData = useCallback(async () => {
@@ -158,6 +221,7 @@ export function usePredict(): UsePredictReturn {
       setManager(null)
       setSummary(null)
       setPositions([])
+      setRanges([])
       setWalletDusdc(BigInt(0))
       setError('Predict is currently only supported on Testnet. Switch to Testnet in the top bar to use it.')
       return
@@ -184,6 +248,7 @@ export function usePredict(): UsePredictReturn {
         setManager(null)
         setSummary(null)
         setPositions([])
+        setRanges([])
         return
       }
       const userManager = data.find((m: ManagerData) => m.owner === account.address)
@@ -204,10 +269,23 @@ export function usePredict(): UsePredictReturn {
         if (posData) {
           setPositions(posData.filter((p: Position) => Number(p.open_quantity) > 0))
         }
+
+        // Range positions — single endpoint per Phase 3.1. If the indexer
+        // doesn't ship this yet, the empty list keeps the popover happy.
+        const rangesData = await safeJsonGet<RangePosition[]>(
+          `${SERVER}/managers/${userManager.manager_id}/ranges`,
+          'GET /ranges',
+        )
+        if (rangesData) {
+          setRanges(rangesData.filter((r) => Number(r.open_quantity) > 0))
+        } else {
+          setRanges([])
+        }
       } else {
         setManager(null)
         setSummary(null)
         setPositions([])
+        setRanges([])
       }
     } catch (e) {
       console.error('Failed to find manager:', e)
@@ -311,29 +389,80 @@ export function usePredict(): UsePredictReturn {
     }
   }
 
+  // Shared smart-fallback logic: build a PTB that mints `amount` of DBUSDC
+  // positions, automatically chaining a wallet→manager deposit when the
+  // manager's trading balance is short of `amount`. Returns a tagged union
+  // indicating which path was taken.
+  //
+  // `buildKeyAndMint` is a callback that, given a tx, adds the market_key
+  // (binary) or range_key (range) call + the predict::mint call and returns
+  // nothing. The deposit leg is appended *before* the mint call, so the
+  // manager's balance is credited before the mint reads it.
+  //
+  // If `manager` is null, returns `{ needsManager: true }` and writes
+  // nothing to the transaction (caller is expected to use
+  // `createManagerAndMint` / `createManagerAndMintRange` instead).
+  const mintWithFallback = async (
+    signAndExecute: any,
+    amount: number,
+    buildKeyAndMint: (tx: any) => Promise<void> | void,
+  ): Promise<{ needsManager: true } | { success: true }> => {
+    if (!account) return { needsManager: true as const }
+    if (!manager) return { needsManager: true as const }
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const tx = new Transaction()
+      const qtyU6 = BigInt(Math.round(amount * 1e6))
+
+      // Compute shortfall: positive value means we need to deposit
+      // `shortfallU6` of DBUSDC from the wallet before the mint can read
+      // the credited balance.
+      const balanceU6 = summary ? BigInt(summary.trading_balance) : BigInt(0)
+      const shortfallU6 = qtyU6 > balanceU6 ? qtyU6 - balanceU6 : BigInt(0)
+
+      if (shortfallU6 > BigInt(0)) {
+        const splitCoin = await addCoinMergeAndSplit(tx, account, RPC, DUSDC_TYPE, shortfallU6)
+        tx.moveCall({
+          target: `${PREDICT_PACKAGE}::predict_manager::deposit`,
+          typeArguments: [DUSDC_TYPE],
+          arguments: [tx.object(manager.manager_id), splitCoin],
+        })
+      }
+
+      await buildKeyAndMint(tx)
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+      return { success: true as const }
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
+  }
+
   const mint = async (
     signAndExecute: any,
     oracleId: string,
     expiryMs: number,
     strike: number,
     direction: 'up' | 'down',
-    amount: number
+    amount: number,
   ) => {
-    if (!account || !manager) return
+    if (!account) return { needsManager: true as const }
+    if (!manager) return { needsManager: true as const }
 
-    setError(null)
-    try {
-      const { Transaction } = await import('@mysten/sui/transactions')
-      const PREDICT_OBJECT_ID = '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a'
-      const CLOCK = '0x6'
-
-      const tx = new Transaction()
+    return mintWithFallback(signAndExecute, amount, (tx) => {
       const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
       const qty = BigInt(Math.round(amount * 1e6))
 
-      const keyFn = direction === 'up' ? 'up' : 'down'
       const key = tx.moveCall({
-        target: `${PREDICT_PACKAGE}::market_key::${keyFn}`,
+        target: `${PREDICT_PACKAGE}::market_key::${direction}`,
         arguments: [
           tx.pure.id(oracleId),
           tx.pure.u64(expiryMs),
@@ -343,6 +472,290 @@ export function usePredict(): UsePredictReturn {
 
       tx.moveCall({
         target: `${PREDICT_PACKAGE}::predict::mint`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [
+          tx.object(PREDICT_OBJECT_ID),
+          tx.object(manager.manager_id),
+          tx.object(oracleId),
+          key,
+          tx.pure.u64(qty),
+          tx.object(CLOCK),
+        ],
+      })
+    })
+  }
+
+  // Single-PTB path: create_manager → deposit → key → mint. If the Move
+  // signature auto-shares the manager (the return value of create_manager
+  // is a shared object), this throws at the second moveCall — caller is
+  // expected to retry via `createManager` + `mint` as a two-sig fallback.
+  const createManagerAndMint = async (
+    signAndExecute: any,
+    oracleId: string,
+    expiryMs: number,
+    strike: number,
+    direction: 'up' | 'down',
+    amount: number,
+  ) => {
+    if (!account) return
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const tx = new Transaction()
+
+      // Step 1: create manager — bind the result so subsequent calls can
+      // reference it inside the same PTB.
+      const managerArg = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::create_manager`,
+        arguments: [],
+      })
+
+      // Step 2: pull the full `amount` out of the wallet and deposit it.
+      const depositU6 = BigInt(Math.round(amount * 1e6))
+      const splitCoin = await addCoinMergeAndSplit(tx, account, RPC, DUSDC_TYPE, depositU6)
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict_manager::deposit`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [managerArg, splitCoin],
+      })
+
+      // Step 3 + 4: market key + mint.
+      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
+      const qty = BigInt(Math.round(amount * 1e6))
+      const key = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::market_key::${direction}`,
+        arguments: [
+          tx.pure.id(oracleId),
+          tx.pure.u64(expiryMs),
+          tx.pure.u64(strikeScaled),
+        ],
+      })
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::mint`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [
+          tx.object(PREDICT_OBJECT_ID),
+          managerArg,
+          tx.object(oracleId),
+          key,
+          tx.pure.u64(qty),
+          tx.object(CLOCK),
+        ],
+      })
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
+  }
+
+  const mintRange = async (
+    signAndExecute: any,
+    oracleId: string,
+    expiryMs: number,
+    lower: number,
+    higher: number,
+    amount: number,
+  ) => {
+    if (!account) return { needsManager: true as const }
+    if (!manager) return { needsManager: true as const }
+
+    return mintWithFallback(signAndExecute, amount, (tx) => {
+      const lowerScaled = BigInt(Math.round(lower)) * PRICE_SCALE
+      const higherScaled = BigInt(Math.round(higher)) * PRICE_SCALE
+      const qty = BigInt(Math.round(amount * 1e6))
+
+      const key = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::range_key::new`,
+        arguments: [
+          tx.pure.id(oracleId),
+          tx.pure.u64(expiryMs),
+          tx.pure.u64(lowerScaled),
+          tx.pure.u64(higherScaled),
+        ],
+      })
+
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::mint_range`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [
+          tx.object(PREDICT_OBJECT_ID),
+          tx.object(manager.manager_id),
+          tx.object(oracleId),
+          key,
+          tx.pure.u64(qty),
+          tx.object(CLOCK),
+        ],
+      })
+    })
+  }
+
+  const createManagerAndMintRange = async (
+    signAndExecute: any,
+    oracleId: string,
+    expiryMs: number,
+    lower: number,
+    higher: number,
+    amount: number,
+  ) => {
+    if (!account) return
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const tx = new Transaction()
+
+      const managerArg = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::create_manager`,
+        arguments: [],
+      })
+
+      const depositU6 = BigInt(Math.round(amount * 1e6))
+      const splitCoin = await addCoinMergeAndSplit(tx, account, RPC, DUSDC_TYPE, depositU6)
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict_manager::deposit`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [managerArg, splitCoin],
+      })
+
+      const lowerScaled = BigInt(Math.round(lower)) * PRICE_SCALE
+      const higherScaled = BigInt(Math.round(higher)) * PRICE_SCALE
+      const qty = BigInt(Math.round(amount * 1e6))
+      const key = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::range_key::new`,
+        arguments: [
+          tx.pure.id(oracleId),
+          tx.pure.u64(expiryMs),
+          tx.pure.u64(lowerScaled),
+          tx.pure.u64(higherScaled),
+        ],
+      })
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::mint_range`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [
+          tx.object(PREDICT_OBJECT_ID),
+          managerArg,
+          tx.object(oracleId),
+          key,
+          tx.pure.u64(qty),
+          tx.object(CLOCK),
+        ],
+      })
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
+  }
+
+  // Redeem a directional position back into the manager.
+  // Mirrors predict_workshop/redeemPosition.ts.
+  //   - settled=false → predict::redeem (oracle still live)
+  //   - settled=true  → predict::redeem_permissionless
+  const redeem = async (
+    signAndExecute: any,
+    oracleId: string,
+    expiryMs: number,
+    strike: number,        // dollars (human units)
+    direction: 'up' | 'down',
+    quantity: number,      // dollars face value (human units)
+    settled: boolean,
+  ) => {
+    if (!account || !manager) return
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const target = settled ? 'redeem_permissionless' : 'redeem'
+
+      const tx = new Transaction()
+      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
+      const qty = BigInt(Math.round(quantity * 1e6))
+
+      const key = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::market_key::${direction}`,
+        arguments: [
+          tx.pure.id(oracleId),
+          tx.pure.u64(expiryMs),
+          tx.pure.u64(strikeScaled),
+        ],
+      })
+
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::${target}`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [
+          tx.object(PREDICT_OBJECT_ID),
+          tx.object(manager.manager_id),
+          tx.object(oracleId),
+          key,
+          tx.pure.u64(qty),
+          tx.object(CLOCK),
+        ],
+      })
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
+  }
+
+  // Range counterpart of `redeem`. Mirrors predict_workshop/redeemRange.ts.
+  //   - settled=false → predict::redeem_range
+  //   - settled=true  → predict::redeem_range_permissionless
+  const redeemRange = async (
+    signAndExecute: any,
+    oracleId: string,
+    expiryMs: number,
+    lower: number,         // dollars (human units)
+    higher: number,        // dollars (human units)
+    quantity: number,      // dollars face value (human units)
+    settled: boolean,
+  ) => {
+    if (!account || !manager) return
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const target = settled ? 'redeem_range_permissionless' : 'redeem_range'
+
+      const tx = new Transaction()
+      const lowerScaled = BigInt(Math.round(lower)) * PRICE_SCALE
+      const higherScaled = BigInt(Math.round(higher)) * PRICE_SCALE
+      const qty = BigInt(Math.round(quantity * 1e6))
+
+      const key = tx.moveCall({
+        target: `${PREDICT_PACKAGE}::range_key::new`,
+        arguments: [
+          tx.pure.id(oracleId),
+          tx.pure.u64(expiryMs),
+          tx.pure.u64(lowerScaled),
+          tx.pure.u64(higherScaled),
+        ],
+      })
+
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict::${target}`,
         typeArguments: [DUSDC_TYPE],
         arguments: [
           tx.object(PREDICT_OBJECT_ID),
@@ -398,8 +811,6 @@ export function usePredict(): UsePredictReturn {
 
     try {
       const { Transaction } = await import('@mysten/sui/transactions')
-      const PREDICT_OBJECT_ID = '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a'
-      const CLOCK = '0x6'
 
       // Use account address for devInspect (or fallback to ZERO_ADDR)
       const senderAddr = account?.address || '0x0000000000000000000000000000000000000000000000000000000000000000'
@@ -461,124 +872,6 @@ export function usePredict(): UsePredictReturn {
     }
   }
 
-  // Mint a range position
-  const mintRange = async (
-    signAndExecute: any,
-    oracleId: string,
-    expiryMs: number,
-    lower: number,
-    higher: number,
-    amount: number
-  ) => {
-    if (!account || !manager) return
- 
-    setError(null)
-    try {
-      const { Transaction } = await import('@mysten/sui/transactions')
-      const PREDICT_OBJECT_ID = '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a'
-      const CLOCK = '0x6'
-
-      const tx = new Transaction()
-      const lowerScaled = BigInt(Math.round(lower)) * PRICE_SCALE
-      const higherScaled = BigInt(Math.round(higher)) * PRICE_SCALE
-      const qty = BigInt(Math.round(amount * 1e6))
-
-      // Create range key
-      const key = tx.moveCall({
-        target: `${PREDICT_PACKAGE}::range_key::new`,
-        arguments: [
-          tx.pure.id(oracleId),
-          tx.pure.u64(expiryMs),
-          tx.pure.u64(lowerScaled),
-          tx.pure.u64(higherScaled),
-        ],
-      })
-
-      tx.moveCall({
-        target: `${PREDICT_PACKAGE}::predict::mint_range`,
-        typeArguments: [DUSDC_TYPE],
-        arguments: [
-          tx.object(PREDICT_OBJECT_ID),
-          tx.object(manager.manager_id),
-          tx.object(oracleId),
-          key,
-          tx.pure.u64(qty),
-          tx.object(CLOCK),
-        ],
-      })
-
-      const result = await signAndExecute({ transaction: tx })
-      if (result.FailedTransaction) {
-        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
-      }
-
-      await refreshData()
-    } catch (e: any) {
-      setError(e.message)
-      throw e
-    }
-  }
-
-  // Redeem a directional position back into the manager.
-  // Mirrors predict_workshop/redeemPosition.ts.
-  //   - settled=false → predict::redeem (oracle still live)
-  //   - settled=true  → predict::redeem_permissionless
-  const redeem = async (
-    signAndExecute: any,
-    oracleId: string,
-    expiryMs: number,
-    strike: number,        // dollars (human units)
-    direction: 'up' | 'down',
-    quantity: number,      // dollars face value (human units)
-    settled: boolean,
-  ) => {
-    if (!account || !manager) return
-
-    setError(null)
-    try {
-      const { Transaction } = await import('@mysten/sui/transactions')
-      const PREDICT_OBJECT_ID = '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a'
-      const CLOCK = '0x6'
-      const target = settled ? 'redeem_permissionless' : 'redeem'
-
-      const tx = new Transaction()
-      const strikeScaled = BigInt(Math.round(strike)) * PRICE_SCALE
-      const qty = BigInt(Math.round(quantity * 1e6))
-
-      const key = tx.moveCall({
-        target: `${PREDICT_PACKAGE}::market_key::${direction}`,
-        arguments: [
-          tx.pure.id(oracleId),
-          tx.pure.u64(expiryMs),
-          tx.pure.u64(strikeScaled),
-        ],
-      })
-
-      tx.moveCall({
-        target: `${PREDICT_PACKAGE}::predict::${target}`,
-        typeArguments: [DUSDC_TYPE],
-        arguments: [
-          tx.object(PREDICT_OBJECT_ID),
-          tx.object(manager.manager_id),
-          tx.object(oracleId),
-          key,
-          tx.pure.u64(qty),
-          tx.object(CLOCK),
-        ],
-      })
-
-      const result = await signAndExecute({ transaction: tx })
-      if (result.FailedTransaction) {
-        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
-      }
-
-      await refreshData()
-    } catch (e: any) {
-      setError(e.message)
-      throw e
-    }
-  }
-
   // Get range quote via devInspect
   const getRangeQuote = async (
     oracleId: string,
@@ -590,11 +883,9 @@ export function usePredict(): UsePredictReturn {
     if (!oracleId || !expiryMs || lower <= 0 || higher <= 0 || quantity <= 0) {
       return null
     }
- 
+
     try {
       const { Transaction } = await import('@mysten/sui/transactions')
-      const PREDICT_OBJECT_ID = '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a'
-      const CLOCK = '0x6'
 
       const senderAddr = account?.address || '0x0000000000000000000000000000000000000000000000000000000000000000'
 
@@ -656,6 +947,7 @@ export function usePredict(): UsePredictReturn {
     manager,
     summary,
     positions,
+    ranges,
     mintPrice,
     walletDusdcBalance: walletDusdc,
     loading: false,
@@ -664,8 +956,11 @@ export function usePredict(): UsePredictReturn {
     deposit,
     withdraw,
     mint,
+    createManagerAndMint,
     mintRange,
+    createManagerAndMintRange,
     redeem,
+    redeemRange,
     fetchMintPrice,
     refreshData,
     getTradeQuote,

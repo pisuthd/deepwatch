@@ -20,7 +20,8 @@ import {
   Sparkles,
   Sparkle,
   Goal,
-  Download
+  Download,
+  Layers
 } from 'lucide-react';
 import { categories, type PageId } from '../../types/navigation';
 
@@ -45,7 +46,8 @@ const iconMap: Record<string, typeof TrendingUp> = {
   Sparkles,
   Sparkle,
   Goal,
-  LineChart
+  LineChart,
+  Layers
 };
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {

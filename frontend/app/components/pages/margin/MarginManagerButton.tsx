@@ -1,19 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ListChecks } from 'lucide-react';
-import { usePredict } from '../../../hooks/usePredict';
-import PositionsPopover from './PositionsPopover';
+import { Layers } from 'lucide-react';
+import { useMargin } from '../../../hooks/useMargin';
+import MarginManagerPopover from './MarginManagerPopover';
 
 const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 
-export default function PositionsButton() {
-  const { positions, ranges } = usePredict();
+/**
+ * Trailing button on the /app/margin page that opens the MarginManager
+ * popover. Mirrors the `AccountOverviewButton` / `PositionsButton` pattern
+ * from the predict page: outside-click closes, badge counts the user's
+ * margin managers.
+ */
+export default function MarginManagerButton() {
+  const { managers } = useMargin();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Outside-click closes
   useEffect(() => {
     if (!open) return;
     const onMouseDown = (e: MouseEvent) => {
@@ -25,8 +30,7 @@ export default function PositionsButton() {
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [open]);
 
-  // Badge sums binary + range open positions.
-  const count = positions.length + ranges.length;
+  const count = managers.length;
 
   return (
     <div className="relative" ref={wrapperRef}>
@@ -38,10 +42,10 @@ export default function PositionsButton() {
           borderColor: 'var(--color-border-default)',
           color: open ? cyan : textPrimary,
         }}
-        aria-label="Positions"
+        aria-label="Margin managers"
       >
-        <ListChecks size={14} />
-        <span className="text-xs font-semibold">Positions</span>
+        <Layers size={14} />
+        <span className="text-xs font-semibold">Managers</span>
         {count > 0 && (
           <span
             className="text-[10px] font-mono font-semibold rounded-full px-1.5 py-px min-w-[18px] text-center"
@@ -56,7 +60,7 @@ export default function PositionsButton() {
         )}
       </button>
 
-      {open && <PositionsPopover onClose={() => setOpen(false)} />}
+      {open && <MarginManagerPopover onClose={() => setOpen(false)} />}
     </div>
   );
 }
