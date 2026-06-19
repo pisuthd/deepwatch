@@ -1,0 +1,16 @@
+[package]
+name = "deepwatch"
+edition = "2024"
+
+[dependencies]
+# Sui framework — provides object, coin, balance, clock, etc.
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+
+[addresses]
+deepwatch = "0x0"
+
+[dev-addresses]
+# Used by `sui move test` so the test coin types resolve to a real
+# on-chain address (otherwise the test files won't compile because
+# Move requires type parameters to have a known size at publish time).
+deepwatch = "0x0"
