@@ -50,7 +50,6 @@ import { useAiBatch } from '@/app/stores/ai-batch-store';
 import type { CmcContext } from '@/app/lib/match-analyses';
 import type { DeepBookMatch } from '@/app/lib/match';
 
-const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 const green = '#00E68A';
@@ -140,25 +139,16 @@ export default function AiAnalyseModal() {
                   <h2
                     className="text-base font-bold flex items-center gap-2"
                     style={{ color: textPrimary }}
-                  >
-                    <Sparkles size={14} style={{ color: cyan }} />
-                    AI batch analysis
+                  > 
+                    AI analysis
                     {isAnalysing && (
                       <span
                         className="text-[10px] uppercase tracking-wider font-semibold"
-                        style={{ color: cyan }}
+                        style={{ color: green }}
                       >
                         running in background
                       </span>
-                    )}
-                    {isReviewing && (
-                      <span
-                        className="text-[10px] uppercase tracking-wider font-semibold"
-                        style={{ color: textSecondary }}
-                      >
-                        ready to start
-                      </span>
-                    )}
+                    )} 
                   </h2>
                   <div
                     className="text-xs mt-1 font-mono"
@@ -167,7 +157,7 @@ export default function AiAnalyseModal() {
                     {isIdle
                       ? 'No batch running.'
                       : isReviewing
-                        ? `Ready to analyse ${totalCount} ${totalCount === 1 ? 'market' : 'markets'}. Review the list below, then click Start.`
+                        ? `${totalCount} ${totalCount === 1 ? 'market is' : 'markets are'} queued for analysis — review the list below, then click Start analysis to begin.`
                         : isDone
                           ? `Done — ${doneCount} of ${totalCount} markets analysed.`
                           : isError
@@ -202,7 +192,7 @@ export default function AiAnalyseModal() {
                 >
                   <motion.div
                     className="h-full"
-                    style={{ background: cyan }}
+                    style={{ background: green }}
                     animate={{ width: `${progressPct}%` }}
                     transition={{ duration: 0.2 }}
                   />
@@ -349,15 +339,14 @@ function ReviewPanel({
         <button
           type="button"
           onClick={onStart}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-bold transition-opacity"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-bold transition-opacity hover:opacity-90"
           style={{
-            background: 'rgba(62, 196, 192, 0.18)',
-            border: '1px solid rgba(62, 196, 192, 0.4)',
-            color: cyan,
+            background: green,
+            color: '#000',
           }}
           title="Fire the AI analysis. This is when tokens start getting spent."
         >
-          <Play size={13} fill={cyan} />
+          <Play size={13} fill="#000" />
           Start analysis
         </button>
         <button
@@ -384,7 +373,7 @@ function ReadyChip({ match }: { match: DeepBookMatch }) {
   if (typeof match.dbProb === 'number') venues.push('DB');
   if (typeof match.polyProb === 'number') venues.push('Poly');
   if (typeof match.kalshiProb === 'number') venues.push('Kalshi');
-  const color = venues.length >= 2 ? cyan : red;
+  const color = venues.length >= 2 ? green : red;
   const title = venues.length >= 2
     ? `Quoted on ${venues.length} venues — actionable`
     : `Only ${venues.length} venue${venues.length === 1 ? '' : 's'} — AI will return NEUTRAL`;
@@ -414,13 +403,13 @@ function MacroContextCard({ cmcContext }: { cmcContext: CmcContext }) {
     <div
       className="rounded-lg p-3 space-y-1.5"
       style={{
-        background: 'rgba(62, 196, 192, 0.06)',
-        border: '1px solid rgba(62, 196, 192, 0.18)',
+        background: 'rgba(0, 230, 138, 0.06)',
+        border: '1px solid rgba(0, 230, 138, 0.18)',
       }}
     >
       <div
         className="text-[10px] font-mono uppercase tracking-wider"
-        style={{ color: cyan }}
+        style={{ color: green }}
       >
         Macro context
       </div>
@@ -480,7 +469,7 @@ function AnalysingPanel({
         <Loader2
           size={32}
           className="animate-spin"
-          style={{ color: cyan }}
+          style={{ color: green }}
         />
         <div className="text-center space-y-1">
           <div
@@ -507,7 +496,7 @@ function AnalysingPanel({
       >
         <motion.div
           className="h-full"
-          style={{ background: cyan }}
+          style={{ background: green }}
           animate={{ width: `${progressPct}%` }}
           transition={{ duration: 0.25 }}
         />
@@ -557,9 +546,9 @@ function DonePanel({
           onClick={onReanalyse}
           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
           style={{
-            background: 'rgba(62, 196, 192, 0.12)',
-            border: '1px solid rgba(62, 196, 192, 0.3)',
-            color: cyan,
+            background: 'rgba(0, 230, 138, 0.12)',
+            border: '1px solid rgba(0, 230, 138, 0.3)',
+            color: green,
           }}
         >
           <RefreshCcw size={12} />
@@ -608,9 +597,9 @@ function ErrorPanel({
           onClick={onRetry}
           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
           style={{
-            background: 'rgba(62, 196, 192, 0.12)',
-            border: '1px solid rgba(62, 196, 192, 0.3)',
-            color: cyan,
+            background: 'rgba(0, 230, 138, 0.12)',
+            border: '1px solid rgba(0, 230, 138, 0.3)',
+            color: green,
           }}
         >
           <RefreshCcw size={12} />
@@ -682,7 +671,7 @@ function ReasoningPanel({
           {thinkingBuf.length > 0 && (
             <pre
               className="whitespace-pre-wrap font-mono"
-              style={{ color: cyan, opacity: 0.7 }}
+              style={{ color: green, opacity: 0.7 }}
             >
               {thinkingBuf}
             </pre>

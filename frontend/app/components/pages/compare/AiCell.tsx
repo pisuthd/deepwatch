@@ -3,27 +3,34 @@
 /**
  * AiCell — the per-row AI column on the Compare table.
  *
- * Three branches driven by `useStake` and `useMatchAnalyses`:
+ * Visibility is gated by `useStake`:
  *
- *   A. **Locked** (no wallet / not a staker in v1)
- *      → dimmed Lock icon, "Connect a staked wallet to use AI insights"
+ *   - **Staker** (`isStaker === true`) → full UI
+ *       A. No analysis yet → right-aligned "Analyse" pill button.
+ *          onClick → `onClickAnalyse(match.key)` so the parent can
+ *          open the batch modal and analyse all visible matches at once.
+ *       B. Analysis exists → four compact lines:
+ *            1. signal pill (`▲ UP · 5%` / `▼ DOWN · 3%` / `▬ NEUTRAL · 0%`)
+ *            2. confidence (e.g. `conf 72%`)
+ *            3. price line (`DB 55¢ · Poly 51¢ · Kalshi 52%`)
+ *            4. reasoning, truncated, full text in `title` tooltip
  *
- *   B. **Staker, no analysis yet**
- *      → right-aligned "Analyse" pill button (Sparkles + label).
- *        onClick → `onClickAnalyse(match.key)` so the parent can
- *        open the batch modal and analyse all visible matches at once.
+ *   - **Non-staker** → locked by default
+ *       C. Has an analysis (i.e. this match sits in the **free slice**
+ *          of some batch — the first FREE_SLICE_SIZE entries are
+ *          public, stored in `b.results[match.key]`) → show the
+ *          analysis. Otherwise show "Analysing…" while a batch is
+ *          in-flight on this row.
+ *       D. Otherwise → "Stake to unlock" pill that links to
+ *          `/app/stake`. Non-stakers can only see the public
+ *          free-slice results; markets 4+ per batch are Seal-
+ *          encrypted and require a valid Subscription NFT.
  *
- *   C. **Staker, analysis exists**
- *      → four compact lines:
- *           1. signal pill (`▲ UP · 5%` / `▼ DOWN · 3%` / `▬ NEUTRAL · 0%`)
- *           2. confidence (e.g. `conf 72%`)
- *           3. price line (`DB 55¢ · Poly 51¢ · Kalshi 52%`)
- *           4. reasoning, truncated, full text in `title` tooltip
- *
- * The cell is read-only once populated (Branch C) — v1 doesn't expose
- * a re-analyse affordance. To force a refresh, clear `localStorage`
- * `deepwatch:match-analyses:v1` and click Analyse again. The real
- * fix (per-row refresh + staleness indicator) is a v1.1 follow-up.
+ * The cell is read-only once populated (Branch B / C) — v1 doesn't
+ * expose a re-analyse affordance. To force a refresh, clear
+ * `localStorage` `deepwatch:match-analyses:v1` and click Analyse
+ * again. The real fix (per-row refresh + staleness indicator) is a
+ * v1.1 follow-up.
  *
  * Visual constants are shared with `MatchTable` so the cell reads
  * consistently against the rest of the row.
@@ -183,16 +190,12 @@ export default function AiCell({ match, onClickAnalyse }: AiCellProps) {
     return state.matches?.some((m) => m.key === match.key) ?? false;
   }, [state.phase, state.matches, match.key]);
 
-  // While the store is hydrating from localStorage, optimistically
-  // render Branch A (locked) so we don't flash a staker Analyse pill
-  // that vanishes a frame later when the persisted read restores. The
-  // store hydrates synchronously inside a useEffect — by the second
-  // render the real answer is in place.
-  //
-  // In-flight results from the provider's `latestResults` take
-  // precedence over the persisted cache, so the cell updates in
-  // real-time as the SSE stream produces results (no need to wait
-  // for the batch's `onBatchComplete` flush).
+  // While the store is hydrating from localStorage, `persisted` is
+  // null — the cell stays locked / "Analyse" until the cache lands
+  // (synchronously inside a useEffect). The in-flight result from the
+  // provider's `latestResults` takes precedence over the persisted
+  // cache so the cell updates in real-time as the SSE stream
+  // produces results (no need to wait for `onBatchComplete` to flush).
   const persisted = useMemo<MatchAnalysis | null>(
     () => (hydrated ? getByMatchKey(match.key) : null),
     [hydrated, getByMatchKey, match.key],
@@ -203,22 +206,64 @@ export default function AiCell({ match, onClickAnalyse }: AiCellProps) {
   );
   const analysis = inFlight ?? persisted;
 
-  // Branch A — locked.
+  // --- Non-staker branches (locked-by-default) ---------------------
+  // The 3 free-slice matches of each batch are public and land in the
+  // local `match-analyses` cache (which is what `analysis` reads).
+  // Anything that isn't in the cache defaults to locked, regardless of
+  // whether the user is "currently looking at" an encrypted match —
+  // we only render the analysis when the data is actually available,
+  // so the free-slice carve-out falls out of the cache hit.
   if (!isStaker) {
+    if (analysis) {
+      return (
+        <div className="flex justify-end">
+          <AnalysisView analysis={analysis} match={match} />
+        </div>
+      );
+    }
+    if (isAnalysing) {
+      return (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            disabled
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded uppercase font-semibold transition-opacity disabled:opacity-50"
+            style={{
+              background: 'rgba(0, 230, 138, 0.12)',
+              border: '1px solid rgba(0, 230, 138, 0.3)',
+              color: green,
+              fontSize: 10,
+              letterSpacing: '0.05em',
+            }}
+            title="AI analysis in progress…"
+          >
+            <Sparkles size={10} />
+            Analysing…
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex justify-end">
-        <span
-          className="inline-flex items-center justify-center w-6 h-6 rounded opacity-50"
-          style={{ background: 'rgba(0, 230, 138, 0.08)' }}
-          title="Connect a staked wallet to use AI insights."
+        <a
+          href="/app/stake"
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md uppercase font-bold transition-opacity hover:opacity-90"
+          style={{
+            background: green,
+            color: '#000',
+            fontSize: 10,
+            letterSpacing: '0.05em',
+          }}
+          title="Stake PLP on the Stake page to unlock encrypted AI insights."
         >
-          <Lock size={11} style={{ color: green }} />
-        </span>
+          <Lock size={10} />
+          Stake to unlock
+        </a>
       </div>
     );
   }
 
-  // Branch C — analysis exists.
+  // --- Staker branches (full UI) -----------------------------------
   if (analysis) {
     return (
       <div className="flex justify-end">
@@ -227,9 +272,6 @@ export default function AiCell({ match, onClickAnalyse }: AiCellProps) {
     );
   }
 
-  // Branch B — staker, no analysis yet. The button is the trigger for
-  // the batch modal; it stays right-aligned to mirror the row's other
-  // venue cells.
   return (
     <div className="flex justify-end">
       <button

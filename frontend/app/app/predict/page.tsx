@@ -4,8 +4,6 @@ import { useEffect } from 'react';
 import TradeWrapper from '../../components/common/TradeWrapper';
 import PredictPage from '../../components/pages/predict/page';
 import PositionsButton from '../../components/pages/predict/PositionsButton';
-import AccountOverviewButton from '../../components/pages/predict/AccountOverviewButton';
-import InsightButton from '../../components/pages/insights/InsightButton';
 import MatchInsightButton from '../../components/pages/predict/MatchInsightButton';
 import AutoPopupMatchInsight from '../../components/pages/predict/AutoPopupMatchInsight';
 import { CurrentMarketProvider } from '../../components/pages/predict/CurrentMarketContext';
@@ -56,9 +54,7 @@ export default function Page() {
       <TradeWrapper
         trailing={
           <>
-            <InsightButton />
             <MatchInsightButton />
-            <AccountOverviewButton />
             <PositionsButton />
           </>
         }

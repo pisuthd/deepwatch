@@ -38,7 +38,7 @@
  *     demand as a backup.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import PageWrapper from '../../common/PageWrapper';
 import FilterBar, {
   applyHorizon,
@@ -51,6 +51,8 @@ import DrilldownPanel from './DrilldownPanel';
 import AiAnalyseModal from './AiAnalyseModal';
 import { useGlobalMarkets } from '../../../stores/markets-store';
 import { useAiBatch } from '@/app/stores/ai-batch-store';
+import { useMatchAnalyses } from '@/app/stores/match-analyses-store';
+import { useBatchIndex } from '@/app/stores/batch-index-store';
 import {
   groupPolymarketMarkets,
   type PolymarketGroup,
@@ -77,6 +79,8 @@ export default function ComparePageClient() {
     refresh: refreshMarkets,
   } = useGlobalMarkets();
   const { prepareBatch } = useAiBatch();
+  const batchIndex = useBatchIndex();
+  const matchAnalyses = useMatchAnalyses();
 
   const [asset, setAsset] = useState<string>('BTC');
   const [horizon, setHorizon] = useState<Horizon>('all');
@@ -123,6 +127,14 @@ export default function ComparePageClient() {
 
   // Apply horizon + sort. Use `lastFetched.deepbook` as a clock to
   // bust the memo when spot/expiry windows shift (90s cadence).
+  //
+  // **Pure sort, no analyzed-first grouping.** The table is sorted
+  // purely by the user's chosen key (expiry / spread / question).
+  // Analyzed matches land wherever the sort places them — a 5m-out
+  // locked match sorts above a 19h analyzed match, not below it.
+  // The 3 free-slice matches are still highlighted via the AI cell
+  // (AnalysisView vs "Stake to unlock"), so the user can spot them
+  // by their content, not by position.
   const filtered = useMemo<DeepBookMatch[]>(
     () => applySort(applyHorizon(allMatches, horizon), sort),
     // `lastFetched.deepbook` is the deepest of the three fetch stamps;
@@ -154,15 +166,18 @@ export default function ComparePageClient() {
     }
   }, [cmcContext]);
 
-  // Clicked "Analyse" on any row → snapshot the visible matches, force a
-  // re-fetch of the latest market data (so the analysis runs on truly
-  // up-to-date numbers, not whatever the 90s poll last cached), and hand
-  // everything to the provider's `prepareBatch`. The provider opens the
-  // modal in `reviewing` state — the SSE consumer does NOT fire until
-  // the user clicks "Start analysis" inside the modal. This is the
-  // critical Part-4 fix: previously the modal auto-started the moment
-  // you opened it, which is hostile to the user if they click Analyse
-  // by accident or want to review the match list first.
+  // Clicked "Analyse" on any row → open the modal IMMEDIATELY with the
+  // current snapshot so the user gets instant feedback (no double-click
+  // required). The refresh + CMC fetch run in the background; the 90s
+  // polling cycle already keeps the snapshot fresh enough that waiting
+  // on the refresh before opening the modal was just adding latency.
+  //
+  // The provider opens the modal in `reviewing` state — the SSE
+  // consumer does NOT fire until the user clicks "Start analysis"
+  // inside the modal. If the user clicks Start before the background
+  // refresh resolves, the analysis runs on whatever was visible at
+  // click time (still ≤90s old). The next "Re-analyse" from the
+  // done-panel will pick up the warmed cache.
   const handleClickAnalyse = useCallback(
     (key: string) => {
       // `key` is accepted to match `MatchTable`'s prop signature
@@ -170,18 +185,59 @@ export default function ComparePageClient() {
       // provider analyses the full `filtered` snapshot regardless of
       // which row triggered the click.
       void key;
-      void (async () => {
-        // Fire both in parallel: a fresh markets pull (Polymarket /
-        // DeepBook / Kalshi all three) and a fresh CMC context. The
-        // prepare call below uses the `filtered` snapshot at the moment
-        // of completion, so if the refresh produces new rows they will
-        // be included in the upcoming analysis.
-        const [, ctx] = await Promise.all([refreshMarkets(), ensureCmcContext()]);
-        prepareBatch(filtered, ctx);
-      })();
+      // Open the modal synchronously so the click feels responsive.
+      prepareBatch(filtered, cmcContext);
+      // Fire the background refresh in parallel — fire-and-forget.
+      // The next batch (or re-analyse) gets the warmed cache.
+      void Promise.all([refreshMarkets(), ensureCmcContext()]);
     },
-    [ensureCmcContext, filtered, prepareBatch, refreshMarkets],
+    [cmcContext, ensureCmcContext, filtered, prepareBatch, refreshMarkets],
   );
+
+  // ─── Walrus hydration (Part 6) ────────────────────────────────────────
+  // On mount, kick off the batch-index refresh. Once it resolves,
+  // hydrate `match-analyses` with the latest batch's plaintext
+  // preview (first FREE_SLICE_SIZE markets) — this is what every
+  // visitor sees, regardless of wallet / stake state. The full set
+  // for stakers comes from the Seal-decrypted blob in the second
+  // effect below.
+  //
+  // After a successful batch upload, `AiBatchProvider.onBatchComplete`
+  // already pushes the in-flight entries into `match-analyses-store`
+  // (so the user sees their fresh analyses immediately, before the
+  // Walrus round-trip). The hydration effect below picks up the next
+  // visitor's view of the same batch.
+  useEffect(() => {
+    void batchIndex.refresh();
+    // refresh() is stable from useCallback; running once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Plaintext preview hydration. Runs once per "latest batch changed"
+  // transition. Only fires when `hydrated` is true and we haven't yet
+  // hydrated from this exact batch (so a re-render mid-Walrus-fetch
+  // doesn't loop). Also skips when the user is the uploader of this
+  // batch — the SSE consumer already populated the full in-memory
+  // set (free + encrypted-tail), and the plaintext-only Walrus
+  // preview would regress the user back to 3 visible entries.
+  useEffect(() => {
+    if (!batchIndex.hydrated) return;
+    const latest = batchIndex.latest;
+    if (!latest) return;
+    if (matchAnalyses.lastHydratedBatchId === latest.batchId) return;
+    if (matchAnalyses.lastUploadedBatchId === latest.batchId) {
+      // Still mark "hydrated" for this batch so subsequent re-renders
+      // don't try to re-hydrate. The user keeps the SSE-populated set.
+      matchAnalyses.hydrateFromWalrus(matchAnalyses.state.byKey, latest.batchId);
+      return;
+    }
+    // Preview = the plaintext blob's `results` (first FREE_SLICE_SIZE).
+    matchAnalyses.hydrateFromWalrus(latest.results, latest.batchId);
+  }, [
+    batchIndex.hydrated,
+    batchIndex.latest,
+    matchAnalyses,
+  ]);
 
   return (
     <PageWrapper title="Compare">
@@ -194,6 +250,7 @@ export default function ComparePageClient() {
           sort={sort}
           onSortChange={setSort}
           allMatches={allMatches}
+          spotUsd={spotUsd}
         />
 
         <MatchTable

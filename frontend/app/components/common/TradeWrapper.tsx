@@ -15,15 +15,15 @@ interface TradeWrapperProps {
 }
 
 export default function TradeWrapper({ children, trailing }: TradeWrapperProps) {
-  const [mode, setMode] = useState<TradeMode>('simple');
+  const [mode, setMode] = useState<TradeMode>('advanced');
   const activeIndex = OPTIONS.findIndex((o) => o.value === mode);
 
   return (
     <div className="relative h-full">
       {children(mode)}
-
-      <div className="sticky bottom-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
-        <div className="relative flex items-center gap-0 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] overflow-hidden">
+ 
+      <div className="sticky bottom-6 left-6 right-6 z-50 flex items-center justify-between gap-2">
+        <div className="relative ml-1 flex items-center gap-0 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border-default)] overflow-hidden">
           {OPTIONS.map((opt) => (
             <button
               key={opt.value}
@@ -43,7 +43,7 @@ export default function TradeWrapper({ children, trailing }: TradeWrapperProps) 
           />
         </div>
         {trailing && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pr-1">
             {trailing}
           </div>
         )}

@@ -55,6 +55,13 @@ interface FilterBarProps {
   onSortChange: (next: SortKey) => void;
   /** Full un-filtered list — used to compute per-horizon counts. */
   allMatches: DeepBookMatch[];
+  /**
+   * Current BTC spot (USD). Used to render the "Spot price" indicator
+   * at the top of the page. `null` while the markets feed is still
+   * loading. Picked from the first DeepBook group's `spotUsd` —
+   * DeepBook's SVI surface tracks spot closely across the ladder.
+   */
+  spotUsd: number | null;
 }
 
 function inHorizon(expiryMs: number, days: number | null, now: number): boolean {
@@ -71,6 +78,7 @@ export default function FilterBar({
   sort,
   onSortChange,
   allMatches,
+  spotUsd,
 }: FilterBarProps) {
   const now = Date.now();
 
@@ -102,6 +110,31 @@ export default function FilterBar({
           />
         </div>
 
+        {/* Spot price indicator — shows the current DeepBook spot so the
+            user has the ATM baseline visible at the top of the page.
+            Hidden while the markets feed is still loading. */}
+        {spotUsd != null && spotUsd > 0 && (
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/10"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+            }}
+            title="Current BTC spot price (DeepBook oracle baseline)."
+          >
+            <span
+              className="text-[10px] uppercase tracking-wider font-semibold"
+              style={{ color: textSecondary }}
+            >
+              Spot
+            </span>
+            <span
+              className="font-mono font-bold"
+              style={{ color: '#ffffff', fontSize: 12 }}
+            >
+              ${spotUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+            </span>
+          </div>
+        )}
         {/* Horizon chips */}
         <div
           className="inline-flex items-center rounded-lg p-0.5 gap-0.5"

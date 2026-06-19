@@ -39,7 +39,6 @@ const PRICE_SCALE = 1e9;
 
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
-const cyan = '#3EC4C0';
 const green = '#00E68A';
 const polyTint = '#3b82f6';
 const kalshiTint = '#a855f7';
@@ -321,7 +320,7 @@ function PriceTableHeader() {
         style={{ color: textSecondary, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}
       >
         <th className="px-3 py-2 font-medium" rowSpan={2}>Strike / Range</th>
-        <th className="px-3 py-2 font-medium text-center" colSpan={2} style={{ color: cyan }}>
+        <th className="px-3 py-2 font-medium text-center" colSpan={2} style={{ color: green }}>
           DeepBook
         </th>
         <th className="px-3 py-2 font-medium text-center" colSpan={2} style={{ color: polyTint }}>
@@ -334,7 +333,7 @@ function PriceTableHeader() {
       <tr
         style={{ color: textSecondary, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}
       >
-        <th className="px-3 py-1 font-medium text-right" style={{ color: cyan }}>YES</th>
+        <th className="px-3 py-1 font-medium text-right" style={{ color: green }}>YES</th>
         <th className="px-3 py-1 font-medium text-right" style={{ color: textSecondary }}>NO</th>
         <th className="px-3 py-1 font-medium text-right" style={{ color: polyTint }}>YES</th>
         <th className="px-3 py-1 font-medium text-right" style={{ color: textSecondary }}>NO</th>
@@ -363,7 +362,7 @@ function UpDownTable({ rows }: { rows: UpDownCompareRow[] }) {
               <td className="px-3 py-2 font-mono font-semibold whitespace-nowrap" style={{ color: textPrimary }}>
                 {formatUsd(r.strikeUsd)}
               </td>
-              {priceCell(r.db, cyan)}
+              {priceCell(r.db, green)}
               {priceCell(r.poly, polyTint)}
               {priceCell(r.kalshi, kalshiTint)}
             </tr>
@@ -394,7 +393,7 @@ function RangeTable({ rows }: { rows: RangeCompareRow[] }) {
                 <td className="px-3 py-2 font-mono font-semibold whitespace-nowrap" style={{ color: textPrimary }}>
                   {formatUsd(r.floorStrikeUsd)}–{formatUsd(r.capStrikeUsd)}
                 </td>
-                {priceCell(r.db, cyan)}
+                {priceCell(r.db, green)}
                 {priceCell(r.poly, polyTint)}
                 {priceCell(r.kalshi, kalshiTint)}
               </tr>

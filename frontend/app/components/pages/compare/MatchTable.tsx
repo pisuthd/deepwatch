@@ -42,13 +42,13 @@
  */
 
 import GlassCard from '../../common/GlassCard';
-import { formatDetailedExpiry, formatExpiryDate, formatUsd } from '@/app/lib/format';
+import { Sparkles } from 'lucide-react';
+import { formatDetailedExpiry, formatExpiryDate } from '@/app/lib/format';
 import type { DeepBookMatch } from '@/app/lib/match';
 import AiCell from './AiCell';
 
 const green = '#00E68A';
 const red = '#ef4444';
-const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 const headerBg = 'rgba(255,255,255,0.04)';
@@ -184,7 +184,7 @@ export default function MatchTable({
               <tr className="text-left" style={{ color: textSecondary, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 <th className="px-3 py-2 font-medium">DeepBook Predict Market</th>
                 <th className="px-3 py-2 font-medium">Expiry</th>
-                <th className="px-3 py-2 font-medium text-right" style={{ color: cyan }}>Deepbook</th>
+                <th className="px-3 py-2 font-medium text-right">Deepbook</th>
                 <th className="px-3 py-2 font-medium text-right">Polymarket</th>
                 <th className="px-3 py-2 font-medium text-right">Kalshi</th>
                 <th className="px-3 py-2 font-medium text-right">AI</th>
@@ -230,7 +230,7 @@ export default function MatchTable({
             >
               <th className="px-3 py-2 font-medium">DeepBook Predict Market</th>
               <th className="px-3 py-2 font-medium">Expiry</th>
-              <th className="px-3 py-2 font-medium text-right" style={{ color: cyan }} title="DeepBook YES price at the ATM strike — the comparison baseline for the row.">Deepbook</th>
+              <th className="px-3 py-2 font-medium text-right" title="DeepBook YES price at the ATM strike — the comparison baseline for the row.">Deepbook</th>
               <th className="px-3 py-2 font-medium text-right" title="Polymarket YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Polymarket</th>
               <th className="px-3 py-2 font-medium text-right" title="Kalshi YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Kalshi</th>
               <th className="px-3 py-2 font-medium text-right" title="AI analysis per row. Click Analyse to run a batch over all visible markets.">AI</th>
@@ -293,7 +293,7 @@ export default function MatchTable({
                     >
                       <span
                         className="font-mono font-semibold"
-                        style={{ color: cyan, fontSize: 13, letterSpacing: '-0.01em' }}
+                        style={{ color: textPrimary, fontSize: 13, letterSpacing: '-0.01em' }}
                       >
                         {(m.dbProb * 100).toFixed(0)}¢
                       </span>
@@ -334,15 +334,35 @@ export default function MatchTable({
         </table>
       </div>
 
-      {/* Spot legend — small footer with current spot for ATM context */}
-      {matches[0]?.spotUsd != null && matches[0].spotUsd > 0 && (
-        <div
-          className="px-3 py-1.5 text-[10px] font-mono border-t border-white/5"
+      {/* Footer action bar — global "Run analysis" trigger so the user
+          can fire a batch over the currently visible matches at any
+          time, without having to find a row's per-cell Analyse button. */}
+      <div
+        className="px-3 py-2.5 border-t border-white/5 flex items-center justify-between gap-3"
+      >
+        <span
+          className="text-[11px]"
           style={{ color: textSecondary }}
         >
-          ATM (DB): {formatUsd(matches[0].spotUsd)}
-        </div>
-      )}
+          {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+        </span>
+        <button
+          type="button"
+          onClick={() => onClickAnalyse(matches[0]?.key ?? '')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-opacity hover:opacity-90"
+          style={{
+            background: green,
+            color: '#000',
+            fontSize: 11,
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+          }}
+          title="Run AI analysis on every visible match (first 3 free, rest Seal-encrypted)."
+        >
+          <Sparkles size={12} />
+          Analyse {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+        </button>
+      </div>
     </GlassCard>
   );
 }
