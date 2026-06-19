@@ -125,7 +125,7 @@ function reducer(state: MarketsState, action: Action): MarketsState {
   }
 }
 
-const MarketsContext = createContext<MarketsState | null>(null);
+const MarketsContext = createContext<(MarketsState & { refresh: () => Promise<void> }) | null>(null);
 
 const REFRESH_INTERVAL_MS = 90_000;
 const SOURCES: Source[] = ['polymarket', 'deepbook', 'kalshi'];
@@ -176,10 +176,14 @@ export function MarketsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [refresh]);
 
-  return <MarketsContext.Provider value={state}>{children}</MarketsContext.Provider>;
+  return (
+    <MarketsContext.Provider value={{ ...state, refresh }}>
+      {children}
+    </MarketsContext.Provider>
+  );
 }
 
-export function useGlobalMarkets(): MarketsState {
+export function useGlobalMarkets(): MarketsState & { refresh: () => Promise<void> } {
   const ctx = useContext(MarketsContext);
   if (!ctx) {
     throw new Error('useGlobalMarkets must be used inside <MarketsProvider>');

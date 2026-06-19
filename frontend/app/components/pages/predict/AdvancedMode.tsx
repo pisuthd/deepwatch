@@ -68,15 +68,25 @@ export default function PredictAdvancedMode() {
   const currentMarket = activeMarkets[selectedIdx] ?? null;
   const currentOracleId = currentMarket?.oracle_id ?? null;
   const { market, loading: marketLoading } = useMarket(currentOracleId, 30_000);
+  // `expiryMs` of the active market. Declared early so the
+  // `CurrentMarketContext` publish effect below can include it in the
+  // context value (consumers like `MatchInsightButton` derive the
+  // AI `matchKey` from it).
+  const expiryMs = market?.expiryMs ?? currentMarket?.expiryMs ?? 0;
 
-  // Publish current market to the popover/page context
+  // Publish current market to the popover/page context. `expiryMs` is
+  // the active market's expiry; combined with `oracleId` it forms the
+  // `matchKey` (${oracleId}::${expiryMs}) that the AI route uses, so
+  // `MatchInsightButton` and `useMatchInsight` on the Predict page
+  // can look up the analysis for this market.
   const setCurrentMarket = useSetCurrentMarket();
   useEffect(() => {
     setCurrentMarket({
       oracleId: currentMarket?.oracle_id ?? null,
       asset: currentMarket?.asset ?? null,
+      expiryMs: expiryMs > 0 ? expiryMs : null,
     });
-  }, [currentMarket?.oracle_id, currentMarket?.asset, setCurrentMarket]);
+  }, [currentMarket?.oracle_id, currentMarket?.asset, expiryMs, setCurrentMarket]);
 
   // Close market dropdown on outside click
   useEffect(() => {
@@ -94,7 +104,8 @@ export default function PredictAdvancedMode() {
   }, [showMarketDropdown]);
 
   const spotUsd = market ? market.spot / 1e9 : 0;
-  const expiryMs = market?.expiryMs ?? currentMarket?.expiryMs ?? 0;
+  // `expiryMs` is computed earlier (right after `useMarket`) so the
+  // CurrentMarketContext publish effect can include it.
   const svi = market?.svi ?? null;
   const asset = currentMarket?.asset ?? 'BTC';
 

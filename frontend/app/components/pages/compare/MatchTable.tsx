@@ -11,10 +11,11 @@
  * Columns:
  *   1. DeepBook Predict Market — just the question (truncated, tooltip on hover)
  *   2. Expiry                  — relative countdown + absolute UTC
- *   3. DB YES (ATM)            — DeepBook YES price at the ATM strike (baseline)
- *   4. Polymarket YES          — Polymarket YES price of the closest match
- *   5. Kalshi YES              — Kalshi YES price of the closest match
- *   6. AI 🔒                   — locked in v1; tooltip explains the staker features
+ *   3. Deepbook                — DeepBook YES price at the ATM strike (baseline)
+ *   4. Polymarket              — Polymarket YES price of the closest match
+ *   5. Kalshi                  — Kalshi YES price of the closest match
+ *   6. AI                      — per-row AI surface (AiCell: locked /
+ *                                analyse button / signal+confidence+prices+reasoning)
  *
  * All three venue columns display the YES mint price on the 0–1 scale
  * (e.g. 0.55 = 55¢ to buy 1 YES token that pays $1 if it resolves YES).
@@ -40,10 +41,10 @@
  * previous MatchGrid behaviour.
  */
 
-import { Lock } from 'lucide-react';
 import GlassCard from '../../common/GlassCard';
 import { formatDetailedExpiry, formatExpiryDate, formatUsd } from '@/app/lib/format';
 import type { DeepBookMatch } from '@/app/lib/match';
+import AiCell from './AiCell';
 
 const green = '#00E68A';
 const red = '#ef4444';
@@ -54,16 +55,15 @@ const headerBg = 'rgba(255,255,255,0.04)';
 const rowHoverBg = 'rgba(255,255,255,0.025)';
 const skeletonBg = 'rgba(40, 44, 60, 0.5)';
 
-// Venues are no longer color-coded in the table — header labels are
-// plain ("Polymarket", "Kalshi") and price cells use the default
-// text color. The VENUE_TINT / VENUE_NAME maps were removed in favour
-// of inline strings passed into the cell component.
-
 interface MatchTableProps {
   matches: DeepBookMatch[];
   firstLoad: boolean;
   onSelect: (key: string) => void;
   venuesLoaded: { polymarket: boolean; deepbook: boolean; kalshi: boolean };
+  /** Called when the user clicks "Analyse" on any row. The page hands
+   * the visible matches to `AiBatchProvider.startBatch()`. The cell
+   * itself reads its own `isAnalysing` state from the provider. */
+  onClickAnalyse: (key: string) => void;
 }
 
 /**
@@ -75,14 +75,6 @@ interface MatchTableProps {
  *   55¢                ← within ±0.5% noise (no tag, just the price)
  *   +28.5% premium     ← DB is 28.5% costlier (red, on a second line)
  *   −28.5% discount    ← DB is 28.5% cheaper (green, on a second line)
- *
- * The price is the YES mint cost displayed in cents (e.g. 55¢ = 0.55
- * = 55% implied prob of the UP outcome). On a binary market the YES
- * price and the implied probability are the same number, but we show
- * it as a price since the user-facing question is "is this venue
- * cheaper or costlier than DB to buy YES for the same outcome?". The
- * delta is `dbPrice − venuePrice` expressed as a percentage, and keeps
- * the "%" suffix because premium/discount are always relative terms.
  */
 function CompareCell({
   prob,
@@ -169,12 +161,20 @@ function SkeletonRow() {
           <div className="h-2 w-14 rounded animate-pulse" style={{ background: skeletonBg }} />
         </div>
       </td>
-      <td className="px-3 py-2.5 text-right"><div className="h-3 w-6 rounded animate-pulse ml-auto" style={{ background: skeletonBg }} /></td>
+      <td className="px-3 py-2.5 text-right">
+        <div className="h-3 w-12 rounded animate-pulse ml-auto" style={{ background: skeletonBg }} />
+      </td>
     </tr>
   );
 }
 
-export default function MatchTable({ matches, firstLoad, onSelect, venuesLoaded }: MatchTableProps) {
+export default function MatchTable({
+  matches,
+  firstLoad,
+  onSelect,
+  venuesLoaded,
+  onClickAnalyse,
+}: MatchTableProps) {
   if (firstLoad) {
     return (
       <GlassCard className="p-0">
@@ -184,14 +184,10 @@ export default function MatchTable({ matches, firstLoad, onSelect, venuesLoaded 
               <tr className="text-left" style={{ color: textSecondary, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 <th className="px-3 py-2 font-medium">DeepBook Predict Market</th>
                 <th className="px-3 py-2 font-medium">Expiry</th>
-                <th className="px-3 py-2 font-medium text-right" style={{ color: cyan }}>DB YES (ATM)</th>
-                <th className="px-3 py-2 font-medium text-right">Polymarket YES</th>
-                <th className="px-3 py-2 font-medium text-right">Kalshi YES</th>
-                <th className="px-3 py-2 font-medium text-right">
-                  <span className="inline-flex items-center gap-1">
-                    AI <Lock size={9} style={{ color: cyan }} />
-                  </span>
-                </th>
+                <th className="px-3 py-2 font-medium text-right" style={{ color: cyan }}>Deepbook</th>
+                <th className="px-3 py-2 font-medium text-right">Polymarket</th>
+                <th className="px-3 py-2 font-medium text-right">Kalshi</th>
+                <th className="px-3 py-2 font-medium text-right">AI</th>
               </tr>
             </thead>
             <tbody>
@@ -234,14 +230,10 @@ export default function MatchTable({ matches, firstLoad, onSelect, venuesLoaded 
             >
               <th className="px-3 py-2 font-medium">DeepBook Predict Market</th>
               <th className="px-3 py-2 font-medium">Expiry</th>
-              <th className="px-3 py-2 font-medium text-right" style={{ color: cyan }} title="DeepBook YES price at the ATM strike — the comparison baseline for the row.">DB YES (ATM)</th>
-              <th className="px-3 py-2 font-medium text-right" title="Polymarket YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Polymarket YES</th>
-              <th className="px-3 py-2 font-medium text-right" title="Kalshi YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Kalshi YES</th>
-              <th className="px-3 py-2 font-medium text-right">
-                <span className="inline-flex items-center gap-1">
-                  AI <Lock size={9} style={{ color: cyan }} />
-                </span>
-              </th>
+              <th className="px-3 py-2 font-medium text-right" style={{ color: cyan }} title="DeepBook YES price at the ATM strike — the comparison baseline for the row.">Deepbook</th>
+              <th className="px-3 py-2 font-medium text-right" title="Polymarket YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Polymarket</th>
+              <th className="px-3 py-2 font-medium text-right" title="Kalshi YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Kalshi</th>
+              <th className="px-3 py-2 font-medium text-right" title="AI analysis per row. Click Analyse to run a batch over all visible markets.">AI</th>
             </tr>
           </thead>
           <tbody>
@@ -328,15 +320,12 @@ export default function MatchTable({ matches, firstLoad, onSelect, venuesLoaded 
                     />
                   </td>
 
-                  {/* AI 🔒 */}
+                  {/* AI — per-row surface (lock / Analyse / signal+conf+prices+reasoning). */}
                   <td className="px-3 py-2.5 text-right">
-                    <span
-                      className="inline-flex items-center justify-center w-6 h-6 rounded opacity-50"
-                      style={{ background: 'rgba(62, 196, 192, 0.08)' }}
-                      title="Stake to unlock AI-verified spread, AI arbitrage signal, and AI confidence."
-                    >
-                      <Lock size={11} style={{ color: cyan }} />
-                    </span>
+                    <AiCell
+                      match={m}
+                      onClickAnalyse={onClickAnalyse}
+                    />
                   </td>
                 </tr>
               );

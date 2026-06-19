@@ -398,6 +398,10 @@ export interface DeepBookMatch {
   polyStrikes?: { strikeUsd: number; impliedProbUp: number }[];
   /** Same idea for Kalshi. */
   kalshiStrikes?: { strikeUsd: number; impliedProbUp: number }[];
+  /** Polymarket URL of the closest-by-expiry group's event page. */
+  polyUrl?: string;
+  /** Kalshi URL of the closest-by-expiry group's market page. */
+  kalshiUrl?: string;
 }
 
 /**
@@ -473,6 +477,8 @@ export function findMatchesForDeepBook(
       kalshi: kalshi ?? undefined,
       polyStrikes,
       kalshiStrikes,
+      polyUrl: poly?.url,
+      kalshiUrl: kalshi?.url,
     });
   }
 

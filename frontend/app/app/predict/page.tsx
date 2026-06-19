@@ -6,6 +6,8 @@ import PredictPage from '../../components/pages/predict/page';
 import PositionsButton from '../../components/pages/predict/PositionsButton';
 import AccountOverviewButton from '../../components/pages/predict/AccountOverviewButton';
 import InsightButton from '../../components/pages/insights/InsightButton';
+import MatchInsightButton from '../../components/pages/predict/MatchInsightButton';
+import AutoPopupMatchInsight from '../../components/pages/predict/AutoPopupMatchInsight';
 import { CurrentMarketProvider } from '../../components/pages/predict/CurrentMarketContext';
 import { useNetwork } from '../../context/NetworkContext';
 import { useToast } from '../../context/ToastContext';
@@ -45,10 +47,17 @@ export default function Page() {
   return (
     <CurrentMarketProvider>
       <MainnetWarning />
+      {/*
+        Auto-popup the `MatchInsightButton` popover once per active
+        market, per session, for stakers. Renderless — coordinates
+        via a custom window event.
+      */}
+      <AutoPopupMatchInsight />
       <TradeWrapper
         trailing={
           <>
             <InsightButton />
+            <MatchInsightButton />
             <AccountOverviewButton />
             <PositionsButton />
           </>

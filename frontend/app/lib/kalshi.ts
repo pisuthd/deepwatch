@@ -412,6 +412,12 @@ export interface KalshiGroup {
   externalId: string;
   question: string;
   expiryMs: number;
+  /**
+   * URL of the Kalshi market page, captured from the first BinaryMarket
+   * row that hits the group. Surfaced as "View on Kalshi" in the Compare
+   * drilldown modal.
+   */
+  url?: string;
   upDown: {
     strikeUsd: number;
     impliedProbUp: number;
@@ -458,6 +464,7 @@ export function groupKalshiMarkets(rows: BinaryMarket[]): KalshiGroup[] {
         externalId: m.externalId,
         question: m.question,
         expiryMs: expiry,
+        url: m.url || undefined,
         upDown: [],
         range: [],
       };

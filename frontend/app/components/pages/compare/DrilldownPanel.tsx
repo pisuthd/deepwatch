@@ -21,7 +21,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { ExternalLink, X } from 'lucide-react';
 import { formatDetailedExpiry, formatExpiryDate, formatUsd } from '@/app/lib/format';
 import type { DeepBookMatch } from '@/app/lib/match';
 import {
@@ -41,7 +41,6 @@ const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 const cyan = '#3EC4C0';
 const green = '#00E68A';
-const red = '#ef4444';
 const polyTint = '#3b82f6';
 const kalshiTint = '#a855f7';
 
@@ -490,6 +489,48 @@ export default function DrilldownPanel({ match, spotUsd, onClose }: DrilldownPan
                           <span style={{ color: kalshiTint }}>Kalshi:</span>{' '}
                           <span style={{ color: textSecondary }}>{match.kalshiQuestion}</span>
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Source URL link chips — open the actual venue page
+                      in a new tab. Only render the chip when the URL is
+                      present (single-venue matches hide the missing one). */}
+                  {(match.polyUrl || match.kalshiUrl) && (
+                    <div className="flex items-center gap-2 mt-2">
+                      {match.polyUrl && (
+                        <a
+                          href={match.polyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+                          style={{
+                            background: 'rgba(59, 130, 246, 0.12)',
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                            color: polyTint,
+                          }}
+                          title="Open this Polymarket event in a new tab."
+                        >
+                          <ExternalLink size={10} />
+                          View on Polymarket
+                        </a>
+                      )}
+                      {match.kalshiUrl && (
+                        <a
+                          href={match.kalshiUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+                          style={{
+                            background: 'rgba(168, 85, 247, 0.12)',
+                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                            color: kalshiTint,
+                          }}
+                          title="Open this Kalshi market in a new tab."
+                        >
+                          <ExternalLink size={10} />
+                          View on Kalshi
+                        </a>
                       )}
                     </div>
                   )}

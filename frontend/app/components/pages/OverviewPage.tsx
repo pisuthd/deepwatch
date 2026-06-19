@@ -7,6 +7,7 @@ import WelcomeCard from '../common/WelcomeCard';
 import PageWrapper from '../common/PageWrapper';
 import PredictManagerPanel from './overview/PredictManagerPanel';
 import PositionsPanel from './overview/PositionsPanel';
+import RecentBatchesPanel from './overview/RecentBatchesPanel';
 
 
  
@@ -82,6 +83,10 @@ export default function OverviewPage() {
 
       <div className="mt-6">
         <PositionsPanel />
+      </div>
+
+      <div className="mt-6">
+        <RecentBatchesPanel />
       </div>
     </PageWrapper>
   );
