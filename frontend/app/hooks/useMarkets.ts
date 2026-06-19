@@ -72,8 +72,44 @@ export interface Market {
 }
 
 export interface VaultSummary {
+  // Identity (kept around for debugging / future routing).
+  predict_id?: string
+  // Underlying coin types that make up the vault. Useful for the
+  // "Vault" card subtitle ("Backed by DUSDC, …").
+  quote_assets?: string[]
+  // ─── Capital & liquidity ─────────────────────────────────────────
+  /** Total DUSDC value locked in the predict protocol. */
   vault_value: number
+  /** DUSDC actually sitting in the on-chain balance object. */
+  vault_balance?: number
+  /** PLP that can still be minted (vault_value − committed positions). */
   available_liquidity: number
+  /** Same number as `available_liquidity` for the user-facing
+   *  "max withdrawal right now" line in the Stake page. */
+  available_withdrawal?: number
+  // ─── PLP token ───────────────────────────────────────────────────
+  /** Total PLP shares outstanding. */
+  plp_total_supply?: number
+  /** PLP share price in DUSDC; 1.0020 means $1.0020 / PLP. */
+  plp_share_price?: number
+  // ─── Risk / utilization ─────────────────────────────────────────
+  /** Fraction of liquidity committed to open positions (0…1). */
+  utilization?: number
+  /** Worst-case payout utilization if every open position resolves
+   *  ITM (0…1). Compare to `utilization` to gauge tail risk. */
+  max_payout_utilization?: number
+  // ─── Exposure ────────────────────────────────────────────────────
+  /** Mark-to-market value of all open positions. */
+  total_mtm?: number
+  /** Sum of max payouts across all open positions. */
+  total_max_payout?: number
+  // ─── Cumulative flows (since launch) ─────────────────────────────
+  /** Cumulative DUSDC supplied. */
+  total_supplied?: number
+  /** Cumulative DUSDC withdrawn. */
+  total_withdrawn?: number
+  /** `total_supplied − total_withdrawn` (should ≈ vault_balance). */
+  net_deposits?: number
 }
 
 // ─── Black-76 + SVI Formulas (same as utils.ts) ───────────────────────────

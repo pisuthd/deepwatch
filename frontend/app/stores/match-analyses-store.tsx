@@ -1,76 +1,104 @@
 'use client';
 
 /**
- * Local store for per-match AI analyses (Compare page).
+ * In-memory store for per-match AI analyses (Compare page).
  *
- * Different access pattern from `useInsights()`:
- *   - key = `DeepBookMatch.key` (lookup by match, not list newest-first)
- *   - shape = `MatchAnalysis` (signal + confidence + position + reasoning),
- *     not the wizard's `InsightBody` (title + long-form markdown)
- *   - writes happen in bulk during a batch AI call, not one-at-a-time
- *     from a wizard "Publish" button
- *   - staleness is silent (markets move, analyses go stale, user clears
- *     localStorage to force-refresh) — no archive/expire logic
+ * # Storage model — Walrus is the source of truth
  *
- * Storage:
- *   - localStorage key `deepwatch:match-analyses:v1`
- *   - shape: `Record<matchKey, MatchAnalysis>`
- *   - 200-entry LRU cap on `set`/`setMany` (oldest by `createdAt` dropped)
- *   - SSR-safe (gate localStorage behind `typeof window !== 'undefined'`)
+ * Per user direction (Part 6): no localStorage anywhere. Walrus (via
+ * Tatum) is the only durable home for AI analyses. This store is a
+ * pure in-memory React context, fed by Walrus hydration:
+ *
+ *   - On Compare-page mount, `batch-index-store.refresh()` lists the
+ *     certified blobs from Walrus, fetches each plaintext (free-slice)
+ *     blob body, and calls `hydrateFromWalrus(...)` here.
+ *   - Stakers additionally Seal-decrypt the encrypted blob and push
+ *     the full set into the same store. See `ComparePageClient`'s
+ *     `useEffect`.
+ *   - `AiBatchProvider.onBatchComplete` also calls `setMany(...)`
+ *     in-memory for the in-flight batch (no Walrus read needed for
+ *     the batch the user just kicked).
+ *
+ * `hydrated` flips to `true` once Walrus hydration completes (or
+ * fails). The Compare table's "Stake to unlock" gate waits on
+ * `hydrated` so we don't flash locked CTAs for analyses that are
+ * still in flight from Walrus.
+ *
+ * Shape: `Record<matchKey, MatchAnalysis>`.
  *
  * API:
- *   - `getByMatchKey(key)` — sync lookup, used by `AiCell` for fast reads
- *   - `set(key, partial)` — deep-merge, used by `AiAnalyseModal` per result
- *   - `setMany(entries)` — bulk write in one dispatch, used at end of batch
+ *   - `getByMatchKey(key)` — sync lookup, used by `AiCell`
+ *   - `hydrateFromWalrus(entries, batchId)` — atomic replace with a
+ *     Walrus-fetched batch (used on mount + after batch-index refresh)
+ *   - `set(key, partial)` — single write, used by `AiBatchProvider`
+ *     per result
+ *   - `setMany(entries)` — bulk write in one dispatch
  *   - `remove(key)` / `clear()` — direct mutations
- *   - `all` — array view of all entries (for debugging / future list view)
- *   - `hydrated` — true after the first localStorage read
+ *   - `all` — array view (debug / future list view)
+ *   - `hydrated` — true after the first Walrus hydration completes
+ *   - `lastHydratedBatchId` — for invalidation on a newer batch
  */
 
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useReducer,
-  useRef,
 } from 'react';
 import type { ReactNode } from 'react';
 import type { MatchAnalysis } from '../lib/match-analyses';
 
-const STORAGE_KEY = 'deepwatch:match-analyses:v1';
-const MAX_ENTRIES = 200;
-
 interface MatchAnalysesState {
   /** Keyed by `matchKey` (= `DeepBookMatch.key`) for O(1) lookup. */
   byKey: Record<string, MatchAnalysis>;
+  /** True once the first Walrus hydration pass has resolved (success
+   * or failure — failures stay at empty `byKey` and let the UI show
+   * "Stake to unlock" everywhere, which is the correct empty state). */
   hydrated: boolean;
+  /** `batchId` of the most recent hydration. Used by callers to know
+   * when a newer Walrus batch has appeared. */
+  lastHydratedBatchId: string | null;
+  /** `batchId` of the most recent batch the user **personally** uploaded
+   * (set via `markUploaded`). The hydration effect skips re-hydrating
+   * for this batch — the in-memory store already has the full result
+   * set (free + encrypted-tail) from the SSE consumer's `setMany`,
+   * and replacing it with the plaintext-only Walrus body would lose
+   * the encrypted-tail entries the user just saw. */
+  lastUploadedBatchId: string | null;
 }
 
 const initialState: MatchAnalysesState = {
   byKey: {},
   hydrated: false,
+  lastHydratedBatchId: null,
+  lastUploadedBatchId: null,
 };
 
 type Action =
-  | { type: 'HYDRATE'; byKey: Record<string, MatchAnalysis> }
+  | { type: 'HYDRATE'; entries: Record<string, MatchAnalysis>; batchId: string | null }
   | { type: 'SET'; matchKey: string; entry: MatchAnalysis }
   | { type: 'SET_MANY'; entries: Array<[string, MatchAnalysis]> }
   | { type: 'REMOVE'; matchKey: string }
-  | { type: 'CLEAR' };
+  | { type: 'CLEAR' }
+  | { type: 'MARK_UPLOADED'; batchId: string };
 
 function reducer(state: MatchAnalysesState, action: Action): MatchAnalysesState {
   switch (action.type) {
     case 'HYDRATE':
-      return { byKey: action.byKey, hydrated: true };
+      return {
+        ...state,
+        byKey: action.entries,
+        hydrated: true,
+        lastHydratedBatchId: action.batchId,
+      };
     case 'SET': {
       const next = { ...state.byKey, [action.matchKey]: action.entry };
-      return { ...state, byKey: enforceCap(next) };
+      return { ...state, byKey: next };
     }
     case 'SET_MANY': {
       const next = { ...state.byKey };
       for (const [k, entry] of action.entries) next[k] = entry;
-      return { ...state, byKey: enforceCap(next) };
+      return { ...state, byKey: next };
     }
     case 'REMOVE': {
       const next = { ...state.byKey };
@@ -79,69 +107,23 @@ function reducer(state: MatchAnalysesState, action: Action): MatchAnalysesState 
     }
     case 'CLEAR':
       return { ...state, byKey: {} };
-  }
-}
-
-/**
- * Drop the oldest entries (by `createdAt`) until the map is at or
- * under the cap. Used after every write so the localStorage payload
- * never grows unbounded.
- */
-function enforceCap(byKey: Record<string, MatchAnalysis>): Record<string, MatchAnalysis> {
-  const entries = Object.values(byKey);
-  if (entries.length <= MAX_ENTRIES) return byKey;
-  entries.sort((a, b) => a.createdAt - b.createdAt);
-  const keep = entries.slice(entries.length - MAX_ENTRIES);
-  const next: Record<string, MatchAnalysis> = {};
-  for (const e of keep) next[e.matchKey] = e;
-  return next;
-}
-
-function safeRead(): Record<string, MatchAnalysis> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const out: Record<string, MatchAnalysis> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (!v || typeof v !== 'object') continue;
-      const e = v as Partial<MatchAnalysis>;
-      if (
-        typeof e.matchKey !== 'string' ||
-        typeof e.signal !== 'string' ||
-        (e.signal !== 'UP' && e.signal !== 'DOWN' && e.signal !== 'NEUTRAL') ||
-        typeof e.confidence !== 'number' ||
-        typeof e.positionSizePct !== 'number' ||
-        typeof e.reasoning !== 'string' ||
-        typeof e.createdAt !== 'number'
-      ) {
-        continue;
-      }
-      out[k] = e as MatchAnalysis;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function safeWrite(byKey: Record<string, MatchAnalysis>): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(byKey));
-    return true;
-  } catch (err) {
-    // QuotaExceededError, etc. — caller decides what to do.
-    console.warn('[match-analyses-store] write failed:', err);
-    return false;
+    case 'MARK_UPLOADED':
+      return { ...state, lastUploadedBatchId: action.batchId };
   }
 }
 
 const MatchAnalysesContext = createContext<{
   state: MatchAnalysesState;
   getByMatchKey: (key: string) => MatchAnalysis | null;
+  hydrateFromWalrus: (
+    entries: Record<string, MatchAnalysis>,
+    batchId?: string | null,
+  ) => void;
+  /** Mark a batchId as "personally uploaded by this user" so the
+   * hydration effect in ComparePageClient doesn't clobber the full
+   * in-memory result set (set by SSE consumer's `setMany`) with the
+   * plaintext-only Walrus preview. */
+  markUploaded: (batchId: string) => void;
   set: (key: string, partial: Omit<MatchAnalysis, 'matchKey' | 'createdAt'> & { createdAt?: number }) => void;
   setMany: (entries: Array<[string, Omit<MatchAnalysis, 'matchKey' | 'createdAt'> & { createdAt?: number }]>) => void;
   remove: (matchKey: string) => void;
@@ -151,21 +133,23 @@ const MatchAnalysesContext = createContext<{
 
 export function MatchAnalysesProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const byKeyRef = useRef<Record<string, MatchAnalysis>>({});
 
-  useEffect(() => {
-    const byKey = safeRead();
-    byKeyRef.current = byKey;
-    dispatch({ type: 'HYDRATE', byKey });
-  }, []);
-
-  useEffect(() => {
-    if (!state.hydrated) return;
-    safeWrite(state.byKey);
-  }, [state.hydrated, state.byKey]);
+  // Walrus is the source of truth — there's nothing to hydrate from
+  // localStorage on mount. The Compare page kicks off the actual
+  // Walrus fetch via `batch-index-store.refresh()` and pushes the
+  // results through `hydrateFromWalrus`. Until that lands, the store
+  // reports `hydrated: false` so the AI cell stays in its loading
+  // branch instead of flashing locked CTAs.
 
   const getByMatchKey = useCallback(
-    (key: string): MatchAnalysis | null => byKeyRef.current[key] ?? null,
+    (key: string): MatchAnalysis | null => state.byKey[key] ?? null,
+    [state.byKey],
+  );
+
+  const hydrateFromWalrus = useCallback(
+    (entries: Record<string, MatchAnalysis>, batchId?: string | null): void => {
+      dispatch({ type: 'HYDRATE', entries, batchId: batchId ?? null });
+    },
     [],
   );
 
@@ -179,7 +163,6 @@ export function MatchAnalysesProvider({ children }: { children: ReactNode }) {
         matchKey: key,
         createdAt: partial.createdAt ?? Date.now(),
       } as MatchAnalysis;
-      byKeyRef.current = enforceCap({ ...byKeyRef.current, [key]: entry });
       dispatch({ type: 'SET', matchKey: key, entry });
     },
     [],
@@ -196,24 +179,21 @@ export function MatchAnalysesProvider({ children }: { children: ReactNode }) {
         k,
         { ...p, matchKey: k, createdAt: p.createdAt ?? now } as MatchAnalysis,
       ]);
-      const next = { ...byKeyRef.current };
-      for (const [k, e] of pairs) next[k] = e;
-      byKeyRef.current = enforceCap(next);
       dispatch({ type: 'SET_MANY', entries: pairs });
     },
     [],
   );
 
   const remove = useCallback((matchKey: string): void => {
-    const next = { ...byKeyRef.current };
-    delete next[matchKey];
-    byKeyRef.current = next;
     dispatch({ type: 'REMOVE', matchKey });
   }, []);
 
   const clear = useCallback((): void => {
-    byKeyRef.current = {};
     dispatch({ type: 'CLEAR' });
+  }, []);
+
+  const markUploaded = useCallback((batchId: string): void => {
+    dispatch({ type: 'MARK_UPLOADED', batchId });
   }, []);
 
   return (
@@ -221,6 +201,8 @@ export function MatchAnalysesProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         getByMatchKey,
+        hydrateFromWalrus,
+        markUploaded,
         set,
         setMany,
         remove,
@@ -241,7 +223,11 @@ export function useMatchAnalyses() {
   return {
     state: ctx.state,
     hydrated: ctx.state.hydrated,
+    lastHydratedBatchId: ctx.state.lastHydratedBatchId,
+    lastUploadedBatchId: ctx.state.lastUploadedBatchId,
     getByMatchKey: ctx.getByMatchKey,
+    hydrateFromWalrus: ctx.hydrateFromWalrus,
+    markUploaded: ctx.markUploaded,
     set: ctx.set,
     setMany: ctx.setMany,
     remove: ctx.remove,

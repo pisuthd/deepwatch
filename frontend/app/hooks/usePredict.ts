@@ -439,9 +439,7 @@ export function usePredict(): UsePredictReturn {
     try {
       const { Transaction } = await import('@mysten/sui/transactions')
       const withdrawAmount = toDusdcUnits(amount)
-
-      console.log("withdrawAmount:", withdrawAmount)
-
+ 
       const tx = new Transaction()
       
       const [withdrawnCoin] = tx.moveCall({
