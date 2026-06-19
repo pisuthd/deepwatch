@@ -302,13 +302,13 @@ function priceCell(yn: { yes: number; no: number } | undefined, tint: string) {
         className="px-3 py-2 text-right font-mono font-semibold text-xs"
         style={{ color: tint }}
       >
-        {yn.yes.toFixed(2)}
+        {(yn.yes * 100).toFixed(0)}¢
       </td>
       <td
         className="px-3 py-2 text-right font-mono text-xs"
         style={{ color: textSecondary }}
       >
-        {yn.no.toFixed(2)}
+        {(yn.no * 100).toFixed(0)}¢
       </td>
     </>
   );
@@ -541,9 +541,10 @@ export default function DrilldownPanel({ match, spotUsd, onClose }: DrilldownPan
 
               {/* Tiny legend so users know what YES / NO means */}
               <div className="text-[10px] font-mono" style={{ color: textSecondary }}>
-                Prices shown as 0–1 mint prices — YES is the cost to buy the
-                UP outcome, NO is the cost to buy the DOWN outcome (YES + NO ≈ 1).
-                Missing rows mean that venue has no market at this strike/band.
+                Prices shown in cents (¢) — the YES mint cost to buy the
+                UP outcome and the NO mint cost to buy the DOWN outcome
+                (YES + NO ≈ 100¢). Missing rows mean that venue has no
+                market at this strike/band.
               </div>
             </div>
           </motion.div>

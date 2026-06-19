@@ -17,6 +17,7 @@
 
 import GlassDropdown from '../../common/GlassDropdown';
 import type { DeepBookMatch } from '@/app/lib/match';
+import { getCoinIcon } from '@/app/lib/coinIcons';
 
 const green = '#00E68A';
 const textSecondary = '#9ca3af';
@@ -37,8 +38,12 @@ export const SORT_OPTIONS: { id: SortKey; label: string }[] = [
   { id: 'question', label: 'Question (A→Z)' },
 ];
 
+// Asset icon URLs come from the shared coin icon helper so the
+// asset picker stays in sync with the rest of the app (and the
+// CoinMarketCap icon endpoint, which is the only one we know works
+// for Sui mainnet assets).
 const ASSET_OPTIONS = [
-  { value: 'BTC', label: 'BTC', icon: '/icons/btc.png' },
+  { value: 'BTC', label: 'BTC', icon: getCoinIcon('BTC') },
 ];
 
 interface FilterBarProps {
@@ -79,7 +84,7 @@ export default function FilterBar({
 
   return (
     <div
-      className="relative rounded-2xl border border-white/10 p-3 flex items-center justify-between gap-3 flex-wrap"
+      className="relative z-50 rounded-2xl border border-white/10 p-3 flex items-center justify-between gap-3 flex-wrap"
       style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
     >
       <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
