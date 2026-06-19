@@ -443,11 +443,13 @@ export function usePredict(): UsePredictReturn {
       console.log("withdrawAmount:", withdrawAmount)
 
       const tx = new Transaction()
-      tx.moveCall({
+      
+      const [withdrawnCoin] = tx.moveCall({
         target: `${PREDICT_PACKAGE}::predict_manager::withdraw`,
         typeArguments: [DUSDC_TYPE],
         arguments: [tx.object(manager.manager_id), tx.pure.u64(withdrawAmount)],
       })
+      tx.transferObjects([withdrawnCoin], account.address)
 
       const result = await signAndExecute({ transaction: tx })
       if (result.FailedTransaction) {
