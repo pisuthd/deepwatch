@@ -21,6 +21,40 @@ export function formatPct(p: number | null | undefined, digits = 0): string {
   return `${(p * 100).toFixed(digits)}%`;
 }
 
+/**
+ * Scale factor for raw 6-decimal DUSDC and PLP values reported by the
+ * Predict indexer and the DeepWatch pool. Divide first, then pass to
+ * `formatCompactUsd` / `formatUnitPrice` so `$1_016_299_409_110` renders
+ * as `$1.02M`, not `$1.02T`.
+ */
+export const DUSDC_SCALE = 1_000_000;
+
+/**
+ * Format a raw 6-decimal DUSDC value as a human-readable USD string
+ * that collapses to K / M / B once the value passes $1k. `null` /
+ * `undefined` render as "—". The input is treated as a raw 6-decimal
+ * integer — divide by `DUSDC_SCALE` first if the source is human-scale.
+ */
+export function formatCompactUsd(raw: number | null | undefined): string {
+  if (raw == null) return '—';
+  const human = raw / DUSDC_SCALE;
+  if (human >= 1e9) return `$${(human / 1e9).toFixed(2)}B`;
+  if (human >= 1e6) return `$${(human / 1e6).toFixed(2)}M`;
+  if (human >= 1e3) return `$${(human / 1e3).toFixed(1)}K`;
+  return `$${human.toFixed(2)}`;
+}
+
+/**
+ * Format a unitless ratio (e.g. PLP share price ≈ 1.0…) as USD with
+ * 4 dp. `null` / `undefined` render as "—". Use for prices that are
+ * already in human form — do NOT pass raw 6-decimal DUSDC integers
+ * here; use `formatCompactUsd` for those.
+ */
+export function formatUnitPrice(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return `$${n.toFixed(4)}`;
+}
+
 /** Short countdown: "4d 2h", "1h 15m", "12m", "soon". */
 export function formatDetailedExpiry(ms: number, now: number = Date.now()): string {
   const diff = ms - now;
