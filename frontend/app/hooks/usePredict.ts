@@ -173,6 +173,23 @@ interface UsePredictReturn {
    */
   mint: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', amount: number) => Promise<{ needsManager: true } | { success: true }>
   /**
+   * Mint N directional positions in a single atomic PTB (the "Auto Trade"
+   * path). One `predict_manager::deposit` for the SUM of all amounts,
+   * then N `market_key::{up,down}` + `predict::mint` calls back-to-back.
+   *
+   * - No manager → returns `{ needsManager: true }`; caller must call
+   *   `createManager` first and retry. There is intentionally no
+   *   `createManagerAndMultiMint` — the auto-shared-object return value
+   *   of `create_manager` can't be safely referenced mid-PTB alongside
+   *   the manager state reads, and the two-sig fallback is the existing
+   *   precedent on the single-bet path too.
+   * - Each order must already carry its `amount` (DUSDC, human units) —
+   *   `useAutoTrade.computeAllocations` is responsible for the split.
+   * - Returns the per-order u6 quantities so the caller can echo them
+   *   back in a success toast.
+   */
+  multiMint: (signAndExecute: any, orders: Array<{ oracleId: string; expiryMs: number; strike: number; direction: 'up' | 'down'; amount: number }>) => Promise<{ needsManager: true } | { success: true; totalQtyU6: bigint }>
+  /**
    * Mint a directional position when no manager exists yet. Single PTB:
    * `create_manager` → `predict_manager::deposit` → `market_key::up|down` →
    * `predict::mint`. Single wallet signature.
@@ -600,6 +617,95 @@ export function usePredict(): UsePredictReturn {
       }
 
       await refreshData()
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
+  }
+
+  // Auto Trade — N binary bets in a single atomic PTB. Same shape as
+  // `mint`, but the deposit covers the SUM of all per-order amounts and
+  // the moveCall loop appends one `market_key` + `mint` pair per order.
+  // Each order's amount is in DUSDC human units; the u6 scaling happens
+  // here. Last-mile reconciliation: `totalQtyU6 = Σ orderQtyU6`. If
+  // rounding made them differ by more than one u6 the split-coin call
+  // would fail with `InsufficientCoinValue` — we pass the exact sum so
+  // the helper's own check matches. (No further reconciliation needed
+  // because we don't round each amount independently — we round the
+  // total once.)
+  const multiMint = async (
+    signAndExecute: any,
+    orders: Array<{ oracleId: string; expiryMs: number; strike: number; direction: 'up' | 'down'; amount: number }>,
+  ): Promise<{ needsManager: true } | { success: true; totalQtyU6: bigint }> => {
+    if (!account) return { needsManager: true as const }
+    if (!manager) return { needsManager: true as const }
+    if (!orders || orders.length === 0) {
+      throw new Error('Auto Trade: no orders to submit')
+    }
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const tx = new Transaction()
+
+      // Pre-compute every order's u6 amount up front. We round each
+      // amount to the nearest u6 independently — the reconciliation
+      // (residual → highest-confidence order) lives in the caller
+      // (`useAutoTrade.computeAllocations`), so by the time we get
+      // here the per-order amounts already sum to `budget` within 0.01.
+      // We compute `totalQtyU6` from those rounded values to guarantee
+      // the wallet-side split and the on-chain sum line up exactly.
+      const orderQtyU6: bigint[] = orders.map(
+        (o) => BigInt(Math.round(o.amount * 1e6)),
+      )
+      const totalQtyU6 = orderQtyU6.reduce((a, b) => a + b, BigInt(0))
+
+      // 1. Split the total from the wallet DBUSDC.
+      const splitCoin = await addCoinMergeAndSplit(tx, account, RPC, DUSDC_TYPE, totalQtyU6)
+
+      // 2. One deposit into the PredictManager for the full sum.
+      tx.moveCall({
+        target: `${PREDICT_PACKAGE}::predict_manager::deposit`,
+        typeArguments: [DUSDC_TYPE],
+        arguments: [tx.object(manager.manager_id), splitCoin],
+      })
+
+      // 3. One (key + mint) per order.
+      for (let i = 0; i < orders.length; i++) {
+        const o = orders[i]
+        const qtyU6 = orderQtyU6[i]
+        const strikeScaled = BigInt(Math.round(o.strike)) * PRICE_SCALE
+
+        const key = tx.moveCall({
+          target: `${PREDICT_PACKAGE}::market_key::${o.direction}`,
+          arguments: [
+            tx.pure.id(o.oracleId),
+            tx.pure.u64(o.expiryMs),
+            tx.pure.u64(strikeScaled),
+          ],
+        })
+
+        tx.moveCall({
+          target: `${PREDICT_PACKAGE}::predict::mint`,
+          typeArguments: [DUSDC_TYPE],
+          arguments: [
+            tx.object(PREDICT_OBJECT_ID),
+            tx.object(manager.manager_id),
+            tx.object(o.oracleId),
+            key,
+            tx.pure.u64(qtyU6),
+            tx.object(CLOCK),
+          ],
+        })
+      }
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+      return { success: true as const, totalQtyU6 }
     } catch (e: any) {
       setError(e.message)
       throw e
@@ -1037,6 +1143,7 @@ export function usePredict(): UsePredictReturn {
     withdraw,
     mint,
     createManagerAndMint,
+    multiMint,
     mintRange,
     createManagerAndMintRange,
     redeem,

@@ -5,6 +5,7 @@ import TradeWrapper from '../../components/common/TradeWrapper';
 import PredictPage from '../../components/pages/predict/page';
 import PositionsButton from '../../components/pages/predict/PositionsButton';
 import MatchInsightButton from '../../components/pages/predict/MatchInsightButton';
+import AutoTradeButton from '../../components/pages/predict/AutoTradeButton';
 import AutoPopupMatchInsight from '../../components/pages/predict/AutoPopupMatchInsight';
 import { CurrentMarketProvider } from '../../components/pages/predict/CurrentMarketContext';
 import { useNetwork } from '../../context/NetworkContext';
@@ -56,6 +57,7 @@ export default function Page() {
           <>
             <MatchInsightButton />
             <PositionsButton />
+            <AutoTradeButton />
           </>
         }
       >
