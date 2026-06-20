@@ -31,8 +31,8 @@ const textSecondary = '#9ca3af';
 // Drop range bands whose inside-probability is at or below 2% / at or
 // above 98% — they are visually indistinguishable from 0/1 and not
 // tradeable. Strict bounds so 0.02 and 0.98 themselves are also dropped.
-const RANGE_MIN_PROB = 0.02;
-const RANGE_MAX_PROB = 0.98;
+const RANGE_MIN_PROB = 0.01;
+const RANGE_MAX_PROB = 0.99;
 
 export default function PredictSimpleMode() {
   const [selectedIdx, setSelectedIdx] = useState(0);

@@ -3,8 +3,8 @@
 import { usePredict } from '../../../hooks/usePredict';
 import PredictManagerContent from './PredictManagerContent';
 
-const green = '#00E68A';
 const textPrimary = '#ffffff';
+const textSecondary = '#9ca3af';
 
 /**
  * Overview-page card wrapping `PredictManagerContent`. The inner content is
@@ -27,8 +27,16 @@ export default function PredictManagerPanel() {
       <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
 
       <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4">
           <h3 className="text-lg font-bold" style={{ color: textPrimary }}>Predict Account</h3>
+          <p
+            className="text-[11px] leading-relaxed mt-1"
+            style={{ color: textSecondary }}
+          >
+            This is your DeepBook Predict trading account. DeepWatch
+            auto-tops-up at bet time so you don't need to manually deposit
+            here. But redeemable assets sit here for your further withdraw.
+          </p>
         </div>
 
         <PredictManagerContent />
