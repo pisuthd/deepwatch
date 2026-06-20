@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * VaultStats — read-only header for the /app/stake page.
  *
@@ -43,7 +41,8 @@
  * Ratios (`plp_share_price`, `utilization`, `max_payout_utilization`)
  * are already in human form and skip the scale conversion.
  *
- * `fmtUsd` collapses to K/M/B once the value passes $1M so the
+ * The `formatCompactUsd` / `formatUnitPrice` helpers in
+ * `lib/format.ts` collapse to K/M/B once the value passes $1M so the
  * cards stay readable at all pool sizes. Utilization ratios are
  * shown as percentages with 2 decimals.
  */
@@ -51,34 +50,7 @@
 import { Wallet, Coins, Activity } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMarkets } from '../../../hooks/useMarkets';
-
-/** 6-decimal scale for DUSDC and PLP — matches `usePredict.ts::DUSDC_SCALE`. */
-const DUSDC_SCALE = 1_000_000;
-
-/**
- * Format a raw 6-decimal DUSDC value as a human-readable USD string.
- * `null`/`undefined` render as "—".
- */
-function fmtUsd(raw: number | null | undefined): string {
-  if (raw == null) return '—';
-  const human = raw / DUSDC_SCALE;
-  if (human >= 1e9) return `$${(human / 1e9).toFixed(2)}B`;
-  if (human >= 1e6) return `$${(human / 1e6).toFixed(2)}M`;
-  if (human >= 1e3) return `$${(human / 1e3).toFixed(1)}K`;
-  return `$${human.toFixed(2)}`;
-}
-
-/** Format a 0…1 ratio as a percentage with `decimals` decimal places. */
-function fmtPct(n: number | null | undefined, decimals = 2): string {
-  if (n == null) return '—';
-  return `${(n * 100).toFixed(decimals)}%`;
-}
-
-/** Format a unitless ratio (e.g. PLP share price ≈ 1.0…) as USD with 4 dp. */
-function fmtPrice(n: number | null | undefined): string {
-  if (n == null) return '—';
-  return `$${n.toFixed(4)}`;
-}
+import { formatCompactUsd, formatPct, formatUnitPrice } from '../../../lib/format';
 
 interface MetricRowProps {
   label: string;
@@ -189,19 +161,19 @@ export default function VaultStats() {
         icon={Wallet}
         accent="blue"
         headlineLabel="Total value"
-        headlineValue={fmtUsd(vault?.vault_value ?? null)}
+        headlineValue={formatCompactUsd(vault?.vault_value ?? null)}
         metrics={[
           {
             label: 'Available liquidity',
-            value: fmtUsd(vault?.available_liquidity ?? null),
+            value: formatCompactUsd(vault?.available_liquidity ?? null),
           },
           {
             label: 'On-chain balance',
-            value: fmtUsd(vault?.vault_balance ?? null),
+            value: formatCompactUsd(vault?.vault_balance ?? null),
           },
           {
             label: 'Utilization',
-            value: fmtPct(vault?.utilization),
+            value: formatPct(vault?.utilization, 2),
             tone: utilizationTone(vault?.utilization),
           },
         ]}
@@ -213,17 +185,15 @@ export default function VaultStats() {
         icon={Coins}
         accent="green"
         headlineLabel="Share price"
-        headlineValue={fmtPrice(vault?.plp_share_price ?? null)}
+        headlineValue={formatUnitPrice(vault?.plp_share_price ?? null)}
         metrics={[
           {
             label: 'Total supply',
-            value: vault?.plp_total_supply != null
-              ? fmtUsd(vault.plp_total_supply)
-              : '—',
+            value: formatCompactUsd(vault?.plp_total_supply ?? null),
           },
           {
             label: 'Net deposits',
-            value: fmtUsd(vault?.net_deposits ?? null),
+            value: formatCompactUsd(vault?.net_deposits ?? null),
           },
         ]}
       />
@@ -234,23 +204,23 @@ export default function VaultStats() {
         icon={Activity}
         accent="amber"
         headlineLabel="Max payout utilization"
-        headlineValue={fmtPct(vault?.max_payout_utilization)}
+        headlineValue={formatPct(vault?.max_payout_utilization, 2)}
         metrics={[
           {
             label: 'Open exposure (MTM)',
-            value: fmtUsd(vault?.total_mtm ?? null),
+            value: formatCompactUsd(vault?.total_mtm ?? null),
           },
           {
             label: 'Max payout',
-            value: fmtUsd(vault?.total_max_payout ?? null),
+            value: formatCompactUsd(vault?.total_max_payout ?? null),
           },
           {
             label: 'Supplied (cumulative)',
-            value: fmtUsd(vault?.total_supplied ?? null),
+            value: formatCompactUsd(vault?.total_supplied ?? null),
           },
           {
             label: 'Withdrawn (cumulative)',
-            value: fmtUsd(vault?.total_withdrawn ?? null),
+            value: formatCompactUsd(vault?.total_withdrawn ?? null),
           },
         ]}
       />

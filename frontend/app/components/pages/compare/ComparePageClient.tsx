@@ -50,6 +50,7 @@ import MatchTable from './MatchTable';
 import DrilldownPanel from './DrilldownPanel';
 import AiAnalyseModal from './AiAnalyseModal';
 import LocalAnalyseModal from './LocalAnalyseModal';
+import LocalSourceExplainerModal from './LocalSourceExplainerModal';
 import { useGlobalMarkets } from '../../../stores/markets-store';
 import { useAiBatch } from '@/app/stores/ai-batch-store';
 import { useMatchAnalyses } from '@/app/stores/match-analyses-store';
@@ -100,6 +101,59 @@ export default function ComparePageClient() {
    * progress for any in-flight batch).
    */
   const [activeAnalyseModal, setActiveAnalyseModal] = useState<'walrus' | 'local' | null>(null);
+
+  // ─── Local-source explainer (deprecation notice) ────────────────────
+  // Surfaces a must-dismiss modal the first time the user flips the
+  // source selector to Local on this browser. After dismissal, a
+  // persistent localStorage flag (`deepwatch:local-explainer-seen`)
+  // suppresses re-renders across page reloads.
+  //
+  // `seenFlag` follows the three-state pattern: `null` while we haven't
+  // read localStorage yet, `true` after the user has dismissed or the
+  // flag is already set, `false` only on first visit.
+  const [explainerOpen, setExplainerOpen] = useState(false);
+  const [seenFlag, setSeenFlag] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    // setTimeout(0) defers the localStorage read into an event-handler
+    // context so React 19's set-state-in-effect rule stays happy.
+    const initialId = setTimeout(() => {
+      try {
+        setSeenFlag(
+          window.localStorage.getItem('deepwatch:local-explainer-seen') === '1',
+        );
+      } catch {
+        // Storage unavailable (private mode, quota, denial) → don't nag.
+        setSeenFlag(true);
+      }
+    }, 0);
+    return () => clearTimeout(initialId);
+  }, []);
+
+  // Open the explainer on a Local-source flip, gated by the seen flag.
+  // Sits alongside the source-flush effect below without interfering —
+  // this effect only sets state on `explainerOpen`, never calls
+  // `batchIndex.refresh()`.
+  useEffect(() => {
+    if (seenFlag !== false) return;
+    if (insightSource !== 'local') return;
+    // Same setTimeout(0) wrap as above to avoid React 19's
+    // set-state-in-effect rule when a state setter is the entire body
+    // of an effect.
+    const id = setTimeout(() => setExplainerOpen(true), 0);
+    return () => clearTimeout(id);
+  }, [insightSource, seenFlag]);
+
+  const closeExplainer = useCallback(() => {
+    setExplainerOpen(false);
+    try {
+      window.localStorage.setItem('deepwatch:local-explainer-seen', '1');
+    } catch {
+      // Storage full or denied — in-memory `seenFlag=true` still
+      // suppresses re-open for this session.
+    }
+    setSeenFlag(true);
+  }, []);
 
   // Group rows → match-ready groups. The groupers drop near-certain /
   // OTHER markets and dedupe YES/UP rows, so what comes out is exactly
@@ -293,7 +347,7 @@ export default function ComparePageClient() {
   // ─── (auto-decrypt removed — see doc comment above) ─────────────────
 
   return (
-    <PageWrapper title="Compare">
+    <PageWrapper title="AI Insights">
       <div className="max-w-7xl mx-auto space-y-4">
         <FilterBar
           asset={asset}
@@ -341,6 +395,17 @@ export default function ComparePageClient() {
       <LocalAnalyseModal
         open={activeAnalyseModal === 'local'}
         onClose={() => setActiveAnalyseModal(null)}
+      />
+
+      {/*
+        Local-source deprecation explainer. Mounted at the page root so
+        its lifecycle is independent of which analyse modal is open. Only
+        renders when `explainerOpen` is true, which is only set on the
+        first-ever Local flip per browser.
+      */}
+      <LocalSourceExplainerModal
+        open={explainerOpen}
+        onClose={closeExplainer}
       />
     </PageWrapper>
   );

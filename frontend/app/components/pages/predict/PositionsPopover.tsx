@@ -4,8 +4,9 @@ import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Loader2, X } from 'lucide-react';
 import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
-import { usePredict, type Position } from '../../../hooks/usePredict';
+import { usePredict, type Position, type RangePosition } from '../../../hooks/usePredict';
 import { useCurrentMarket } from './CurrentMarketContext';
+import { useToast } from '../../../context/ToastContext';
 import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
 import { formatExpiryDate, formatPrice } from './utils';
@@ -48,11 +49,39 @@ const STATUS_COLOR: Record<NonNullable<Position['status']>, string> = {
   awaiting_settlement: '#f59e0b',
 };
 
+/**
+ * A position is "eligible for redeem-all" when the indexer reports a
+ * non-active status (`redeemable`, `lost`, `awaiting_settlement`, or
+ * `redeemed`) AND the position still has remaining quantity on-chain.
+ * Only `active` is excluded (market is still live). Rows with
+ * `open_quantity === 0` are excluded because the on-chain Move
+ * contract aborts if you try to redeem an already-claimed position —
+ * which would poison the whole atomic PTB.
+ *
+ * Centralised here so the popover and the Overview panel compute
+ * the same count.
+ */
+function isRedeemAllEligible(
+  p: {
+    status?: Position['status'] | RangePosition['status'];
+    open_quantity?: string;
+  },
+): boolean {
+  if (p.status === undefined || p.status === 'active') return false;
+  if (!p.open_quantity) return false;
+  try {
+    return BigInt(p.open_quantity) > BigInt(0);
+  } catch {
+    return false;
+  }
+}
+
 export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
-  const { positions, ranges, redeem } = usePredict();
+  const { positions, ranges, redeem, redeemRange, redeemAll } = usePredict();
   const { oracleId: currentOracleId, asset: currentAsset } = useCurrentMarket();
+  const { notify } = useToast();
 
   const [tab, setTab] = useState<Tab>('binary');
   const [marketFilter, setMarketFilter] = useState<string>(
@@ -61,6 +90,9 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  // Redeem All state — single button per tab, one PTB, one signature.
+  const [submittingAll, setSubmittingAll] = useState<boolean>(false);
+  const [allError, setAllError] = useState<string | null>(null);
 
   const sorted = useMemo(() => {
     return [...positions].sort((a, b) => {
@@ -86,6 +118,18 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
       return true;
     });
   }, [ranges, marketFilter]);
+
+  // Eligible counts for the Redeem All button. Scoped to the
+  // currently-visible tab AND the active market filter so the user
+  // sees exactly how many positions the click will affect.
+  const eligibleBinaryCount = useMemo(
+    () => filtered.filter(isRedeemAllEligible).length,
+    [filtered],
+  );
+  const eligibleRangeCount = useMemo(
+    () => filteredRanges.filter(isRedeemAllEligible).length,
+    [filteredRanges],
+  );
 
   // Distinct (oracle_id, asset, expiry) tuples present in positions for the dropdown
   const marketOptions = useMemo(() => {
@@ -124,6 +168,36 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
       setSubmittingId(null);
     }
   };
+
+  const handleRedeemAll = async () => {
+    if (!account || !dAppKit?.signAndExecuteTransaction) return;
+    const kind = tab;
+    const count = kind === 'binary' ? eligibleBinaryCount : eligibleRangeCount;
+    if (count === 0) return;
+    setSubmittingAll(true);
+    setAllError(null);
+    try {
+      const { redeemedCount } = await redeemAll(dAppKit.signAndExecuteTransaction, kind);
+      notify(
+        `Redeemed ${redeemedCount} ${kind === 'binary' ? 'binary' : 'range'} position${redeemedCount === 1 ? '' : 's'}`,
+        { variant: 'success' },
+      );
+    } catch (e: any) {
+      const msg = e?.message ?? 'Redeem all failed';
+      setAllError(msg);
+      notify(msg, { variant: 'error' });
+    } finally {
+      setSubmittingAll(false);
+    }
+  };
+
+  const redeemAllLabel =
+    tab === 'binary'
+      ? `REDEEM ALL BINARY${eligibleBinaryCount > 0 ? ` (${eligibleBinaryCount})` : ''}`
+      : `REDEEM ALL RANGE${eligibleRangeCount > 0 ? ` (${eligibleRangeCount})` : ''}`;
+  const redeemAllCount = tab === 'binary' ? eligibleBinaryCount : eligibleRangeCount;
+  const redeemAllDisabled =
+    redeemAllCount === 0 || submittingAll || !account || !dAppKit?.signAndExecuteTransaction;
 
   return (
     <div
@@ -212,6 +286,27 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
               <option value="awaiting_settlement">Awaiting</option>
             </select>
           )}
+
+          {/* Redeem All — one button, scoped to the active tab and the
+              active market filter. Disabled when count is 0. */}
+          <button
+            type="button"
+            onClick={handleRedeemAll}
+            disabled={redeemAllDisabled}
+            title={
+              redeemAllCount === 0
+                ? 'No settled positions to redeem'
+                : `Redeem all ${tab === 'binary' ? 'binary' : 'range'} settled positions in a single PTB`
+            }
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            style={{
+              background: green,
+              color: '#000',
+            }}
+          >
+            {submittingAll && <Loader2 size={10} className="animate-spin" />}
+            {submittingAll ? 'REDEEMING…' : redeemAllLabel}
+          </button>
 
           <button
             onClick={onClose}
@@ -360,6 +455,17 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
           </table>
         )}
       </div>
+
+      {/* Redeem All error — surfaces under the body so the user sees
+          it without losing the table context. */}
+      {allError && (
+        <div
+          className="relative z-10 px-4 py-2 border-t border-white/5 text-[10px]"
+          style={{ color: red }}
+        >
+          Redeem all failed: <span title={allError}>{allError}</span>
+        </div>
+      )}
     </div>
   );
 }

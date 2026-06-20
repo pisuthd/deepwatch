@@ -7,6 +7,7 @@ import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
 import { usePredict, type Position, type RangePosition } from '../../../hooks/usePredict';
 import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
+import { useToast } from '../../../context/ToastContext';
 import { formatExpiryDate, formatPrice } from '../predict/utils';
 
 const PRICE_SCALE_NUM = 1e9;
@@ -51,6 +52,33 @@ interface MarketOption {
 }
 
 /**
+ * A position is "eligible for redeem-all" when the indexer reports a
+ * non-active status (`redeemable`, `lost`, `awaiting_settlement`, or
+ * `redeemed`) AND the position still has remaining quantity on-chain.
+ * Only `active` is excluded (market is still live). Rows with
+ * `open_quantity === 0` are excluded because the on-chain Move
+ * contract aborts if you try to redeem an already-claimed position —
+ * which would poison the whole atomic PTB.
+ *
+ * Mirrors the same predicate in `PositionsPopover` so both panels
+ * surface the same eligible count.
+ */
+function isRedeemAllEligible(
+  p: {
+    status?: Position['status'] | RangePosition['status'];
+    open_quantity?: string;
+  },
+): boolean {
+  if (p.status === undefined || p.status === 'active') return false;
+  if (!p.open_quantity) return false;
+  try {
+    return BigInt(p.open_quantity) > BigInt(0);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Overview-page positions panel. Renders a glass card with a Binary | Range
  * tab toggle and the corresponding table, fed by `usePredict`. Compact
  * counterpart of `PositionsPopover` — designed to sit on the Overview page
@@ -60,12 +88,16 @@ interface MarketOption {
 export default function PositionsPanel() {
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
-  const { positions, ranges, redeem, redeemRange } = usePredict();
+  const { positions, ranges, redeem, redeemRange, redeemAll } = usePredict();
+  const { notify } = useToast();
 
   const [tab, setTab] = useState<Tab>('binary');
   const [marketFilter, setMarketFilter] = useState<string>('all');
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  // Redeem All state — one PTB covering the eligible slice of the active tab.
+  const [submittingAll, setSubmittingAll] = useState<boolean>(false);
+  const [allError, setAllError] = useState<string | null>(null);
 
   const sortedBinary = useMemo(() => {
     return [...positions].sort((a, b) => (b.first_minted_at ?? 0) - (a.first_minted_at ?? 0));
@@ -155,6 +187,48 @@ export default function PositionsPanel() {
   const total = positions.length + ranges.length;
   const currentCount = tab === 'binary' ? filteredBinary.length : filteredRanges.length;
 
+  // Eligible counts for the Redeem All button. Scoped to the active tab AND
+  // the active market filter so the user sees exactly how many positions
+  // the click will affect.
+  const eligibleBinaryCount = useMemo(
+    () => filteredBinary.filter(isRedeemAllEligible).length,
+    [filteredBinary],
+  );
+  const eligibleRangeCount = useMemo(
+    () => filteredRanges.filter(isRedeemAllEligible).length,
+    [filteredRanges],
+  );
+
+  const handleRedeemAll = async () => {
+    if (!account || !dAppKit?.signAndExecuteTransaction) return;
+    const kind = tab;
+    const count = kind === 'binary' ? eligibleBinaryCount : eligibleRangeCount;
+    if (count === 0) return;
+    setSubmittingAll(true);
+    setAllError(null);
+    try {
+      const { redeemedCount } = await redeemAll(dAppKit.signAndExecuteTransaction, kind);
+      notify(
+        `Redeemed ${redeemedCount} ${kind === 'binary' ? 'binary' : 'range'} position${redeemedCount === 1 ? '' : 's'}`,
+        { variant: 'success' },
+      );
+    } catch (e: any) {
+      const msg = e?.message ?? 'Redeem all failed';
+      setAllError(msg);
+      notify(msg, { variant: 'error' });
+    } finally {
+      setSubmittingAll(false);
+    }
+  };
+
+  const redeemAllLabel =
+    tab === 'binary'
+      ? `REDEEM ALL BINARY${eligibleBinaryCount > 0 ? ` (${eligibleBinaryCount})` : ''}`
+      : `REDEEM ALL RANGE${eligibleRangeCount > 0 ? ` (${eligibleRangeCount})` : ''}`;
+  const redeemAllCount = tab === 'binary' ? eligibleBinaryCount : eligibleRangeCount;
+  const redeemAllDisabled =
+    redeemAllCount === 0 || submittingAll || !account || !dAppKit?.signAndExecuteTransaction;
+
   return (
     <div
       className="relative overflow-hidden rounded-2xl p-6 border border-white/10 flex flex-col"
@@ -224,6 +298,27 @@ export default function PositionsPanel() {
               ))}
             </select>
           )}
+
+          {/* Redeem All — one button, scoped to the active tab and the
+              active market filter. Disabled when count is 0. */}
+          <button
+            type="button"
+            onClick={handleRedeemAll}
+            disabled={redeemAllDisabled}
+            title={
+              redeemAllCount === 0
+                ? 'No settled positions to redeem'
+                : `Redeem all ${tab === 'binary' ? 'binary' : 'range'} settled positions in a single PTB`
+            }
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            style={{
+              background: green,
+              color: '#000',
+            }}
+          >
+            {submittingAll && <Loader2 size={10} className="animate-spin" />}
+            {submittingAll ? 'REDEEMING…' : redeemAllLabel}
+          </button>
         </div>
       </div>
 
@@ -500,6 +595,17 @@ export default function PositionsPanel() {
       {currentCount === 0 && account && (
         <div className="relative z-10 mt-3 pt-3 border-t border-white/5 text-[10px]" style={{ color: textSecondary }}>
           No {tab} positions match the current view.
+        </div>
+      )}
+
+      {/* Redeem All error — surfaces under the body so the user sees
+          it without losing the table context. */}
+      {allError && (
+        <div
+          className="relative z-10 mt-2 text-[10px]"
+          style={{ color: red }}
+        >
+          Redeem all failed: <span title={allError}>{allError}</span>
         </div>
       )}
     </div>

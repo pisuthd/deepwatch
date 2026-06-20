@@ -207,6 +207,27 @@ interface UsePredictReturn {
   redeem: (signAndExecute: any, oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', quantity: number, settled: boolean) => Promise<void>
   /** Redeem a range position. `settled=true` switches to the permissionless variant. */
   redeemRange: (signAndExecute: any, oracleId: string, expiryMs: number, lower: number, higher: number, quantity: number, settled: boolean) => Promise<void>
+  /**
+   * Batch redeem — every position in the given kind with `status` in
+   * {`redeemable`, `lost`} gets its own `redeem_permissionless` /
+   * `redeem_range_permissionless` moveCall appended to a single PTB.
+   *
+   * - `kind: 'binary'` → loops `positions` filtered to settled
+   *   statuses; emits one `market_key::{up|down}` + one
+   *   `predict::redeem_permissionless` per position.
+   * - `kind: 'range'`  → loops `ranges` filtered to settled statuses;
+   *   emits one `range_key::new` + one
+   *   `predict::redeem_range_permissionless` per position.
+   *
+   * PTB is atomic — any failed moveCall aborts the whole tx.
+   * `active` and `awaiting_settlement` are intentionally excluded; if
+   * you need them, redeem them one-by-one with `redeem` / `redeemRange`.
+   *
+   * Returns `{ redeemedCount }` (0 if no eligible positions — caller
+   * should still disable the button in this case but we defend in the
+   * hook so it stays composable).
+   */
+  redeemAll: (signAndExecute: any, kind: 'binary' | 'range') => Promise<{ redeemedCount: number }>
   fetchMintPrice: (oracleId: string, strike: number) => void
   refreshData: () => Promise<void>
   getTradeQuote: (oracleId: string, expiryMs: number, strike: number, direction: 'up' | 'down', quantity: number) => Promise<TradeQuote | null>
@@ -285,16 +306,34 @@ export function usePredict(): UsePredictReturn {
         if (summaryData) setSummary(summaryData)
 
         // 2. Directional (binary) positions — aggregated by the indexer.
-        //    Expose ALL positions (open, redeemable, lost, awaiting_settlement,
-        //    redeemed) and let the UI filter — the popover already has a
-        //    status filter, and filtering at this layer would hide historical
-        //    positions from the user.
-        const posData = await safeJsonGet<Position[]>(
+        //    Expose ALL positions (open, redeemable, lost, awaiting_settlement)
+        //    and let the UI filter — the popover already has a status filter,
+        //    and filtering at this layer would hide historical positions from
+        //    the user.
+        //
+        //    The indexer uses the literal string `"redeemed"` to mean
+        //    "settled and ready to claim". Our in-app vocabulary only knows
+        //    `redeemable` / `lost`, so normalise at the boundary: a
+        //    `redeemed` row with positive `total_payout` is a win
+        //    (`redeemable`), zero payout is a loss (`lost`). Already-claimed
+        //    rows (open_quantity === 0) are kept so the user can still see
+        //    their history in the popover.
+        type RawPosition = Omit<Position, 'status'> & { status?: string; total_payout?: string | number }
+        const posData = await safeJsonGet<RawPosition[]>(
           `${SERVER}/managers/${userManager.manager_id}/positions/summary`,
           'GET /positions/summary',
         )
         if (posData) {
-          setPositions(posData)
+          const normalized: Position[] = posData.map((p) => {
+            let status: Position['status']
+            if (p.status === 'redeemed') {
+              status = Number(p.total_payout) > 0 ? 'redeemable' : 'lost'
+            } else {
+              status = (p.status ?? 'active') as Position['status']
+            }
+            return { ...p, status }
+          })
+          setPositions(normalized)
         } else {
           setPositions([])
         }
@@ -965,6 +1004,137 @@ export function usePredict(): UsePredictReturn {
     }
   }
 
+  // Batch redeem — every settled position in `kind` gets its own
+  // permissionless redeem moveCall appended to a single atomic PTB.
+  //
+  // Settled statuses are `redeemable` (won) and `lost` (resolved). Both
+  // can use `redeem_permissionless` because the market has expired and
+  // the outcome is on-chain — there's no race with an active oracle.
+  //
+  // `active` (market not yet expired) and `awaiting_settlement` (oracle
+  // not yet settled) are intentionally excluded: the first would fail
+  // on-chain with `ENotExpired`; the second would either fail (oracle
+  // can't tell us the outcome yet) or succeed against the wrong path
+  // if we used the non-permissionless variant. Either way, surface as
+  // per-row errors via the existing `redeem` / `redeemRange` paths.
+  //
+  // The PTB is one transaction, one signature. If any single moveCall
+  // fails (e.g. a position already redeemed between indexer poll and
+  // PTB build) the whole tx aborts and the caller surfaces a single
+  // error toast. That's acceptable — the user retries and the indexer
+  // catches up.
+  const isSettledStatus = (
+    s: Position['status'] | RangePosition['status'] | undefined,
+  ): boolean => s !== undefined && s !== 'active'
+
+  // Beyond the indexer's status, the on-chain Move contract aborts if the
+  // position's remaining quantity is zero (already claimed). Filter those
+  // out so the atomic PTB doesn't fail on the first row.
+  const hasRemainingQty = (openQty: string | undefined): boolean => {
+    if (!openQty) return false
+    try {
+      return BigInt(openQty) > BigInt(0)
+    } catch {
+      return false
+    }
+  }
+
+  const redeemAll = async (
+    signAndExecute: any,
+    kind: 'binary' | 'range',
+  ): Promise<{ redeemedCount: number }> => {
+    if (!account || !manager) return { redeemedCount: 0 }
+
+    const eligible = (
+      kind === 'binary'
+        ? positions.filter(
+            (p) => isSettledStatus(p.status) && hasRemainingQty(p.open_quantity),
+          )
+        : ranges.filter(
+            (r) => isSettledStatus(r.status) && hasRemainingQty(r.open_quantity),
+          )
+    ) as Array<Position | RangePosition>
+
+    if (eligible.length === 0) return { redeemedCount: 0 }
+
+    setError(null)
+    try {
+      const { Transaction } = await import('@mysten/sui/transactions')
+      const tx = new Transaction()
+
+      for (const item of eligible) {
+        if (kind === 'binary') {
+          const p = item as Position
+          // p.strike is already a PRICE_SCALE-scaled integer string;
+          // p.open_quantity is already a DUSDC_SCALE-scaled integer
+          // string. Skip the human→scaled roundtrip that the
+          // single-position `redeem()` does — direct BigInt passes
+          // through `tx.pure.u64` without precision loss.
+          const strikeScaled = BigInt(p.strike)
+          const qty = BigInt(p.open_quantity)
+          const direction = p.is_up ? 'up' : 'down'
+          const key = tx.moveCall({
+            target: `${PREDICT_PACKAGE}::market_key::${direction}`,
+            arguments: [
+              tx.pure.id(p.oracle_id),
+              tx.pure.u64(p.expiry),
+              tx.pure.u64(strikeScaled),
+            ],
+          })
+          tx.moveCall({
+            target: `${PREDICT_PACKAGE}::predict::redeem_permissionless`,
+            typeArguments: [DUSDC_TYPE],
+            arguments: [
+              tx.object(PREDICT_OBJECT_ID),
+              tx.object(manager.manager_id),
+              tx.object(p.oracle_id),
+              key,
+              tx.pure.u64(qty),
+              tx.object(CLOCK),
+            ],
+          })
+        } else {
+          const r = item as RangePosition
+          const lowerScaled = BigInt(r.lower_strike)
+          const higherScaled = BigInt(r.higher_strike)
+          const qty = BigInt(r.open_quantity)
+          const key = tx.moveCall({
+            target: `${PREDICT_PACKAGE}::range_key::new`,
+            arguments: [
+              tx.pure.id(r.oracle_id),
+              tx.pure.u64(r.expiry),
+              tx.pure.u64(lowerScaled),
+              tx.pure.u64(higherScaled),
+            ],
+          })
+          tx.moveCall({
+            target: `${PREDICT_PACKAGE}::predict::redeem_range_permissionless`,
+            typeArguments: [DUSDC_TYPE],
+            arguments: [
+              tx.object(PREDICT_OBJECT_ID),
+              tx.object(manager.manager_id),
+              tx.object(r.oracle_id),
+              key,
+              tx.pure.u64(qty),
+              tx.object(CLOCK),
+            ],
+          })
+        }
+      }
+
+      const result = await signAndExecute({ transaction: tx })
+      if (result.FailedTransaction) {
+        throw new Error(result.FailedTransaction.status.error?.message || 'Failed')
+      }
+
+      await refreshData()
+      return { redeemedCount: eligible.length }
+    } catch (e: any) {
+      setError(e.message)
+      throw e
+    }
+  }
+
   const fetchMintPrice = (oracleId: string, strike: number) => {
     if (!oracleId || strike <= 0) return
 
@@ -1148,6 +1318,7 @@ export function usePredict(): UsePredictReturn {
     createManagerAndMintRange,
     redeem,
     redeemRange,
+    redeemAll,
     fetchMintPrice,
     refreshData,
     getTradeQuote,
