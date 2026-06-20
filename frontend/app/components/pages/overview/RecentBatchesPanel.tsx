@@ -762,7 +762,7 @@ function ExpandedBody({
         {/* Blob ID */}
         <DetailRow
           label="Blob ID"
-          value={row.blobId}
+          value={row.blobId || ""}
           displayValue={row.blobId ? truncate(row.blobId, 22) : '—'}
           onCopy={row.blobId ? () => handleCopy(row.blobId!, 'blob') : null}
           copied={copied === 'blob'}
