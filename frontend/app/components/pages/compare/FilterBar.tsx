@@ -16,6 +16,7 @@
  */
 
 import GlassDropdown from '../../common/GlassDropdown';
+import InsightSourceSelector from '../../common/InsightSourceSelector';
 import type { DeepBookMatch } from '@/app/lib/match';
 import { getCoinIcon } from '@/app/lib/coinIcons';
 
@@ -135,6 +136,12 @@ export default function FilterBar({
             </span>
           </div>
         )}
+
+        {/* AI insight source selector (Local vs Walrus). Global preference
+            lives in `useInsightSource()` — applies across Compare, Predict,
+            Auto Trade. */}
+        <InsightSourceSelector />
+
         {/* Horizon chips */}
         <div
           className="inline-flex items-center rounded-lg p-0.5 gap-0.5"

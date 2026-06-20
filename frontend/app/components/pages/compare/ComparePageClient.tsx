@@ -49,10 +49,12 @@ import FilterBar, {
 import MatchTable from './MatchTable';
 import DrilldownPanel from './DrilldownPanel';
 import AiAnalyseModal from './AiAnalyseModal';
+import LocalAnalyseModal from './LocalAnalyseModal';
 import { useGlobalMarkets } from '../../../stores/markets-store';
 import { useAiBatch } from '@/app/stores/ai-batch-store';
 import { useMatchAnalyses } from '@/app/stores/match-analyses-store';
 import { useBatchIndex } from '@/app/stores/batch-index-store';
+import { useInsightSource } from '@/app/context/InsightSourceContext';
 import {
   groupPolymarketMarkets,
   type PolymarketGroup,
@@ -81,12 +83,23 @@ export default function ComparePageClient() {
   const { prepareBatch } = useAiBatch();
   const batchIndex = useBatchIndex();
   const matchAnalyses = useMatchAnalyses();
+  const { source: insightSource } = useInsightSource();
 
   const [asset, setAsset] = useState<string>('BTC');
   const [horizon, setHorizon] = useState<Horizon>('all');
   const [sort, setSort] = useState<SortKey>('expiry');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [cmcContext, setCmcContext] = useState<CmcContext | null>(null);
+  /**
+   * Which analyse-modal surface the user last opened. Gates the two
+   * modals on this page so they don't stack on top of each other —
+   * both subscribe to the same `useAiBatch()` state, and `prepareBatch`
+   * flips the provider's `isModalOpen` regardless of `target`, so we
+   * have to make sure only one `<*AnalyseModal>` renders per click.
+   * `null` = none open (clean state, dock pill still shows background
+   * progress for any in-flight batch).
+   */
+  const [activeAnalyseModal, setActiveAnalyseModal] = useState<'walrus' | 'local' | null>(null);
 
   // Group rows → match-ready groups. The groupers drop near-certain /
   // OTHER markets and dedupe YES/UP rows, so what comes out is exactly
@@ -185,6 +198,10 @@ export default function ComparePageClient() {
       // provider analyses the full `filtered` snapshot regardless of
       // which row triggered the click.
       void key;
+      // Flip the active-modal gate BEFORE the prepareBatch call so the
+      // provider's `isModalOpen=true` doesn't surface `AiAnalyseModal`
+      // if the user has just switched from the local flow.
+      setActiveAnalyseModal('walrus');
       // Open the modal synchronously so the click feels responsive.
       prepareBatch(filtered, cmcContext);
       // Fire the background refresh in parallel — fire-and-forget.
@@ -194,40 +211,64 @@ export default function ComparePageClient() {
     [cmcContext, ensureCmcContext, filtered, prepareBatch, refreshMarkets],
   );
 
-  // ─── Walrus hydration (Part 6) ────────────────────────────────────────
-  // On mount, kick off the batch-index refresh. Once it resolves,
-  // hydrate `match-analyses` with the latest batch's plaintext
-  // preview (first HEAD_SIZE + MIDDLE_SIZE markets) — this is what every
-  // visitor sees, regardless of wallet / stake state.
+  // Sibling of `handleClickAnalyse` — same shape, but `prepareBatch`
+  // stages the batch with `target: 'local'` so the SSE consumer's
+  // on-complete path writes to `localStorage` (and auto-flips the
+  // global source preference) instead of uploading to Walrus.
+  const handleClickLocalAnalyse = useCallback(
+    (key: string) => {
+      void key;
+      // Show the local modal — the Walrus `AiAnalyseModal` must not
+      // also render, since `prepareBatch` flips the shared provider's
+      // `isModalOpen` regardless of target.
+      setActiveAnalyseModal('local');
+      prepareBatch(filtered, cmcContext, { target: 'local' });
+      void Promise.all([refreshMarkets(), ensureCmcContext()]);
+    },
+    [cmcContext, ensureCmcContext, filtered, prepareBatch, refreshMarkets],
+  );
+
+  // ─── Source-aware hydration ──────────────────────────────────────────
+  // On mount AND whenever the user flips the global source selector,
+  // kick off the batch-index refresh (which now branches on `source`
+  // inside `batch-index-store.refresh()` — Walrus Tatum listWalrusUploads
+  // vs `getLocalBatches()`). Once it resolves, hydrate the per-match
+  // analyses store from the chosen source.
   //
-  // The encrypted slice is no longer auto-decrypted on this page (per
-  // user direction: it was confusing — sometimes worked, sometimes didn't,
-  // and the inconsistency between free-slice and encrypted-slice rows on
-  // the same batch was hard to explain). Stakers can read encrypted
-  // analyses on the Predict page via `useMatchInsight`. On Compare, the
-  // AI cell shows "Stake to unlock" for any row that isn't in the
-  // free slice — same UX for everyone, no surprises.
-  //
-  // After a successful batch upload, `AiBatchProvider.onBatchComplete`
-  // already pushes the in-flight entries into `match-analyses-store`
-  // (so the user sees their fresh analyses immediately, before the
-  // Walrus round-trip). The hydration effect below picks up the next
-  // visitor's view of the same batch.
+  // We also `clear()` the per-match store on every source flip so the
+  // table doesn't briefly show the OLD source's data while the new
+  // source's batch-index refresh is in flight (the user would otherwise
+  // see a flash of Walrus analyses on the screen even though they've
+  // switched to Local).
   useEffect(() => {
+    // `matchAnalyses` is intentionally NOT in the deps array —
+    // `useMatchAnalyses()` returns a fresh wrapper object on every
+    // render (spreads the context value into a new `{}`), so depending
+    // on it would re-fire this effect every render → infinite loop.
+    // `matchAnalyses.clear()` is a stable `useCallback` from the
+    // provider and is safe to call without depending on the wrapper.
+    matchAnalyses.clear();
     void batchIndex.refresh();
-    // refresh() is stable from useCallback; running once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [insightSource, batchIndex.refresh]);
 
   // Plaintext preview hydration. Runs once per "latest batch changed"
-  // transition. Only fires when `hydrated` is true and we haven't yet
-  // hydrated from this exact batch (so a re-render mid-Walrus-fetch
-  // doesn't loop). Also skips when the user is the uploader of this
-  // batch — the SSE consumer already populated the full in-memory
-  // set (free + encrypted-tail), and the plaintext-only Walrus
-  // preview would regress the user back to 3 visible entries.
+  // transition AND whenever the source flips. Branches on `insightSource`:
+  //
+  //   - `walrus` (default): hydrate from the latest batch's plaintext
+  //     preview (first HEAD_SIZE + MIDDLE_SIZE markets). Skipped when
+  //     the user is the uploader of this batch — the SSE consumer
+  //     already populated the full in-memory set, and the plaintext-only
+  //     Walrus body would regress them back to 3 visible entries.
+  //   - `local`: hydrate from `lib/local-insights.ts` directly via
+  //     `matchAnalyses.hydrateFromLocal()` — merges every cached
+  //     batch's `results` into one map (newest batch wins on overlap).
+  //     No Walrus roundtrip; no encrypted slice to worry about.
   useEffect(() => {
     if (!batchIndex.hydrated) return;
+    if (insightSource === 'local') {
+      matchAnalyses.hydrateFromLocal();
+      return;
+    }
     const latest = batchIndex.latest;
     if (!latest) return;
     if (matchAnalyses.lastHydratedBatchId === latest.batchId) return;
@@ -241,9 +282,12 @@ export default function ComparePageClient() {
     // MIDDLE_SIZE markets — see `ai-batch-store.tsx`).
     matchAnalyses.hydrateFromWalrus(latest.results, latest.batchId);
   }, [
+    insightSource,
     batchIndex.hydrated,
     batchIndex.latest,
-    matchAnalyses,
+    // `matchAnalyses` deliberately omitted — see comment in the
+    // refresh effect above. The `useMatchAnalyses()` wrapper object
+    // is recreated on every render; depending on it would loop.
   ]);
 
   // ─── (auto-decrypt removed — see doc comment above) ─────────────────
@@ -268,6 +312,7 @@ export default function ComparePageClient() {
           onSelect={setSelectedKey}
           venuesLoaded={everLoaded}
           onClickAnalyse={handleClickAnalyse}
+          onClickLocalAnalyse={handleClickLocalAnalyse}
         />
       </div>
 
@@ -277,7 +322,26 @@ export default function ComparePageClient() {
         onClose={() => setSelectedKey(null)}
       />
 
-      <AiAnalyseModal />
+      {/*
+        Only one modal at a time — `prepareBatch` flips the shared
+        provider's `isModalOpen` regardless of `target`, so without
+        the gate both `<AiAnalyseModal>` and `<LocalAnalyseModal>`
+        would mount at z-50 on the same click. Gate is keyed on the
+        user's most recent click (`activeAnalyseModal`).
+
+        Why `=== 'walrus'` and not `!== 'local'`? When the user closes
+        the local modal we set `activeAnalyseModal` back to `null`;
+        `null !== 'local'` is true, so `AiAnalyseModal` would
+        re-render and pick up the still-open `isModalOpen=true` flag
+        from the provider — surfacing the Walrus modal as a phantom.
+        Pinning the gate to the literal `'walrus'` keeps the Walrus
+        modal hidden until the user actually clicks "Run Analyse".
+      */}
+      {activeAnalyseModal === 'walrus' && <AiAnalyseModal />}
+      <LocalAnalyseModal
+        open={activeAnalyseModal === 'local'}
+        onClose={() => setActiveAnalyseModal(null)}
+      />
     </PageWrapper>
   );
 }

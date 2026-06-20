@@ -47,6 +47,7 @@ import { useSealDecrypt } from '@/app/hooks/useSealDecrypt';
 import { useMatchAnalyses } from '@/app/stores/match-analyses-store';
 import { useAiBatch } from '@/app/stores/ai-batch-store';
 import { useBatchIndex } from '@/app/stores/batch-index-store';
+import { useInsightSource } from '@/app/context/InsightSourceContext';
 import { useToast } from '@/app/context/ToastContext';
 import { SealAccessError } from '@/app/lib/seal';
 import type { DeepBookMatch } from '@/app/lib/match';
@@ -182,6 +183,7 @@ export default function AiCell({ match }: AiCellProps) {
   const { getByMatchKey, hydrated, setMany: setManyAnalyses } = useMatchAnalyses();
   const { state } = useAiBatch();
   const batchIndex = useBatchIndex();
+  const { source: insightSource } = useInsightSource();
   const { decrypt: sealDecryptBatch, isSigning } = useSealDecrypt();
   const { notify } = useToast();
   // Per-cell decrypt-in-flight flag. Combined with `isSigning` (true
@@ -310,75 +312,10 @@ export default function AiCell({ match }: AiCellProps) {
 
   const decrypting = manualDecrypting || isSigning;
 
-  // --- Non-staker branches (locked-by-default) ---------------------
-  // The 3 free-slice matches of each batch are public and land in the
-  // local `match-analyses` cache (which is what `analysis` reads).
-  // Anything that isn't in the cache defaults to locked, regardless of
-  // whether the user is "currently looking at" an encrypted match —
-  // we only render the analysis when the data is actually available,
-  // so the free-slice carve-out falls out of the cache hit.
-  if (!isStaker) {
-    if (analysis) {
-      return (
-        <div className="flex justify-end">
-          <AnalysisView analysis={analysis} match={match} />
-        </div>
-      );
-    }
-    if (isAnalysing) {
-      return (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            disabled
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded uppercase font-semibold transition-opacity disabled:opacity-50"
-            style={{
-              background: 'rgba(0, 230, 138, 0.12)',
-              border: '1px solid rgba(0, 230, 138, 0.3)',
-              color: green,
-              fontSize: 10,
-              letterSpacing: '0.05em',
-            }}
-            title="AI analysis in progress…"
-          >
-            <Sparkles size={10} />
-            Analysing…
-          </button>
-        </div>
-      );
-    }
-    return (
-      <div className="flex justify-end">
-        <a
-          href="/app/stake"
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md uppercase font-bold transition-opacity hover:opacity-90"
-          style={{
-            background: green,
-            color: '#000',
-            fontSize: 10,
-            letterSpacing: '0.05em',
-          }}
-          title="Stake PLP on the Stake page to unlock encrypted AI insights."
-        >
-          <Lock size={10} />
-          Stake to unlock
-        </a>
-      </div>
-    );
-  }
-
-  // --- Staker branches ----------------------------------------------
-  if (analysis) {
-    return (
-      <div className="flex justify-end">
-        <AnalysisView analysis={analysis} match={match} />
-      </div>
-    );
-  }
-
-  // Batch is in flight — show the same pill non-stakers see, so the
-  // staker knows the bottom click was registered even though no
-  // per-cell button exists anymore.
+  // --- Shared "in flight" pill ---------------------------------------
+  // Shown the moment a batch targets this row, regardless of source or
+  // stake state. Identical for Walrus and Local so the user sees the
+  // same "the click registered" feedback on both flows.
   if (isAnalysing) {
     return (
       <div className="flex justify-end">
@@ -402,12 +339,72 @@ export default function AiCell({ match }: AiCellProps) {
     );
   }
 
-  // No analysis yet, no in-flight batch — for stakers, surface an
-  // explicit "Decrypt" pill. `handleManualDecrypt` + `decrypting` are
-  // declared above the early returns so the hook order stays stable
-  // across renders (Rules of Hooks). The bottom global Analyse
-  // button is for the AI run; this button is for the encrypted-slice
-  // read on demand.
+  // --- Shared analysis branch ---------------------------------------
+  // The `analysis` variable already merges in-flight + persisted, and
+  // the persisted side is source-gated by `ComparePageClient`'s
+  // hydration effect (which calls `hydrateFromLocal()` or
+  // `hydrateFromWalrus()` based on `insightSource`). So a truthy
+  // `analysis` here always means "from the currently-selected source".
+  if (analysis) {
+    return (
+      <div className="flex justify-end">
+        <AnalysisView analysis={analysis} match={match} />
+      </div>
+    );
+  }
+
+  // --- Source=Local: no analysis → blank ----------------------------
+  // The "Stake to unlock" / "Unlock" affordances below are Walrus-only
+  // — they tie into the Subscription NFT + Seal-decrypt flow, which has
+  // no meaning in the localStorage world. Hiding them when source=local
+  // makes the per-source surface visually distinct: Walrus rows show
+  // the full locked/encrypted UI, Local rows show a clean "no analysis
+  // here yet" gap. Users who want to see the Walrus UI for this row
+  // flip the selector in the FilterBar.
+  if (insightSource === 'local') {
+    return (
+      <div
+        className="flex justify-end font-mono"
+        title="No local analysis for this row yet — run a one-time batch or switch the source to Walrus."
+      >
+        <span style={{ color: textSecondary, opacity: 0.45, fontSize: 13, letterSpacing: '-0.01em' }}>—</span>
+      </div>
+    );
+  }
+
+  // --- Source=Walrus: no analysis yet → gate on stake state ----------
+  // The 3 free-slice matches of each batch are public and land in the
+  // local `match-analyses` cache (which is what `analysis` reads).
+  // Anything that isn't in the cache defaults to locked, regardless of
+  // whether the user is "currently looking at" an encrypted match —
+  // we only render the analysis when the data is actually available,
+  // so the free-slice carve-out falls out of the cache hit.
+  if (!isStaker) {
+    return (
+      <div className="flex justify-end">
+        <a
+          href="/app/stake"
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md uppercase font-bold transition-opacity hover:opacity-90"
+          style={{
+            background: green,
+            color: '#000',
+            fontSize: 10,
+            letterSpacing: '0.05em',
+          }}
+          title="Stake PLP on the Stake page to unlock encrypted AI insights."
+        >
+          <Lock size={10} />
+          Stake to unlock
+        </a>
+      </div>
+    );
+  }
+
+  // Staker, no analysis, no in-flight — surface an explicit "Decrypt"
+  // pill. `handleManualDecrypt` + `decrypting` are declared above the
+  // early returns so the hook order stays stable across renders
+  // (Rules of Hooks). The bottom global Analyse button is for the AI
+  // run; this button is for the encrypted-slice read on demand.
   return (
     <div className="flex justify-end">
       <button

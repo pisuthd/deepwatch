@@ -47,6 +47,7 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import type { MatchAnalysis } from '../lib/match-analyses';
+import { getLocalBatches } from '../lib/local-insights';
 
 interface MatchAnalysesState {
   /** Keyed by `matchKey` (= `DeepBookMatch.key`) for O(1) lookup. */
@@ -119,6 +120,13 @@ const MatchAnalysesContext = createContext<{
     entries: Record<string, MatchAnalysis>,
     batchId?: string | null,
   ) => void;
+  /**
+   * Hydrate from the browser-local batch store (`lib/local-insights`).
+   * Reads every cached batch newest-first, merges all `results` into
+   * `byKey`. Called by Compare / Predict pages when the global source
+   * is `'local'`.
+   */
+  hydrateFromLocal: () => void;
   /** Mark a batchId as "personally uploaded by this user" so the
    * hydration effect in ComparePageClient doesn't clobber the full
    * in-memory result set (set by SSE consumer's `setMany`) with the
@@ -152,6 +160,21 @@ export function MatchAnalysesProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  const hydrateFromLocal = useCallback((): void => {
+    // Merge every cached batch's `results` into one flat map. Newer
+    // batches (already first in `getLocalBatches()`) win on overlap.
+    const batches = getLocalBatches(); // newest first
+    const merged: Record<string, MatchAnalysis> = {};
+    for (const b of batches) {
+      for (const [k, v] of Object.entries(b.results)) merged[k] = v;
+    }
+    dispatch({
+      type: 'HYDRATE',
+      entries: merged,
+      batchId: batches[0]?.batchId ?? null,
+    });
+  }, []);
 
   const set = useCallback(
     (
@@ -202,6 +225,7 @@ export function MatchAnalysesProvider({ children }: { children: ReactNode }) {
         state,
         getByMatchKey,
         hydrateFromWalrus,
+        hydrateFromLocal,
         markUploaded,
         set,
         setMany,
@@ -227,6 +251,7 @@ export function useMatchAnalyses() {
     lastUploadedBatchId: ctx.state.lastUploadedBatchId,
     getByMatchKey: ctx.getByMatchKey,
     hydrateFromWalrus: ctx.hydrateFromWalrus,
+    hydrateFromLocal: ctx.hydrateFromLocal,
     markUploaded: ctx.markUploaded,
     set: ctx.set,
     setMany: ctx.setMany,

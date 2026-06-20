@@ -72,6 +72,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMatchAnalyses } from '@/app/stores/match-analyses-store';
 import { useBatchIndex } from '@/app/stores/batch-index-store';
+import { useInsightSource } from '@/app/context/InsightSourceContext';
 import { useStake } from './useStake';
 import { useSealDecrypt } from './useSealDecrypt';
 import { SealAccessError, type SealAccessErrorReason } from '@/app/lib/seal';
@@ -80,6 +81,7 @@ import {
   fetchInsightBlob,
   parseBatchFilename,
 } from '@/app/lib/tatum';
+import { findLocalAnalysisForMatch, getLocalBatches } from '@/app/lib/local-insights';
 import { validateBatchInsight, type MatchAnalysis } from '@/app/lib/match-analyses';
 
 const TATUM_API_KEY =
@@ -111,7 +113,9 @@ export function useMatchInsight(
     set: setBatch,
     setEncryptedResults: cacheEncryptedResults,
     hydrated: batchesHydrated,
+    refresh: refreshBatchIndex,
   } = useBatchIndex();
+  const { source } = useInsightSource();
   const { isStaker } = useStake();
   const { decrypt: sealDecryptBatch } = useSealDecrypt();
   const [remoteAnalysis, setRemoteAnalysis] = useState<MatchAnalysis | null>(null);
@@ -155,6 +159,27 @@ export function useMatchInsight(
           ?.encryptedResults?.[matchKey] ?? null)
       : null;
 
+  // Local-source path: kick off the batch-index refresh (which reads
+  // from localStorage) the first time this hook mounts when source=local.
+  // Skip when source=walrus — ComparePageClient already triggered the
+  // Walrus refresh on its mount.
+  useEffect(() => {
+    if (source === 'local' && !batchesHydrated) {
+      void refreshBatchIndex();
+    }
+  }, [source, batchesHydrated, refreshBatchIndex]);
+
+  // Local-source direct lookup: when the batch index hasn't populated
+  // yet (or doesn't include this matchKey for any reason), walk the
+  // local envelope directly. Cheaper than waiting for refresh() and
+  // gives a same-render answer.
+  const fromLocalDirect: MatchAnalysis | null = useMemo(() => {
+    if (source !== 'local' || !matchKey) return null;
+    if (local || fromIndex) return null;
+    const batch = findLocalAnalysisForMatch(matchKey);
+    return batch?.results[matchKey] ?? null;
+  }, [source, matchKey, local, fromIndex]);
+
   // Step 2c: find the batch gating this key in its encrypted slice.
   // Used to (a) decide whether to attempt a decrypt and (b) know
   // which `batchId` to read `wrappedKey` / `encryptedPayload` /
@@ -173,12 +198,14 @@ export function useMatchInsight(
   // IS a staker, the decrypt effect below handles the failure
   // (mapping `SealAccessError` to `accessError` on the fly).
   const accessError: AccessError | null = useMemo<AccessError | null>(() => {
+    if (source !== 'walrus') return null; // local batches have no encrypted slice
     if (!matchKey || !batchesHydrated) return null;
     if (local || fromIndex || fromEncryptedCache || remoteAnalysis) return null;
     if (!gatedBatch) return null;
     if (isStaker) return null; // decrypt path below will surface a real reason
     return 'NO_SUBSCRIPTION';
   }, [
+    source,
     matchKey,
     batchesHydrated,
     local,
@@ -209,6 +236,7 @@ export function useMatchInsight(
   // cancel.
   useEffect(() => {
     if (!matchKey) return;
+    if (source !== 'walrus') return; // local batches live in batch-index already
     if (!analysesHydrated || !batchesHydrated) return; // wait for hydration
     if (local || fromIndex || fromEncryptedCache) return; // already have a hit
     if (!TATUM_API_KEY) return; // no API key → can't fetch
@@ -282,6 +310,7 @@ export function useMatchInsight(
     // included so a freshly-loaded index re-evaluates the skip.
     // `fromEncryptedCache` short-circuits on a decrypt hit.
   }, [
+    source,
     matchKey,
     analysesHydrated,
     batchesHydrated,
@@ -315,6 +344,7 @@ export function useMatchInsight(
   // matchKey — nothing left to cancel.
   useEffect(() => {
     if (!matchKey) return;
+    if (source !== 'walrus') return; // local batches have no encrypted slice
     if (!analysesHydrated || !batchesHydrated) return;
     if (!isStaker) return; // non-stakers: leave `accessError: 'NO_SUBSCRIPTION'` in place
     if (!gatedBatch) return; // not in any encrypted slice
@@ -359,6 +389,7 @@ export function useMatchInsight(
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    source,
     matchKey,
     analysesHydrated,
     batchesHydrated,
@@ -372,7 +403,7 @@ export function useMatchInsight(
   ]);
 
   return {
-    analysis: local ?? fromIndex ?? fromEncryptedCache ?? remoteAnalysis,
+    analysis: local ?? fromIndex ?? fromEncryptedCache ?? fromLocalDirect ?? remoteAnalysis,
     // decryptError overrides the metadata-only accessError when a real
     // decrypt attempt failed — gives the UI a more specific reason.
     accessError: accessError ?? decryptError,

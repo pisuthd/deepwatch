@@ -57,6 +57,8 @@ import { useBatchIndex } from './batch-index-store';
 import { useToast } from '../context/ToastContext';
 import { useNetworkConfig } from '../hooks/useNetworkConfig';
 import { useNetwork } from '../context/NetworkContext';
+import { useInsightSource } from '../context/InsightSourceContext';
+import { saveLocalBatch } from '../lib/local-insights';
 import {
   generateInsightBatch,
   type InsightBatchChunk,
@@ -148,6 +150,19 @@ export interface AiBatchState {
   finishedAt: number | null;
 }
 
+export type BatchTarget = 'walrus' | 'local';
+
+export interface PrepareBatchOptions {
+  /**
+   * Where the completed batch will be written:
+   *   - `'walrus'` (default) — uploads to Walrus via Tatum.
+   *   - `'local'` — saves to browser localStorage. No upload, no Seal
+   *     encryption. Used by the `LocalAnalyseModal` "Run One-Time"
+   *     button.
+   */
+  target?: BatchTarget;
+}
+
 export interface AiBatchApi {
   state: AiBatchState;
   /**
@@ -159,13 +174,23 @@ export interface AiBatchApi {
    * Calling this while a batch is `analysing` aborts the in-flight one
    * first (matching the old `startBatch` behaviour for the re-analyse
    * path).
+   *
+   * Pass `{ target: 'local' }` to write the completed batch to
+   * localStorage instead of Walrus (no Seal encryption, no upload).
    */
-  prepareBatch: (matches: DeepBookMatch[], cmcContext: CmcContext | null) => void;
+  prepareBatch: (
+    matches: DeepBookMatch[],
+    cmcContext: CmcContext | null,
+    options?: PrepareBatchOptions,
+  ) => void;
   /**
    * Actually fire the SSE consumer. No-op unless `phase === 'reviewing'`.
    * If called from a different phase (e.g. from the Done panel's
    * "Re-analyse" button), it re-prepares from the current `state.matches`
    * first so the flow is consistent.
+   *
+   * On completion, the batch is written to the target that was passed
+   * to `prepareBatch` (default `'walrus'`).
    */
   commitBatch: () => void;
   /** Abort the in-flight batch without starting a new one. No-op if idle. */
@@ -221,6 +246,7 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
   const { notify } = useToast();
   const cfg = useNetworkConfig();
   const { network } = useNetwork();
+  const { setSource: setInsightSource } = useInsightSource();
 
   const [state, setState] = useState<AiBatchState>(IDLE_STATE);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -234,6 +260,9 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
   const abortRef = useRef<AbortController | null>(null);
   const cmcContextRef = useRef<CmcContext | null>(null);
   const preparedMatchesRef = useRef<DeepBookMatch[] | null>(null);
+  // Where the completed batch will be written (set in `prepareBatch`,
+  // read in `commitBatch` / `onBatchComplete`). Defaults to `'walrus'`.
+  const preparedTargetRef = useRef<BatchTarget>('walrus');
   // Buffer of in-flight results waiting to be bulk-persisted.
   const bufRef = useRef<Array<[string, MatchAnalysis]>>([]);
 
@@ -485,7 +514,11 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
    * pre-Part-4 behaviour for the "user clicked Analyse again" path).
    */
   const prepareBatch = useCallback(
-    (matches: DeepBookMatch[], cmcContext: CmcContext | null) => {
+    (
+      matches: DeepBookMatch[],
+      cmcContext: CmcContext | null,
+      options?: PrepareBatchOptions,
+    ) => {
       if (matches.length === 0) return;
 
       // Abort any in-flight batch (analysing or another in-flight review).
@@ -493,6 +526,7 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
       bufRef.current = [];
       cmcContextRef.current = cmcContext;
       preparedMatchesRef.current = matches;
+      preparedTargetRef.current = options?.target ?? 'walrus';
 
       setState({
         ...REVIEWING_STATE_TEMPLATE,
@@ -681,7 +715,7 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
         },
       );
 
-      // 7. Build the BatchInsight and upload to Walrus in the background.
+      // 7. Build the BatchInsight and write it to the target storage.
       const results: Record<string, MatchAnalysis> = {};
       for (const [k, v] of persistedEntries) results[k] = v;
       const batch: BatchInsightForUpload = {
@@ -690,12 +724,59 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
         cmcContext: cmcContextRef.current,
         results,
       };
+
+      if (preparedTargetRef.current === 'local') {
+        // Local path: plaintext full-set (no free-slice split, no
+        // Seal/AES wrap). Save to localStorage, mirror into the
+        // in-memory batch index so reads see it without re-fetch, and
+        // auto-flip the global source preference to `'local'` so the
+        // Compare / Predict pages read from this batch next render.
+        try {
+          const localBatch: BatchInsight = {
+            batchId: batch.batchId,
+            createdAt: batch.createdAt,
+            cmcContext: batch.cmcContext,
+            results: batch.results,
+            plaintextFilename: `local-${batch.batchId}-${batch.createdAt}.json`,
+          };
+          const ok = saveLocalBatch(localBatch);
+          if (!ok) {
+            notify(
+              'Local storage full — old batches were not kept. Use Walrus for longer retention.',
+              { variant: 'warning', title: 'Save failed', duration: 6000 },
+            );
+            return;
+          }
+          // Mirror into the in-memory cache so the table re-renders
+          // without waiting for the next refresh.
+          setBatchIndex(localBatch);
+          setInsightSource('local');
+          notify(
+            `Saved locally · ${persistedEntries.length} of ${completedMatches.length} markets analysed.`,
+            {
+              variant: 'success',
+              title: 'AI batch saved (local)',
+              duration: 6000,
+              key: `ai-batch-complete-local-${completedBatchId}`,
+              action: { label: 'View results', onClick: () => setIsModalOpen(true) },
+            },
+          );
+        } catch (e: any) {
+          notify(
+            e?.message ?? 'Local save failed.',
+            { variant: 'error', title: 'Save failed' },
+          );
+        }
+        return;
+      }
+
+      // Walrus path (default) — encrypt + upload in the background.
       void uploadBatchInBackground(batch);
     };
 
     // Kick the consumer. Errors are caught inside `consume`.
     void consume();
-  }, [abortBatch, markUploaded, notify, setMany, uploadBatchInBackground]);
+  }, [abortBatch, markUploaded, notify, setMany, setBatchIndex, setInsightSource, uploadBatchInBackground]);
 
   const clearBatch = useCallback(() => {
     abortBatch();

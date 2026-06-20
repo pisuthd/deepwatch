@@ -1,6 +1,7 @@
 'use client';
 
 import { NetworkProvider } from './context/NetworkContext';
+import { InsightSourceProvider } from './context/InsightSourceContext';
 import { ToastProvider } from './context/ToastContext';
 import { DAppKitProvider } from '@mysten/dapp-kit-react';
 import { dAppKit } from './dapp-kit';
@@ -19,6 +20,10 @@ import BatchStatusDock from './components/pages/compare/BatchStatusDock';
  *                            Lives outside DAppKit intentionally — the markets
  *                            feed is independent of wallet state.
  *   NetworkProvider        — global network (mainnet/testnet) selector.
+ *   InsightSourceProvider  — global preference for AI batch storage
+ *                            ('walrus' default / 'local' fallback). Read
+ *                            by MatchAnalysesProvider + BatchIndexProvider
+ *                            so it sits above both.
  *   InsightsProvider       — local-first insight store backed by localStorage.
  *   MatchAnalysesProvider  — per-match AI analysis store (Compare page).
  *   BatchIndexProvider     — localStorage cache of Walrus batch blobs.
@@ -41,24 +46,29 @@ import BatchStatusDock from './components/pages/compare/BatchStatusDock';
  *     a batch is in flight on the Compare page.
  *   - `ToastProvider` must wrap `AiBatchProvider` because the provider
  *     fires a completion toast on `done`.
+ *   - `InsightSourceProvider` wraps `MatchAnalysesProvider` and
+ *     `BatchIndexProvider` so they can branch on `useInsightSource()`
+ *     when refreshing / hydrating.
  */
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <DAppKitProvider dAppKit={dAppKit}>
       <MarketsProvider>
         <NetworkProvider>
-          <InsightsProvider>
-            <MatchAnalysesProvider>
-              <BatchIndexProvider>
-                <ToastProvider>
-                  <AiBatchProvider>
-                    <BatchStatusDock />
-                    {children}
-                  </AiBatchProvider>
-                </ToastProvider>
-              </BatchIndexProvider>
-            </MatchAnalysesProvider>
-          </InsightsProvider>
+          <InsightSourceProvider>
+            <InsightsProvider>
+              <MatchAnalysesProvider>
+                <BatchIndexProvider>
+                  <ToastProvider>
+                    <AiBatchProvider>
+                      <BatchStatusDock />
+                      {children}
+                    </AiBatchProvider>
+                  </ToastProvider>
+                </BatchIndexProvider>
+              </MatchAnalysesProvider>
+            </InsightsProvider>
+          </InsightSourceProvider>
         </NetworkProvider>
       </MarketsProvider>
     </DAppKitProvider>

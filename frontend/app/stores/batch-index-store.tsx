@@ -57,6 +57,8 @@ import {
   type BatchInsight,
   type MatchAnalysis,
 } from '../lib/match-analyses';
+import { useInsightSource } from '../context/InsightSourceContext';
+import { getLocalBatches } from '../lib/local-insights';
 
 const TATUM_API_KEY =
   (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_TATUM_API_KEY) || '';
@@ -160,8 +162,33 @@ export function BatchIndexProvider({ children }: { children: ReactNode }) {
   // other. The ref holds the most recent in-flight promise so callers
   // can `await` the same one.
   const inflightRef = useRef<Promise<void> | null>(null);
+  const { source } = useInsightSource();
 
   const refresh = useCallback(async (): Promise<void> => {
+    if (inflightRef.current) return inflightRef.current;
+
+    // Local-source branch: read straight from `lib/local-insights.ts`,
+    // skip the Tatum roundtrip entirely. SSR-safe (empty array on the
+    // server; hydrate on the client). Mark hydrated so consumers
+    // unblock.
+    if (source === 'local') {
+      dispatch({ type: 'REFRESH_START' });
+      try {
+        const localBatches = getLocalBatches();
+        const byBatchId: Record<string, BatchInsight> = {};
+        for (const b of localBatches) byBatchId[b.batchId] = b;
+        dispatch({
+          type: 'REFRESH_END',
+          byBatchId,
+          lastRefreshedAt: Date.now(),
+        });
+      } finally {
+        inflightRef.current = null;
+      }
+      return;
+    }
+
+    // Walrus-source branch (default): existing Tatum roundtrip.
     if (!TATUM_API_KEY) {
       // No API key → mark hydrated so consumers don't block forever.
       // The empty index is the correct empty state.
@@ -172,7 +199,6 @@ export function BatchIndexProvider({ children }: { children: ReactNode }) {
       });
       return;
     }
-    if (inflightRef.current) return inflightRef.current;
 
     dispatch({ type: 'REFRESH_START' });
     const promise = (async () => {
@@ -233,7 +259,7 @@ export function BatchIndexProvider({ children }: { children: ReactNode }) {
     })();
     inflightRef.current = promise;
     return promise;
-  }, []);
+  }, [source]);
 
   const getByBatchId = useCallback(
     (id: string): BatchInsight | null => state.byBatchId[id] ?? null,

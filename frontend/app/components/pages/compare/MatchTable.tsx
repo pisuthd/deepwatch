@@ -42,7 +42,7 @@
  */
 
 import GlassCard from '../../common/GlassCard';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Database } from 'lucide-react';
 import { formatDetailedExpiry, formatExpiryDate } from '@/app/lib/format';
 import type { DeepBookMatch } from '@/app/lib/match';
 import AiCell from './AiCell';
@@ -64,6 +64,13 @@ interface MatchTableProps {
    * the visible matches to `AiBatchProvider.startBatch()`. The cell
    * itself reads its own `isAnalysing` state from the provider. */
   onClickAnalyse: (key: string) => void;
+  /**
+   * Called when the user clicks the footer's "Run One-Time Analyse
+   * (Local)" button. Opens a separate modal whose on-complete path
+   * persists to localStorage (and auto-flips the source preference to
+   * `'local'`) instead of uploading to Walrus.
+   */
+  onClickLocalAnalyse: (key: string) => void;
 }
 
 /**
@@ -174,6 +181,7 @@ export default function MatchTable({
   onSelect,
   venuesLoaded,
   onClickAnalyse,
+  onClickLocalAnalyse,
 }: MatchTableProps) {
   if (firstLoad) {
     return (
@@ -334,9 +342,11 @@ export default function MatchTable({
 
       {/* Footer action bar — global "Run analysis" trigger so the user
           can fire a batch over the currently visible matches at any
-          time, without having to find a row's per-cell Analyse button. */}
+          time, without having to find a row's per-cell Analyse button.
+          Two variants: Walrus (default, durable via Tatum) and Local
+          (browser-localStorage, free, temporary). */}
       <div
-        className="px-3 py-2.5 border-t border-white/5 flex items-center justify-between gap-3"
+        className="px-3 py-2.5 border-t border-white/5 flex items-center justify-between gap-3 flex-wrap"
       >
         <span
           className="text-[11px]"
@@ -344,22 +354,41 @@ export default function MatchTable({
         >
           {matches.length} {matches.length === 1 ? 'match' : 'matches'}
         </span>
-        <button
-          type="button"
-          onClick={() => onClickAnalyse(matches[0]?.key ?? '')}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-opacity hover:opacity-90"
-          style={{
-            background: green,
-            color: '#000',
-            fontSize: 11,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-          }}
-          title="Run AI analysis on every visible match (first 3 free, rest Seal-encrypted)."
-        >
-          <Sparkles size={12} />
-          Run Analyse {matches.length} {matches.length === 1 ? 'match' : 'matches'}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => onClickLocalAnalyse(matches[0]?.key ?? '')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-opacity hover:opacity-90"
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: textPrimary,
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+            }}
+            title="Run AI analysis and save to this browser's local storage. Free and instant, but temporary."
+          >
+            <Database size={12} />
+            Run One-Time (Local) {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onClickAnalyse(matches[0]?.key ?? '')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-opacity hover:opacity-90"
+            style={{
+              background: green,
+              color: '#000',
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+            }}
+            title="Run AI analysis on every visible match (first 3 free, rest Seal-encrypted) and upload to Walrus."
+          >
+            <Sparkles size={12} />
+            Run Analyse {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+          </button>
+        </div>
       </div>
     </GlassCard>
   );
