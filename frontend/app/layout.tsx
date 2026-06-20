@@ -19,8 +19,8 @@ const orbitron = Orbitron({
 });
 
 export const metadata: Metadata = {
-  title: "DeepWatch - The intelligence layer for DeepBook",
-  description: "AI-powered prediction platform",
+  title: "DeepWatch - The Intelligence Layer for DeepBook",
+  description: "AI-powered trading terminal for DeepBook Spot, Margin, and Predict — with on-chain access control and AI insights.",
 };
 
 export default function RootLayout({
