@@ -4,11 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useSpotPools, type SpotPool } from '../../../hooks/useSpotPools';
+import { useDefaultSpotPool } from '../../../hooks/useDefaultSpotPool';
 import { useCurrentPool, useSetCurrentPool } from './CurrentPoolContext';
 import GlassCard from '../../common/GlassCard';
 import SwapCard from './SwapCard';
 import { getCoinIcon } from '../../../lib/coinIcons';
-import { useNetwork } from '../../../context/NetworkContext';
 
 const green = '#00E68A';
 const red = '#ef4444';
@@ -94,29 +94,12 @@ export default function SpotSimpleMode() {
   const { pools, loading } = useSpotPools();
   const { poolKey: currentPoolKey, baseAsset, quoteAsset } = useCurrentPool();
   const setCurrentPool = useSetCurrentPool();
-  const { network } = useNetwork();
+  // Auto-select a default pool (XBTC_USDC on mainnet) when nothing is
+  // chosen yet, so the swap card mounts on first paint. Shared with
+  // SpotAdvancedMode via useDefaultSpotPool.
+  useDefaultSpotPool(pools);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const selectorRef = useRef<HTMLDivElement>(null);
-
-  // Default-select a pool when nothing is chosen yet. Mainnet prefers
-  // `XBTC_USDC` (the headline BTC pair); testnet falls back to whatever the
-  // indexer returned first since the testnet default varies by season.
-  useEffect(() => {
-    if (!currentPoolKey && pools.length > 0) {
-      const preferred = network === 'mainnet'
-        ? pools.find((p) => p.poolName === 'XBTC_USDC') ?? pools[0]
-        : pools[0];
-      setCurrentPool({
-        poolKey: preferred.poolName,
-        baseAsset: preferred.baseAsset,
-        quoteAsset: preferred.quoteAsset,
-        baseAssetId: preferred.baseAssetId,
-        quoteAssetId: preferred.quoteAssetId,
-        baseAssetDecimals: preferred.baseAssetDecimals,
-        quoteAssetDecimals: preferred.quoteAssetDecimals,
-      });
-    }
-  }, [currentPoolKey, pools, setCurrentPool, network]);
 
   const currentPool: SpotPool | undefined = useMemo(
     () => pools.find((p) => p.poolName === currentPoolKey),

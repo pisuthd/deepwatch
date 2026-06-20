@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useSpotPools, type SpotPool } from '../../../hooks/useSpotPools';
+import { useDefaultSpotPool } from '../../../hooks/useDefaultSpotPool';
 import { useCurrentPool, useSetCurrentPool } from './CurrentPoolContext';
 import CandlestickChart from './CandlestickChart';
 import AdvancedSwapCard from './AdvancedSwapCard';
@@ -70,6 +71,10 @@ export default function SpotAdvancedMode() {
   const { pools, loading, getOHLCV } = useSpotPools();
   const { poolKey, baseAsset, quoteAsset } = useCurrentPool();
   const setCurrentPool = useSetCurrentPool();
+  // Auto-select a default pool (XBTC_USDC on mainnet) when nothing is
+  // chosen yet, so the chart and swap card mount on first paint instead
+  // of waiting for the user to round-trip through Simple mode.
+  useDefaultSpotPool(pools);
   const [interval, setInterval] = useState<Interval>('4h');
   const [selectorOpen, setSelectorOpen] = useState(false);
   const selectorRef = useRef<HTMLDivElement>(null);
