@@ -127,23 +127,23 @@ export function validateMatchAnalysisToolInput(
  * `useMatchInsight` hook indexes this map by `matchKey` to look up a
  * single market.
  *
- * # v2 (Seal encryption split)
+ * # v2 (hybrid Seal + AES encryption)
  *
  * Per user direction (hackathon v2): the *first 3 markets per batch*
- * are uploaded as plaintext to Walrus (anyone can read), the remainder
- * are Seal-encrypted before upload. Only wallets holding a valid
- * `deepwatch::subscription::Subscription` NFT can decrypt the
- * sealed slice.
+ * live in `results` (plaintext, anyone can read). The *full set*
+ * is AES-256-GCM-encrypted; the AES key is itself Seal-encrypted
+ * (the "hybrid" pattern). Only wallets holding a valid
+ * `deepwatch::subscription::Subscription` NFT can recover the AES
+ * key via Seal and therefore decrypt the full set.
  *
- * The plaintext blob holds `results` (the free slice). The encrypted
- * blob holds a separate `BatchInsight`-shaped JSON whose `results`
- * field is the encrypted slice — the field name is identical because
- * the two blobs are structurally the same; what differs is whether
- * the bytes are ciphertext or plaintext. Both blobs are uploaded in
- * the same batch lifecycle (see `ai-batch-store.onBatchComplete`).
+ * The hybrid cuts Walrus cost in half vs the prior "two blobs per
+ * batch" approach (plaintext blob + separate Seal blob), because
+ * the encrypted slice now lives inline in the same JSON — base64
+ * ciphertext and base64 wrapped-key, sitting next to the plaintext
+ * `results` and the `encryptedMatchKeys` list.
  *
  * `encryptedMatchKeys` is a deliberately-unencrypted list of the
- * matchKeys behind the Seal gate. This is metadata, not analysis
+ * matchKeys behind the gate. This is metadata, not analysis
  * content — exposing the key list doesn't leak the analysis. The
  * `useMatchInsight` hook uses it to know when to attempt a decrypt.
  *
@@ -160,23 +160,28 @@ export interface BatchInsight {
   /**
    * Per-match results for the **free slice** (first 3 markets by
    * insertion order). Keyed by `matchKey` (= `DeepBookMatch.key`).
-   * The encrypted slice lives in a separate Walrus blob; see
-   * `encryptedBlobId` below.
+   * The full set lives behind `encryptedPayload` (AES-encrypted).
    */
   results: Record<string, MatchAnalysis>;
-  /**
-   * Walrus filename of the *encrypted slice's* blob (the
-   * Seal-encrypted JSON of `{ batchId, createdAt, cmcContext,
-   * results: encryptedResults }`). `undefined` for batches that
-   * had ≤ 3 markets (no encryption needed).
-   */
-  encryptedBlobId?: string;
   /**
    * `matchKey`s behind the Seal gate. Unencrypted metadata so the
    * Predict page's `useMatchInsight` can know to attempt a decrypt
    * without first fetching the ciphertext.
    */
   encryptedMatchKeys?: string[];
+  /**
+   * Base64-encoded AES-256-GCM ciphertext of the full-set JSON
+   * (the `{ batchId, createdAt, cmcContext, results: allEntries }`
+   * blob). Format: `[12-byte IV][ciphertext][16-byte GCM tag]`. See
+   * `lib/aes.ts` for the wire layout. `undefined` for batches that
+   * had ≤ 3 markets (no encryption needed).
+   */
+  encryptedPayload?: string;
+  /**
+   * Base64-encoded Seal ciphertext wrapping the AES key (32 raw bytes).
+   * Decrypt path: `Seal-decrypt(wrappedKey) → AES key → AES-decrypt(encryptedPayload)`.
+   */
+  wrappedKey?: string;
   /**
    * Seal key-id in hex. Format: `[poolObjectIdBytes ++ 5-byte-nonce]`.
    * The first N bytes must match `poolObjectId`; the last 5 are
@@ -190,24 +195,19 @@ export interface BatchInsight {
    */
   poolObjectId?: string;
   /**
-   * Cached decrypted entries — populated by `useMatchInsight` the
-   * first time a wallet successfully decrypts the encrypted slice.
-   * Subsequent reads skip the decrypt roundtrip. `undefined` until
-   * the first decrypt succeeds (or forever, for non-stakers).
+   * Cached decrypted entries — populated by `useMatchInsight` /
+   * `ComparePageClient` the first time a wallet successfully
+   * decrypts the encrypted slice. Subsequent reads skip the
+   * decrypt roundtrip. `undefined` until the first decrypt succeeds
+   * (or forever, for non-stakers).
    */
   encryptedResults?: Record<string, MatchAnalysis>;
   /**
-   * Filename of the *plaintext* blob as uploaded to Walrus. Stored
-   * so `listWalrusUploads` matches don't return the encrypted blob
-   * when `useMatchInsight` is looking for the free slice.
-   */
-  plaintextFilename?: string;
-  /**
-   * Filename of the *encrypted* blob as uploaded to Walrus. Stored
-   * alongside `encryptedBlobId` so read-side can locate it via the
+   * Filename of the batch's single Walrus blob. Stored so
+   * `listWalrusUploads` matches can find the right body via the
    * filename-based `parseBatchFilename` filter.
    */
-  encryptedFilename?: string;
+  plaintextFilename?: string;
 }
 
 /**
@@ -261,8 +261,8 @@ export function validateBatchInsight(raw: unknown): BatchInsight | null {
     cmcContext: (r.cmcContext as CmcContext | null) ?? null,
     results: out,
     // Optional v2 fields — pass through when present, validated loosely
-    // (they're either hex strings we wrote ourselves or filenames).
-    ...(typeof r.encryptedBlobId === 'string' ? { encryptedBlobId: r.encryptedBlobId } : {}),
+    // (they're either base64 ciphertext, hex strings we wrote
+    // ourselves, or filenames).
     ...(Array.isArray(r.encryptedMatchKeys)
       ? {
           encryptedMatchKeys: (r.encryptedMatchKeys as unknown[]).filter(
@@ -270,10 +270,15 @@ export function validateBatchInsight(raw: unknown): BatchInsight | null {
           ),
         }
       : {}),
+    ...(typeof r.encryptedPayload === 'string' && r.encryptedPayload.length > 0
+      ? { encryptedPayload: r.encryptedPayload }
+      : {}),
+    ...(typeof r.wrappedKey === 'string' && r.wrappedKey.length > 0
+      ? { wrappedKey: r.wrappedKey }
+      : {}),
     ...(typeof r.keyId === 'string' ? { keyId: r.keyId } : {}),
     ...(typeof r.poolObjectId === 'string' ? { poolObjectId: r.poolObjectId } : {}),
     ...(typeof r.plaintextFilename === 'string' ? { plaintextFilename: r.plaintextFilename } : {}),
-    ...(typeof r.encryptedFilename === 'string' ? { encryptedFilename: r.encryptedFilename } : {}),
     // `encryptedResults` is intentionally NOT read from disk — it's a
     // per-session in-memory cache populated by `useMatchInsight` after
     // a successful Seal-decrypt. We never persist it to the plaintext

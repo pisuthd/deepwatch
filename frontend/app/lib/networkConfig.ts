@@ -47,6 +47,28 @@ export interface NetworkConfig {
     objectId: string | null;
     dusdcType: string | null;
   };
+  /**
+   * DeepWatch second-layer staking + lending pool wiring (see
+   * `contracts/sources/pool.move`). `packageId` is the
+   * `deepwatch` Move package; `poolObjectId` is the shared `Pool`
+   * object that every staker/borrower interacts with; `poolCapId` is
+   * the admin `PoolCap` (transferred to the deployer's wallet on
+   * `init_pool`) used for `set_ltv_bps` / `set_borrow_rate_bps` /
+   * `admin_seed_borrow`. All `null` on mainnet — the package is a
+   * hackathon v1 and only published to testnet. The Seal encryption
+   * pattern keys off `poolObjectId` (the key-id namespace is the
+   * pool's bytes), so changing the pool object ID invalidates all
+   * in-flight encrypted blobs.
+   */
+  deepwatch: {
+    packageId: string | null;
+    poolObjectId: string | null;
+    poolCapId: string | null;
+    /** PLP coin type produced by `predict::supply<DUSDC>`. */
+    plpCoinType: string | null;
+    /** Default stake duration the stake page pre-fills (ms). 30 days. */
+    defaultStakeDurationMs: number;
+  };
   /** Pool keys to feature by default in the simple-mode pair selector. */
   defaultPools: string[];
 }
@@ -72,6 +94,21 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
       objectId: '0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a',
       dusdcType: '0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC',
     },
+    deepwatch: {
+      // Package `0x3816ac1…8c0c5` was published from `contracts/`
+      // (modules `pool`, `subscription`) after adding the `init_pool`
+      // entry wrapper. The Pool shared object (`0xec06…177f`) and the
+      // admin PoolCap (`0xb1de…e26c`) were both created by the
+      // `init_pool` tx (digest `2Bke3wZ…ghDN`, epoch 1135). The cap
+      // lives in the deployer wallet and is what you'd pass to future
+      // `set_ltv_bps` / `set_borrow_rate_bps` / `admin_seed_borrow`
+      // calls.
+      packageId: '0x3816ac19825e2da1715e5fa937ef8a800a0dca4071e5e732b18af0b56e68c0c5',
+      poolObjectId: '0xec062bb23a7672d461a13666d7a698b092175e852ff871676ed22ca75708177f',
+      poolCapId: '0xb1deec52a1d9838256b1f7e2f83acf505cee98c92195be044a493b28daa9e26c',
+      plpCoinType: '0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138::plp::PLP',
+      defaultStakeDurationMs: 30 * 24 * 60 * 60 * 1000, // 30 days
+    },
     defaultPools: ['SUI_DBUSDC', 'DEEP_USDC', 'SUI_USDC'],
   },
   mainnet: {
@@ -94,6 +131,13 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
       packageId: null,
       objectId: null,
       dusdcType: null,
+    },
+    deepwatch: {
+      packageId: null,
+      poolObjectId: null,
+      poolCapId: null,
+      plpCoinType: null,
+      defaultStakeDurationMs: 30 * 24 * 60 * 60 * 1000,
     },
     defaultPools: ['SUI_USDC', 'DEEP_SUI', 'DEEP_USDC', 'WUSDT_USDC', 'BETH_USDC'],
   },

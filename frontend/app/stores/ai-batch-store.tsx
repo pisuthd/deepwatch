@@ -55,17 +55,27 @@ import type { ReactNode } from 'react';
 import { useMatchAnalyses } from './match-analyses-store';
 import { useBatchIndex } from './batch-index-store';
 import { useToast } from '../context/ToastContext';
+import { useNetworkConfig } from '../hooks/useNetworkConfig';
+import { useNetwork } from '../context/NetworkContext';
 import {
   generateInsightBatch,
   type InsightBatchChunk,
 } from '../lib/minimax';
-import type { CmcContext, MatchAnalysis } from '../lib/match-analyses';
+import type { BatchInsight, CmcContext, MatchAnalysis } from '../lib/match-analyses';
 import type { DeepBookMatch } from '../lib/match';
 import {
   uploadInsightToWalrus,
   pollWalrusStatus,
   batchFilename,
 } from '../lib/tatum';
+import {
+  buildSealSuiClient,
+  getSealClient,
+  hexToBytes,
+  sealEncrypt,
+} from '../lib/seal';
+import { generateAesKey, aesEncrypt } from '../lib/aes';
+import { toHex } from '@mysten/sui/utils';
 
 // Tatum API key is sourced from the same env var the old code used. The
 // helper accepts the key as a parameter (see `lib/tatum.ts`), so we read
@@ -73,6 +83,46 @@ import {
 // server (initial render) and the client (bundled via NEXT_PUBLIC_).
 const TATUM_API_KEY =
   (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_TATUM_API_KEY) || '';
+
+/**
+ * Free-slice composition. The plaintext blob carries a public preview
+ * so any visitor can see the AI's directional read on a few markets
+ * without paying the stake fee. The encrypted slice carries the full
+ * set behind the Seal gate.
+ *
+ * Per user direction (Part 6 / preview-too-short fix):
+ *   - Keep the first `HEAD_SIZE` markets as the "head" (stable, in
+ *     insertion order — same as the old behaviour).
+ *   - Pick `MIDDLE_SIZE` more markets from the middle of the
+ *     remainder, evenly spaced. Gives a wider preview without
+ *     putting too many on the public slice (the gate is the product).
+ *   - Total free slice: `HEAD_SIZE + MIDDLE_SIZE = 6` markets.
+ *
+ * Small batches (≤ `HEAD_SIZE + MIDDLE_SIZE` total entries) include
+ * everything — no point encrypting a 4-market batch.
+ */
+const HEAD_SIZE = 3;
+const MIDDLE_SIZE = 3;
+
+/**
+ * Pick `count` entries from `entries` evenly spaced through its
+ * length. Deterministic (no randomness) so two consecutive uploads
+ * of the same batch produce the same free slice.
+ */
+function pickMiddleEntries<T>(entries: T[], count: number): T[] {
+  const n = entries.length;
+  const size = Math.min(count, n);
+  if (size <= 0) return [];
+  if (size >= n) return entries.slice();
+  const out: T[] = [];
+  for (let i = 0; i < size; i++) {
+    // Distribute the picks through `(0, n)` with a midpoint bias.
+    // For `n=20, size=3`: indices 5, 10, 15.
+    const idx = Math.floor((n * (i + 1)) / (size + 1));
+    out.push(entries[idx]);
+  }
+  return out;
+}
 
 export type BatchPhase = 'idle' | 'reviewing' | 'analysing' | 'done' | 'error';
 
@@ -166,9 +216,11 @@ function randomBatchId(): string {
 }
 
 export function AiBatchProvider({ children }: { children: ReactNode }) {
-  const { setMany } = useMatchAnalyses();
+  const { setMany, markUploaded } = useMatchAnalyses();
   const { set: setBatchIndex } = useBatchIndex();
   const { notify } = useToast();
+  const cfg = useNetworkConfig();
+  const { network } = useNetwork();
 
   const [state, setState] = useState<AiBatchState>(IDLE_STATE);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -209,9 +261,38 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
 
   /**
    * Upload a completed batch to Walrus. Best-effort — failures surface
-   * a toast but do not block the UI or revert the local cache.
+   * a toast but do not block the UI or revert the in-memory cache.
    * Declared before `prepareBatch` so it can be referenced without a
    * circular-dep warning.
+   *
+   * v4 (single-blob, hybrid Seal + AES): per user direction (cost
+   * feedback: two Walrus uploads per batch was burning Tatum credits),
+   * the structure is now:
+   *
+   *   - **One JSON blob** containing everything:
+   *       - `results` — plaintext `MatchAnalysis` map for the first
+   *         `HEAD_SIZE + MIDDLE_SIZE` markets (the public "taster",
+   *         anyone can read).
+   *       - `encryptedPayload` — base64 AES-256-GCM ciphertext of the
+   *         FULL set JSON (`{ batchId, createdAt, cmcContext, results }`).
+   *       - `wrappedKey` — base64 Seal ciphertext wrapping the AES
+   *         key. Only stakers in the matching pool can recover the
+   *         key via Seal.
+   *       - `keyId`, `poolObjectId` — metadata needed to build the
+   *         `seal_approve` PTB on the decrypt side.
+   *       - `encryptedMatchKeys` — unencrypted list of matchKeys
+   *         behind the gate (so `useMatchInsight` knows when to
+   *         attempt a decrypt without fetching ciphertext).
+   *
+   * Halves Walrus upload count vs the v3 "two blobs" approach. Seal's
+   * key-server work is also reduced (encrypts 32 bytes instead of the
+   * full insight payload) since only the AES key is Seal-wrapped.
+   *
+   * Access gate is preserved: a non-staker sees the free slice
+   * plaintext; a staker Seal-decrypts the wrapped key, then
+   * AES-decrypts the payload. Any wallet with a valid, unexpired
+   * `Subscription` NFT for the matching pool can recover the key —
+   * same as v3.
    */
   const uploadBatchInBackground = useCallback(
     async (batch: BatchInsightForUpload) => {
@@ -223,11 +304,132 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
         });
         return;
       }
+
+      // Split by insertion order — the SSE consumer pushes results in
+      // the same order `matches` was provided to the model. We use that
+      // to keep the "first N free" rule stable across re-runs.
+      const entries = Object.entries(batch.results);
+      // Free slice = HEAD_SIZE entries from the head + MIDDLE_SIZE
+      // entries from the middle of the remainder. For small batches
+      // (≤ HEAD_SIZE + MIDDLE_SIZE) we include everything so we
+      // don't waste the encryption roundtrip on a 4-market blob.
+      const headEntries = entries.slice(0, HEAD_SIZE);
+      const restEntries = entries.slice(HEAD_SIZE);
+      const middleEntries = pickMiddleEntries(restEntries, MIDDLE_SIZE);
+      const freeEntries =
+        entries.length <= HEAD_SIZE + MIDDLE_SIZE
+          ? entries.slice()
+          : [...headEntries, ...middleEntries];
+      const freeResults: Record<string, MatchAnalysis> = Object.fromEntries(freeEntries);
+      // The encrypted payload carries the FULL set (not just the
+      // tail), so a staker who decrypts it gets everything in one
+      // shot — no need to merge preview + decrypted tail.
+      const fullResults: Record<string, MatchAnalysis> = Object.fromEntries(entries);
+      const encryptedMatchKeys = entries.map(([k]) => k);
+
+      const filename = batchFilename(batch.batchId, batch.createdAt);
+
+      // ─── Pre-compute the Seal namespace + keyId ────────────────────
+      // Both are deterministic functions of `(poolObjectIdHex, nonce)`
+      // — we choose the nonce upfront (5 random bytes) so the same
+      // keyId is what we feed into Seal-encrypt-the-key below AND
+      // what we write onto the blob's metadata.
+      const poolObjectIdHex = cfg.deepwatch.poolObjectId;
+      const sealPackageId = cfg.deepwatch.packageId;
+      const hasSealInfra = Boolean(sealPackageId && poolObjectIdHex);
+
+      let keyIdHex: string | undefined;
+      let wrappedKeyB64: string | undefined;
+      let encryptedPayloadB64: string | undefined;
+      let encryptionError: string | null = null;
+
+      if (encryptedMatchKeys.length > 0 && hasSealInfra) {
+        try {
+          // AES key (32 bytes) for the bulk payload.
+          const aesKey = await generateAesKey();
+
+          // Seal-wrap the AES key bytes under the pool's namespace.
+          // `sealEncrypt` already accepts arbitrary bytes; the
+          // resulting ciphertext is what we embed as `wrappedKey`.
+          const poolBytes = hexToBytes(poolObjectIdHex!);
+          const nonce = crypto.getRandomValues(new Uint8Array(5));
+          keyIdHex = toHex(new Uint8Array([...poolBytes, ...nonce]));
+
+          const sealSuiClient = buildSealSuiClient(network);
+          const sealClient = getSealClient(sealSuiClient);
+          const sealedKey = await sealEncrypt(
+            aesKey,
+            poolBytes,
+            sealPackageId!,
+            sealClient,
+            keyIdHex, // pre-computed — ensures the persisted keyId matches what Seal used
+          );
+          keyIdHex = sealedKey.keyIdHex; // confirm
+          wrappedKeyB64 = bufferToBase64(sealedKey.ciphertext);
+
+          // AES-encrypt the FULL set JSON. The plaintext payload
+          // includes batchId/createdAt/cmcContext so a decrypt
+          // roundtrip can sanity-check we got the right blob.
+          const fullJson = new TextEncoder().encode(
+            JSON.stringify({
+              batchId: batch.batchId,
+              createdAt: batch.createdAt,
+              cmcContext: batch.cmcContext,
+              results: fullResults,
+            }),
+          );
+          encryptedPayloadB64 = await aesEncrypt(fullJson, aesKey);
+        } catch (err) {
+          encryptionError = err instanceof Error ? err.message : 'Seal encrypt failed';
+          // Wipe so we don't write a half-encrypted blob.
+          keyIdHex = undefined;
+          wrappedKeyB64 = undefined;
+          encryptedPayloadB64 = undefined;
+        }
+      } else if (encryptedMatchKeys.length > 0 && !hasSealInfra) {
+        notify(
+          `Skipped Seal-encryption of ${encryptedMatchKeys.length} markets — DeepWatch pool is not deployed on this network. The plaintext blob holds everything as a fallback.`,
+          {
+            variant: 'warning',
+            title: 'Encryption skipped',
+            duration: 6000,
+            key: `seal-skip-${batch.batchId}`,
+          },
+        );
+      }
+
+      if (encryptionError) {
+        notify(
+          `Failed to encrypt ${encryptedMatchKeys.length} markets: ${encryptionError}`,
+          { variant: 'error', title: 'Encryption failed' },
+        );
+        // Fall through: still upload the plaintext-only blob so the
+        // preview is at least available. Without the encrypted fields
+        // there's nothing to decrypt later.
+      }
+
+      // ─── Build the single blob body ───────────────────────────────
+      // Always upload the free slice (preview). The encrypted fields
+      // are present iff the Seal step succeeded — missing means the
+      // blob is plaintext-only and readers won't attempt a decrypt.
+      const singleBlob: BatchInsight = {
+        batchId: batch.batchId,
+        createdAt: batch.createdAt,
+        cmcContext: batch.cmcContext,
+        results: freeResults,
+        ...(encryptedMatchKeys.length > 0 ? { encryptedMatchKeys } : {}),
+        ...(encryptedPayloadB64 ? { encryptedPayload: encryptedPayloadB64 } : {}),
+        ...(wrappedKeyB64 ? { wrappedKey: wrappedKeyB64 } : {}),
+        ...(keyIdHex ? { keyId: keyIdHex } : {}),
+        ...(poolObjectIdHex ? { poolObjectId: poolObjectIdHex } : {}),
+        plaintextFilename: filename,
+      };
+
+      // ─── Upload the single blob ───────────────────────────────────
+      let certified = false;
       try {
-        const json = JSON.stringify(batch, null, 2);
-        const file = new File([json], batchFilename(batch.batchId, batch.createdAt), {
-          type: 'application/json',
-        });
+        const json = JSON.stringify(singleBlob, null, 2);
+        const file = new File([json], filename, { type: 'application/json' });
         const enqueued = await uploadInsightToWalrus(file, TATUM_API_KEY);
         notify(`Uploading batch ${batch.batchId} to Walrus…`, {
           variant: 'info',
@@ -238,19 +440,12 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
           maxAttempts: 20,
         });
         if (final.status === 'CERTIFIED') {
-          // Cache the body locally so the Recent Batches panel and the
-          // Predict page don't need to re-fetch.
-          setBatchIndex(batch);
-          notify(`Batch ${batch.batchId} saved to Walrus.`, {
-            variant: 'success',
-            title: 'Saved to Walrus',
-            duration: 4000,
-          });
+          certified = true;
         } else if (final.status === 'FAILED') {
-          notify(
-            final.errorMessage ?? 'Walrus rejected the upload.',
-            { variant: 'error', title: 'Walrus upload failed' },
-          );
+          notify(final.errorMessage ?? 'Walrus rejected the batch upload.', {
+            variant: 'error',
+            title: 'Walrus upload failed',
+          });
         } else {
           notify(
             `Batch still uploading — will appear on the Overview page once Walrus certifies it.`,
@@ -260,9 +455,25 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Walrus upload failed';
         notify(msg, { variant: 'error', title: 'Upload failed' });
+        return;
+      }
+
+      if (certified) {
+        setBatchIndex(singleBlob);
+        notify(`Batch ${batch.batchId} saved to Walrus.`, {
+          variant: 'success',
+          title: 'Saved to Walrus',
+          duration: 4000,
+        });
       }
     },
-    [notify, setBatchIndex],
+    [
+      cfg.deepwatch.packageId,
+      cfg.deepwatch.poolObjectId,
+      network,
+      notify,
+      setBatchIndex,
+    ],
   );
 
   /**
@@ -430,9 +641,10 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
         finishedAt: completedAt,
       }));
 
-      // Guard: if the model produced 0 valid tool calls, don't persist
-      // an empty batch to localStorage and don't upload a 0-market blob
-      // to Walrus. Surface a clear error instead so the user can retry.
+      // Guard: if the model produced 0 valid tool calls, don't push
+      // an empty batch into the in-memory store and don't upload a
+      // 0-market blob to Walrus. Surface a clear error instead so the
+      // user can retry.
       if (persistedEntries.length === 0) {
         notify(
           `Batch ${completedBatchId} produced 0 valid results out of ${completedMatches.length} markets. The model may have hit a token limit or returned text instead of tool calls. Click Re-analyse to retry.`,
@@ -446,8 +658,13 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // 5. Persist to useMatchAnalyses in one dispatch.
+      // 5. Persist to useMatchAnalyses in one dispatch, then mark
+      // this batchId as "personally uploaded" so the Compare-page
+      // hydration effect (which would otherwise replace the full
+      // in-memory result set with the plaintext-only Walrus preview)
+      // skips this batch.
       setMany(persistedEntries);
+      markUploaded(completedBatchId);
 
       // 6. Fire the completion toast (per user direction).
       notify(
@@ -478,7 +695,7 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
 
     // Kick the consumer. Errors are caught inside `consume`.
     void consume();
-  }, [abortBatch, notify, setMany, uploadBatchInBackground]);
+  }, [abortBatch, markUploaded, notify, setMany, uploadBatchInBackground]);
 
   const clearBatch = useCallback(() => {
     abortBatch();
@@ -535,4 +752,20 @@ interface BatchInsightForUpload {
   createdAt: number;
   cmcContext: CmcContext | null;
   results: Record<string, MatchAnalysis>;
+}
+
+// ─── Internal helpers ───────────────────────────────────────────────────────
+
+/**
+ * Encode a `Uint8Array` as base64. Mirrors the helper in `lib/aes.ts`
+ * (kept private there; duplicated here because the Seal ciphertext is
+ * sealed on the encrypt path and we don't want a public round-trip
+ * helper).
+ */
+function bufferToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    bin += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(bin);
 }
