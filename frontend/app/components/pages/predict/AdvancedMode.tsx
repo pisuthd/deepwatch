@@ -18,6 +18,7 @@ import GlassCard from '../../common/GlassCard';
 import BinaryTradeModal from './BinaryTradeModal';
 import RangeTradeModal from './RangeTradeModal';
 import PriceChart from './PriceChart';
+import HowToTradeGuide from './HowToTradeGuide';
 import StrikeGrid from './StrikeGrid';
 import RangePanel from './RangePanel';
 import { useSetCurrentMarket } from './CurrentMarketContext';
@@ -416,23 +417,31 @@ export default function PredictAdvancedMode() {
 
       {/* ── Chart + right column ────────────────────────────────────────── */}
       <div className="flex items-stretch gap-2 flex-1 min-h-0">
-        <GlassCard className="flex-1 min-h-0 overflow-hidden p-0">
-          <div className="relative w-full h-full">
-            <PriceChart
-              oracleId={currentOracleId}
-              strike={strike}
-              onStrikeChange={setStrike}
-              {...(marketType === 'range' && {
-                lower,
-                upper,
-                onRangeChange: (l: number, u: number) => {
-                  setLower(l);
-                  setUpper(u);
-                },
-              })}
-            />
-          </div>
-        </GlassCard>
+        {/* Left column: chart on top, how-to-trade guide below. The right
+            column is content-tall (UP/DOWN + StrikeGrid) and stretches the
+            row via `items-stretch`, which leaves empty space on the left
+            under the chart — the guide fills it without competing with
+            the price chart. */}
+        <div className="flex-1 flex flex-col gap-2 min-h-0">
+          <GlassCard className="flex-1 min-h-0 overflow-hidden p-0">
+            <div className="relative w-full h-full">
+              <PriceChart
+                oracleId={currentOracleId}
+                strike={strike}
+                onStrikeChange={setStrike}
+                {...(marketType === 'range' && {
+                  lower,
+                  upper,
+                  onRangeChange: (l: number, u: number) => {
+                    setLower(l);
+                    setUpper(u);
+                  },
+                })}
+              />
+            </div>
+          </GlassCard>
+          <HowToTradeGuide />
+        </div>
 
         {/* Right-side column. Both modes place the action buttons on
             top so the user always sees the trade entry point first, then

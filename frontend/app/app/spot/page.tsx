@@ -1,14 +1,13 @@
 'use client';
 
 import TradeWrapper from '../../components/common/TradeWrapper';
-import SpotPage from '../../components/pages/spot/page';
-import InsightButton from '../../components/pages/insights/InsightButton';
+import SpotPage from '../../components/pages/spot/page'; 
 import { CurrentPoolProvider } from '../../components/pages/spot/CurrentPoolContext';
 
 export default function Page() {
   return (
     <CurrentPoolProvider>
-      <TradeWrapper trailing={<InsightButton />}>
+      <TradeWrapper>
         {(mode) => <SpotPage mode={mode} />}
       </TradeWrapper>
     </CurrentPoolProvider>

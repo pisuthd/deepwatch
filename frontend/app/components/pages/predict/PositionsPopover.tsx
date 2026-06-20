@@ -193,8 +193,8 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
 
   const redeemAllLabel =
     tab === 'binary'
-      ? `REDEEM ALL BINARY${eligibleBinaryCount > 0 ? ` (${eligibleBinaryCount})` : ''}`
-      : `REDEEM ALL RANGE${eligibleRangeCount > 0 ? ` (${eligibleRangeCount})` : ''}`;
+      ? `REDEEM ALL`
+      : `REDEEM ALL`;
   const redeemAllCount = tab === 'binary' ? eligibleBinaryCount : eligibleRangeCount;
   const redeemAllDisabled =
     redeemAllCount === 0 || submittingAll || !account || !dAppKit?.signAndExecuteTransaction;
