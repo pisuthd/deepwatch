@@ -263,7 +263,7 @@ function PoolsTab({
         icon={<TowerControl size={18} style={{ color: green }} />}
         name="DeepWatch Subscription Vault"
         subtitle="Stake PLP → unlock AI insights + more"
-        metric={{ value: '20%', label: 'APR' }}
+        metric={{ value: '35%', label: 'APR' }}
         details={[
           { label: 'Lockup', value: '7 / 30 / 90 days' },
         ]}

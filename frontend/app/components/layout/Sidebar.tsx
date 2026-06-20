@@ -22,7 +22,6 @@ import {
   Sparkles,
   Sparkle,
   Goal,
-  Download,
   CheckLine,
   Layers
 } from 'lucide-react';
@@ -106,19 +105,6 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Download Agent at bottom */}
-      <div className="px-4 pb-5">
-        <button
-          onClick={() => onNavigate('download-agent')}
-          className={`flex items-center gap-3.5 w-full px-3.5 py-2.5 rounded-xl text-[15px] font-semibold transition-all ${activePage === 'download-agent'
-            ? 'bg-accent-primary-dim'
-            : 'hover:bg-[var(--color-sidebar-hover)]'
-            }`}
-        >
-          <Download size={20} strokeWidth={activePage === 'download-agent' ? 2.2 : 1.8} className={activePage === 'download-agent' ? 'text-accent-primary' : ''} />
-          <span className={activePage === 'download-agent' ? 'text-accent-primary' : 'text-gradient-white'}>Download Agent</span>
-        </button>
-      </div>
     </aside>
   );
 }
