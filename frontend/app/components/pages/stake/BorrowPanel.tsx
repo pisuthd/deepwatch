@@ -20,13 +20,11 @@
  *     Not in the v1 demo path; the user can still call it via the
  *     `sui client call` CLI.
  *
- * # Why "live" UI (admin borrow)
+ * # Layout
  *
- * The hackathon yield bootstrap runs `admin_seed_borrow` →
- * `donate` from a separate wallet. The panel doesn't drive that
- * (admin runs via CLI). For a wallet that ISN'T the pool admin, the
- * panel renders the borrow/repay flow only — that's the user-
- * facing surface.
+ * Mirrors `AdvancedSwapCard.tsx` — header row, stacked cards for
+ * "from" / "to" amounts, info box, full-width CTA. No token icons in
+ * the balance row or input (per feedback — icons are noisy here).
  *
  * # Shared utilities
  *
@@ -35,19 +33,28 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { Transaction } from '@mysten/sui/transactions';
 import { useCurrentAccount, useCurrentClient, useDAppKit } from '@mysten/dapp-kit-react';
-import { Banknote, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, Loader2, Sparkles } from 'lucide-react';
 import GlassCard from '../../common/GlassCard';
 import { useNetworkConfig } from '../../../hooks/useNetworkConfig';
 import { useDeepWatchPool } from '../../../hooks/useDeepWatchPool';
 import { useToast } from '../../../context/ToastContext';
 import { fetchCoinBalance, fmtUnits, parseUnits, type CoinBalance } from '../../../lib/coin';
 import { buildBorrowTx, buildRepayTx } from '../../../lib/deepwatch-pool';
+import { getCoinIcon } from '../../../lib/coinIcons';
 
 const PLP_DECIMALS = 6;
 const SUI_DECIMALS = 9;
 const MS_PER_YEAR = 31_536_000_000;
+
+const textPrimary = '#ffffff';
+const textSecondary = '#9ca3af';
+const textMuted = '#6b7280';
+const green = '#00E68A';
+const red = '#ef4444';
+const amber = '#FFA500';
 
 type Mode = 'borrow' | 'repay';
 
@@ -114,6 +121,13 @@ export default function BorrowPanel() {
   }, [collateralSui, borrowPlp]);
   const ltvTooHigh = ltvRatio !== null && ltvRatio > ltvBps;
 
+  // Live 1-year interest estimate (re-derives on every keystroke)
+  const interest1y = useMemo<bigint | null>(() => {
+    const b = parseUnits(borrowPlp, PLP_DECIMALS);
+    if (b <= BigInt(0)) return null;
+    return estimateInterest(b, rateBps, MS_PER_YEAR);
+  }, [borrowPlp, rateBps]);
+
   // Borrow handler
   const handleBorrow = async () => {
     if (!account?.address) return;
@@ -158,7 +172,7 @@ export default function BorrowPanel() {
     }
   };
 
-  // Repay handler
+  // Repay handler (v1: still requires Debt NFT object ID via CLI)
   const handleRepay = async () => {
     if (!account?.address) return;
     const signAndExecute = dAppKit?.signAndExecuteTransaction;
@@ -176,11 +190,6 @@ export default function BorrowPanel() {
       notify('Insufficient PLP balance.', { variant: 'error' });
       return;
     }
-    // TODO: a proper repay would require a Debt NFT lookup. For
-    // the v1 demo, we expose the button but the caller is expected
-    // to pass a Debt NFT object ID via a future input field. The
-    // buildRepayTx helper takes it as `debtObjectInput`. Skipped
-    // here to avoid a half-implemented flow.
     notify(
       'Repay requires a Debt NFT object ID — copy it from your wallet and call `pool::repay` via `sui client call` for now.',
       { variant: 'info', duration: 8000 },
@@ -190,132 +199,350 @@ export default function BorrowPanel() {
   };
 
   return (
-    <GlassCard>
-      <div className="flex items-center gap-2 mb-3">
-        <Banknote size={18} className="text-accent-primary" />
-        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-          Borrow
-        </h2>
-        <span className="ml-auto text-xs text-[var(--color-text-muted)]">
-          SUI collateral → PLP loan ({rateBps / 100}% APR)
-        </span>
+    <GlassCard className="space-y-4  ">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden p-1"
+             
+          >
+            <Image
+              src={getCoinIcon('SUI')}
+              width={22}
+              height={22}
+              alt="SUI"
+              className="rounded-full"
+              unoptimized
+            />
+          </div>
+          <div className="min-w-0">
+            <h2
+              className="text-sm font-bold leading-tight"
+              style={{ color: textPrimary }}
+            >
+              Borrow SUI
+            </h2>
+            <p
+              className="text-[10px] leading-snug"
+              style={{ color: textSecondary }}
+            >
+              Deposit SUI as collateral, borrow PLP
+            </p>
+          </div>
+        </div> 
       </div>
 
       {!configured ? (
-        <p className="text-sm text-[var(--color-text-muted)]">
+        <p className="text-sm" style={{ color: textMuted }}>
           DeepWatch pool is not deployed on this network. Borrowing is unavailable.
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-            <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-              <p className="text-[var(--color-text-muted)]">Wallet SUI</p>
-              <p className="font-mono">{fmtUnits(suiBal.totalBalance, SUI_DECIMALS, 4)}</p>
+          {/* ── Wallet balance (one line, no token icons) ──────────── */}
+          <div
+            className="rounded-xl mt-4 p-3"
+            style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+          >
+            <div
+              className="text-[10px] uppercase tracking-wide mb-1.5"
+              style={{ color: textSecondary }}
+            >
+              Wallet Balance
             </div>
-            <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-              <p className="text-[var(--color-text-muted)]">Wallet PLP</p>
-              <p className="font-mono">{fmtUnits(plpBal.totalBalance, PLP_DECIMALS)}</p>
+            <div className="flex items-center gap-3 text-sm font-mono">
+              <span style={{ color: textPrimary }}>
+                <span style={{ color: textSecondary }}>SUI</span>{' '}
+                <strong>{fmtUnits(suiBal.totalBalance, SUI_DECIMALS, 4)}</strong>
+              </span>
+              <span style={{ color: textMuted }}>·</span>
+              <span style={{ color: textPrimary }}>
+                <span style={{ color: textSecondary }}>PLP</span>{' '}
+                <strong>{fmtUnits(plpBal.totalBalance, PLP_DECIMALS)}</strong>
+              </span>
             </div>
           </div>
 
-          <div className="flex gap-2 mb-3">
-            <button
-              type="button"
-              onClick={() => setMode('borrow')}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                mode === 'borrow'
-                  ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-                  : 'bg-white/5 border-white/10 text-[var(--color-text-secondary)] hover:bg-white/10'
-              }`}
-            >
-              Borrow
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('repay')}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                mode === 'repay'
-                  ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-                  : 'bg-white/5 border-white/10 text-[var(--color-text-secondary)] hover:bg-white/10'
-              }`}
-            >
-              Repay
-            </button>
+          {/* ── Mode toggle (underline, full-width) ─────────────────── */}
+          <div
+            className="flex mt-2 border-b"
+            style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+          >
+            {(['borrow', 'repay'] as const).map((id) => {
+              const isActive = mode === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setMode(id)}
+                  className="flex-1 py-2 text-sm font-semibold text-center transition-colors"
+                  style={{
+                    color: isActive ? green : textSecondary,
+                    borderBottom: isActive
+                      ? `2px solid ${green}`
+                      : '2px solid transparent',
+                    marginBottom: '-1px', // overlap the parent border
+                  }}
+                >
+                  {id === 'borrow' ? 'Borrow' : 'Repay'}
+                </button>
+              );
+            })}
           </div>
 
           {mode === 'borrow' ? (
             <>
-              <label className="text-xs text-[var(--color-text-muted)]">Collateral (SUI)</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="10 SUI"
-                value={collateralSui}
-                onChange={(e) => setCollateralSui(e.target.value)}
-                disabled={submitting || !account}
-                className="mt-1 mb-3 w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[var(--color-text-primary)] font-mono text-sm focus:outline-none focus:border-accent-primary"
-              />
-              <label className="text-xs text-[var(--color-text-muted)]">
-                Borrow amount (PLP) — LTV cap {ltvBps / 100}%
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="5 PLP"
-                value={borrowPlp}
-                onChange={(e) => setBorrowPlp(e.target.value)}
-                disabled={submitting || !account}
-                className="mt-1 mb-2 w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[var(--color-text-primary)] font-mono text-sm focus:outline-none focus:border-accent-primary"
-              />
+              {/* ── Collateral card ────────────────────────────────── */}
+              <div
+                className="rounded-xl mt-4 p-3"
+                style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+              >
+                <div
+                  className="text-[10px] uppercase tracking-wide mb-2"
+                  style={{ color: textSecondary }}
+                >
+                  Collateral
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={collateralSui}
+                    onChange={(e) => setCollateralSui(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    disabled={submitting || !account}
+                    className="flex-1 bg-transparent text-lg font-mono font-semibold outline-none placeholder:text-white/30"
+                    style={{ color: textPrimary }}
+                  />
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: textSecondary }}
+                  >
+                    SUI
+                  </span>
+                </div>
+              </div>
+
+              {/* Arrow divider */}
+              <div className="flex justify-center -my-2">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'rgba(0, 230, 138, 0.10)',
+                    border: '2px solid rgba(0, 230, 138, 0.35)',
+                    color: green,
+                  }}
+                >
+                  <ArrowDown size={12} />
+                </div>
+              </div>
+
+              {/* ── Borrow amount card ─────────────────────────────── */}
+              <div
+                className="rounded-xl mb-3 p-3"
+                style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+              >
+                <div
+                  className="text-[10px] uppercase tracking-wide mb-2"
+                  style={{ color: textSecondary }}
+                >
+                  Borrow amount
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={borrowPlp}
+                    onChange={(e) => setBorrowPlp(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    disabled={submitting || !account}
+                    className="flex-1 bg-transparent text-lg font-mono font-semibold outline-none placeholder:text-white/30"
+                    style={{ color: textPrimary }}
+                  />
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: textSecondary }}
+                  >
+                    PLP
+                  </span>
+                </div>
+              </div>
+
+              {/* ── Info box (LTV / Interest) ───────────────────────── */}
+              <div
+                className="rounded-xl p-3 space-y-2.5"
+                style={{ background: 'rgba(255, 255, 255, 0.03)' }}
+              >
+                <div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span
+                      className="text-[10px] uppercase tracking-wide"
+                      style={{ color: textSecondary }}
+                    >
+                      LTV
+                    </span>
+                    <span
+                      className="text-xs font-mono font-semibold"
+                      style={{ color: textPrimary }}
+                    >
+                      {ltvRatio !== null
+                        ? `${(ltvRatio / 100).toFixed(2)}% / ${(ltvBps / 100).toFixed(0)}%`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div
+                    className="mt-1 h-1 rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${
+                          ltvRatio !== null
+                            ? Math.min((ltvRatio / ltvBps) * 100, 100)
+                            : 0
+                        }%`,
+                        background: ltvTooHigh ? red : green,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-2">
+                  <span
+                    className="text-[10px] uppercase tracking-wide"
+                    style={{ color: textSecondary }}
+                  >
+                    Interest (1Y)
+                  </span>
+                  <span
+                    className="text-xs font-mono font-semibold"
+                    style={{ color: textPrimary }}
+                  >
+                    {interest1y !== null
+                      ? `${fmtUnits(interest1y, PLP_DECIMALS)} PLP`
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+
               {ltvTooHigh && (
-                <p className="text-xs text-red-400">
-                  LTV ratio {((ltvRatio ?? 0) / 100).toFixed(2)}% exceeds the {ltvBps / 100}% cap.
+                <p
+                  className="flex items-center gap-1.5 text-xs"
+                  style={{ color: amber }}
+                >
+                  <AlertTriangle size={12} />
+                  LTV {((ltvRatio ?? 0) / 100).toFixed(2)}% exceeds the{' '}
+                  {ltvBps / 100}% cap.
                 </p>
               )}
-              <button
-                type="button"
-                onClick={handleBorrow}
-                disabled={
-                  submitting ||
-                  !account ||
-                  parseUnits(collateralSui, SUI_DECIMALS) <= BigInt(0) ||
-                  parseUnits(borrowPlp, PLP_DECIMALS) <= BigInt(0) ||
-                  ltvTooHigh ||
-                  !suiBal.primaryCoinId
-                }
-                className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent-primary text-black font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-primary-hover transition-colors"
-              >
-                {submitting && <Loader2 size={14} className="animate-spin" />}
-                Borrow PLP
-              </button>
+
+              {/* ── Submit ─────────────────────────────────────────── */}
+              {!account ? (
+                <div
+                  className="text-center mt-4 text-xs py-3"
+                  style={{ color: textSecondary }}
+                >
+                  Connect your wallet to borrow.
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleBorrow}
+                  disabled={
+                    submitting ||
+                    parseUnits(collateralSui, SUI_DECIMALS) <= BigInt(0) ||
+                    parseUnits(borrowPlp, PLP_DECIMALS) <= BigInt(0) ||
+                    ltvTooHigh ||
+                    !suiBal.primaryCoinId
+                  }
+                  className="w-full mt-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+                  style={{
+                    background:
+                      parseUnits(borrowPlp, PLP_DECIMALS) > BigInt(0) && !ltvTooHigh
+                        ? green
+                        : 'rgba(255, 255, 255, 0.08)',
+                    color:
+                      parseUnits(borrowPlp, PLP_DECIMALS) > BigInt(0) && !ltvTooHigh
+                        ? '#000'
+                        : textSecondary,
+                    opacity: submitting ? 0.6 : 1,
+                  }}
+                >
+                  {submitting ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : ltvTooHigh ? (
+                    <AlertTriangle size={14} />
+                  ) : (
+                    <Sparkles size={14} />
+                  )}
+                  {submitting ? 'Borrowing…' : 'Borrow PLP'}
+                </button>
+              )}
             </>
           ) : (
             <>
-              <label className="text-xs text-[var(--color-text-muted)]">Repay amount (PLP)</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="5 PLP"
-                value={repayPlp}
-                onChange={(e) => setRepayPlp(e.target.value)}
-                disabled={submitting || !account}
-                className="mt-1 mb-3 w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[var(--color-text-primary)] font-mono text-sm focus:outline-none focus:border-accent-primary"
-              />
-              <button
-                type="button"
-                onClick={handleRepay}
-                disabled={submitting || !account || parseUnits(repayPlp, PLP_DECIMALS) <= BigInt(0)}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent-primary text-black font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-primary-hover transition-colors"
+              {/* ── Repay card ────────────────────────────────────── */}
+              <div
+                className="rounded-xl mt-4 mb-4 p-3"
+                style={{ background: 'rgba(255, 255, 255, 0.04)' }}
               >
-                {submitting && <Loader2 size={14} className="animate-spin" />}
-                Repay PLP
-              </button>
-              <p className="mt-2 text-[10px] text-[var(--color-text-muted)]">
-                Repay takes a Debt NFT object ID — paste it via &quot;sui client call&quot; for v1.
-                Yield estimate helper:{' '}
-                {snapshot && estimateInterest(BigInt(100_000_000), rateBps, MS_PER_YEAR).toString()} PLP
-                {' '}on 100 PLP at 5% APR for 1 yr.
-              </p>
+                <div
+                  className="text-[10px] uppercase tracking-wide mb-2"
+                  style={{ color: textSecondary }}
+                >
+                  Repay amount
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={repayPlp}
+                    onChange={(e) => setRepayPlp(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    disabled={submitting || !account}
+                    className="flex-1 bg-transparent text-lg font-mono font-semibold outline-none placeholder:text-white/30"
+                    style={{ color: textPrimary }}
+                  />
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: textSecondary }}
+                  >
+                    PLP
+                  </span>
+                </div>
+              </div>
+ 
+
+              {!account ? (
+                <div
+                  className="text-center text-xs py-3"
+                  style={{ color: textSecondary }}
+                >
+                  Connect your wallet to repay.
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleRepay}
+                  disabled={
+                    submitting ||
+                    parseUnits(repayPlp, PLP_DECIMALS) <= BigInt(0)
+                  }
+                  className="w-full mt-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+                  style={{
+                    background: green,
+                    color: '#000',
+                    opacity: submitting ? 0.6 : 1,
+                  }}
+                >
+                  {submitting && <Loader2 size={14} className="animate-spin" />}
+                  {submitting ? 'Repaying…' : 'Repay PLP'}
+                </button>
+              )}
             </>
           )}
         </>

@@ -355,7 +355,7 @@ function AnalysisBody({ analysis }: { analysis: MatchAnalysis }) {
                       className="text-[9px] uppercase tracking-wider font-semibold block mb-1 not-italic"
                       style={{ color: textSecondary }}
                     >
-                      CoinMarketCap backdrop
+                      CoinMarketCap API
                     </span>
                     📊 {analysis.macroTake}
                     <div

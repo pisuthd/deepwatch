@@ -156,7 +156,7 @@ export function LpProvisionFormBody({
       <div className="flex items-center gap-2">
         <ArrowDownUp size={16} className="text-accent-primary" />
         <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-          DUSDC ↔ PLP via Predict
+          DUSDC ↔ DeepBook PLP
         </span>
       </div>
 

@@ -96,13 +96,7 @@ export default function LpProvisionModal({
                   >
                     <ArrowDownUp size={14} style={{ color: green }} />
                     LP provision
-                  </h2>
-                  <div
-                    className="text-[11px] mt-1 font-mono"
-                    style={{ color: textSecondary }}
-                  >
-                    DUSDC ↔ PLP via predict::supply / predict::withdraw
-                  </div>
+                  </h2> 
                 </div>
                 <button
                   type="button"

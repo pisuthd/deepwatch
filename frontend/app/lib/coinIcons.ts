@@ -4,6 +4,7 @@ export const COIN_ICONS: Record<string, string> = {
   // Stablecoins
   'USDC': 'https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png',
   'DBUSDC': 'https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png',
+  'DUSDC': 'https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png',
   'WUSDC': 'https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png',
   'WUSDT': 'https://s2.coinmarketcap.com/static/img/coins/64x64/3257.png',
   'USDT' : 'https://bridge-assets.sui.io/usdt.png',
