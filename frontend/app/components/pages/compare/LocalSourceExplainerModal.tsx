@@ -1,39 +1,37 @@
 'use client';
 
 /**
- * LocalSourceExplainerModal — must-dismiss explainer that surfaces the
- * first time the user toggles the InsightSourceSelector to `Local`.
+ * LocalSourceExplainerModal — short status notice shown whenever the
+ * user flips the InsightSourceSelector to `Local`.
  *
- * Three reasons this exists as a separate modal (rather than a toast or
- * inline banner):
- *   1. **Local is being deprecated.** Saying "Local is temporary and
- *      will be removed soon" is product-level news — the user should
- *      have to look at it once.
- *   2. **Walrus requires a stake.** Anyone reading the explainer needs
- *      to internalise that the durable path costs PLP — that's a
- *      decision, not a notification.
- *   3. **Local exists for evaluation.** Surfacing "use Local to try the
- *      platform with no barrier" makes the Local flow feel intentional
- *      rather than a degraded Walrus path.
+ * Three things it has to communicate in a glance:
+ *   1. **Why Local exists at all** — Shared insights on Walrus are
+ *      stored on Mainnet via Tatum, which uses limited credits.
+ *   2. **What Local is for** — generate insights locally to evaluate
+ *      the platform with no barrier.
+ *   3. **That it's going away** — Local mode will be removed in the
+ *      next version.
+ *
+ * The "Shared insights on Walrus" line is the key context (it tells
+ * the user *why* Local exists in the first place), so it's first.
  *
  * Dismissal: explicit button click only. Backdrop click and ESC are
- * intentionally NOT wired — this is a one-time-per-browser notice, not
- * a transient toast. After dismissal, a persistent localStorage flag
- * (`deepwatch:local-explainer-seen`) suppresses re-renders.
+ * intentionally NOT wired — this is a per-flip notice, not a transient
+ * toast. The parent (`ComparePageClient`) re-opens the modal on every
+ * Local flip, so dismissal only closes the current one.
  */
 
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, Database, Globe2, Sparkles, X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
-const textMuted = '#6b7280';
 const green = '#00E68A';
 const amber = '#FFA500';
 
 interface LocalSourceExplainerModalProps {
-  /** Parent-controlled open state. Set true the first time the user
+  /** Parent-controlled open state. Set true every time the user
    *  flips the source selector to Local. */
   open: boolean;
   onClose: () => void;
@@ -89,17 +87,11 @@ export default function LocalSourceExplainerModal({
                   <h2
                     id="local-source-explainer-title"
                     className="text-base font-bold flex items-center gap-2"
-                    style={{ color: amber }}
+                    style={{ color: green }}
                   >
-                    <AlertTriangle size={15} />
-                    Local mode is temporary
+                    <Info size={15} />
+                    You are using local mode
                   </h2>
-                  <div
-                    className="text-[11px] mt-1 leading-relaxed"
-                    style={{ color: textSecondary }}
-                  >
-                    A quick note before you use it.
-                  </div>
                 </div>
                 <button
                   type="button"
@@ -113,57 +105,29 @@ export default function LocalSourceExplainerModal({
                 </button>
               </div>
 
-              {/* Three explainer rows */}
-              <div className="space-y-3">
-                <Row
-                  icon={<Database size={13} style={{ color: green }} />}
-                  title="Local"
-                  body={
-                    <>
-                      Stores AI insights <strong style={{ color: textPrimary }}>only in this browser</strong>.
-                      Free and instant, but cleared if you wipe browser
-                      data. <strong style={{ color: amber }}>Will be removed soon</strong> from
-                      the platform.
-                    </>
-                  }
-                />
-                <Row
-                  icon={<Globe2 size={13} style={{ color: green }} />}
-                  title="Walrus"
-                  body={
-                    <>
-                      Stores them <strong style={{ color: textPrimary }}>on-chain</strong> via the
-                      Walrus storage layer. Durable and shareable, but
-                      requires a PLP <strong style={{ color: textPrimary }}>subscription</strong> (stake).
-                    </>
-                  }
-                />
-                <Row
-                  icon={<Sparkles size={13} style={{ color: green }} />}
-                  title="Why use Local?"
-                  body={
-                    <>
-                      Use Local to <strong style={{ color: textPrimary }}>evaluate the platform with no barrier</strong> — see
-                      how the AI batches work, what the analyses look
-                      like, how the cross-venue Compare table reads them.
-                      When you&apos;re ready to keep results long-term,
-                      stake PLP and switch to Walrus.
-                    </>
-                  }
-                />
+              {/* Three short lines — distilled from the previous
+                  three-card layout. Kept tight so the modal doesn't
+                  dominate the screen. */}
+              <div
+                className="space-y-2 text-xs leading-relaxed"
+                style={{ color: textSecondary }}
+              >
+                <p>
+                  Shared insights on Walrus run on Mainnet via Tatum
+                  with limited credits.
+                </p>
+                <p>
+                  Use Local to generate insights and evaluate the
+                  platform right here in your browser.
+                </p>
+                <p>
+                  <strong style={{ color: amber }}>Heads up:</strong>{' '}
+                  Local mode will be removed in the next version.
+                </p>
               </div>
 
               {/* Footer */}
               <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="inline-flex items-center px-3 py-2 rounded-md text-xs font-semibold transition-colors hover:bg-white/5"
-                  style={{ color: textSecondary }}
-                  title="Dismiss this notice"
-                >
-                  Got it
-                </button>
                 <button
                   type="button"
                   onClick={onClose}
@@ -172,61 +136,15 @@ export default function LocalSourceExplainerModal({
                     background: green,
                     color: '#000',
                   }}
-                  title="Acknowledge — switch back to Walrus for durable storage later"
+                  title="Dismiss this notice"
                 >
-                  Use Local for now
+                  Got it
                 </button>
               </div>
-
-              {/* Subtle helper text — when localStorage wasn't available, this stays so
-                  the user understands the dismissal persists in-memory only. */}
-              <p
-                className="text-[10px] leading-relaxed pt-1"
-                style={{ color: textMuted }}
-              >
-                This notice will not appear again on this browser once
-                dismissed.
-              </p>
             </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
-  );
-}
-
-function Row({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: React.ReactNode;
-}) {
-  return (
-    <div
-      className="flex items-start gap-3 rounded-lg px-3 py-2.5"
-      style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.06)',
-      }}
-    >
-      <div className="shrink-0 mt-0.5">{icon}</div>
-      <div className="min-w-0 space-y-0.5">
-        <div
-          className="text-[11px] font-bold uppercase tracking-wider"
-          style={{ color: green }}
-        >
-          {title}
-        </div>
-        <div
-          className="text-[11px] leading-relaxed"
-          style={{ color: textSecondary }}
-        >
-          {body}
-        </div>
-      </div>
-    </div>
   );
 }

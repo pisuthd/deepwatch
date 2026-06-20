@@ -197,26 +197,28 @@ export default function InsightSourceSelector() {
                 className="text-[11px] leading-relaxed"
                 style={{ color: textPrimary }}
               >
-                <span style={{ color: green }}>Local</span> stores AI
-                insights in your browser only — free, instant, but
-                temporary (cleared if you wipe browser data).
+                <span style={{ color: green }}>Local</span> (current
+                default on Testnet) — free, instant, browser-only. Your
+                insights are saved in this browser's storage and survive
+                reloads, but get cleared if you wipe site data.
               </p>
               <p
                 className="text-[11px] leading-relaxed"
                 style={{ color: textPrimary }}
               >
-                <span style={{ color: green }}>Walrus</span> stores them
-                on the Walrus storage layer via Tatum — durable and
-                shareable across sessions, but requires Tatum credits
-                that need periodic top-ups.
+                <span style={{ color: green }}>Walrus</span> (Mainnet via
+                Tatum) — durable, shareable across sessions and devices.
+                Each save uses Tatum credits, so we top up periodically;
+                if credits run out, saves will fail until the next top-up.
               </p>
               <p
                 className="text-[10px] leading-relaxed"
                 style={{ color: textMuted }}
               >
-                Use <strong style={{ color: textSecondary }}>Local</strong> for quick
-                experiments. Use <strong style={{ color: textSecondary }}>Walrus</strong> when
-                you want results to persist between visits.
+                Stick with <strong style={{ color: textSecondary }}>Local</strong> while the
+                dapp is on Testnet. Switch to{' '}
+                <strong style={{ color: textSecondary }}>Walrus</strong> once we migrate the
+                default to Mainnet.
               </p>
             </div>
           </div>

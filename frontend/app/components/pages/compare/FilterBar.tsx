@@ -120,13 +120,13 @@ export default function FilterBar({
             style={{
               background: 'rgba(255,255,255,0.04)',
             }}
-            title="Current BTC spot price (DeepBook oracle baseline)."
+            title="Current BTC spot price (From DeepBook oracle)."
           >
             <span
               className="text-[10px] uppercase tracking-wider font-semibold"
               style={{ color: textSecondary }}
             >
-              Spot
+             Current Price
             </span>
             <span
               className="font-mono font-bold"

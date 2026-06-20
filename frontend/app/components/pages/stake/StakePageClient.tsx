@@ -67,7 +67,7 @@ export default function StakePageClient() {
   const [openModal, setOpenModal] = useState<OpenModal>(null);
 
   return (
-    <PageWrapper title="Stake / Subscription">
+    <PageWrapper title="Subscription">
       <MainnetWarning />
       <div className="max-w-7xl mx-auto space-y-4">
         <Tabs

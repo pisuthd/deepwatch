@@ -190,12 +190,12 @@ export default function MatchTable({
           <table className="w-full text-xs">
             <thead style={{ background: headerBg }}>
               <tr className="text-left" style={{ color: textSecondary, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <th className="px-3 py-2 font-medium">DeepBook Predict Market</th>
+                <th className="px-3 py-2 font-medium">Market</th>
                 <th className="px-3 py-2 font-medium">Expiry</th>
-                <th className="px-3 py-2 font-medium text-right">Deepbook</th>
-                <th className="px-3 py-2 font-medium text-right">Polymarket</th>
-                <th className="px-3 py-2 font-medium text-right">Kalshi</th>
-                <th className="px-3 py-2 font-medium text-right">AI</th>
+                <th className="px-3 py-2 font-medium text-right">DeepBook YES</th>
+                <th className="px-3 py-2 font-medium text-right">Polymarket YES</th>
+                <th className="px-3 py-2 font-medium text-right">Kalshi YES</th>
+                <th className="px-3 py-2 font-medium text-right">AI Insights</th>
               </tr>
             </thead>
             <tbody>
@@ -236,12 +236,12 @@ export default function MatchTable({
               className="text-left"
               style={{ color: textSecondary, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}
             >
-              <th className="px-3 py-2 font-medium">DeepBook Predict Market</th>
+              <th className="px-3 py-2 font-medium">Market</th>
               <th className="px-3 py-2 font-medium">Expiry</th>
-              <th className="px-3 py-2 font-medium text-right" title="DeepBook YES price at the ATM strike — the comparison baseline for the row.">Deepbook</th>
-              <th className="px-3 py-2 font-medium text-right" title="Polymarket YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Polymarket</th>
-              <th className="px-3 py-2 font-medium text-right" title="Kalshi YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Kalshi</th>
-              <th className="px-3 py-2 font-medium text-right" title="AI analysis per row. Click Analyse to run a batch over all visible markets.">AI</th>
+              <th className="px-3 py-2 font-medium text-right" title="DeepBook YES price at the ATM strike — the comparison baseline for the row.">DeepBook YES</th>
+              <th className="px-3 py-2 font-medium text-right" title="Polymarket YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Polymarket YES</th>
+              <th className="px-3 py-2 font-medium text-right" title="Kalshi YES price of the closest-by-expiry match. Compare to the DB baseline on the left.">Kalshi YES</th>
+              <th className="px-3 py-2 font-medium text-right" title="AI analysis per row. Click Analyse to run a batch over all visible markets.">AI Insights</th>
             </tr>
           </thead>
           <tbody>
@@ -344,49 +344,55 @@ export default function MatchTable({
           can fire a batch over the currently visible matches at any
           time, without having to find a row's per-cell Analyse button.
           Two variants: Walrus (default, durable via Tatum) and Local
-          (browser-localStorage, free, temporary). */}
+          (browser-localStorage, free, temporary). Both use the same
+          glass-button style as the UP/DOWN buttons in PredictAdvancedMode:
+          rounded-2xl + rgba(26,29,46,0.6) bg + blur(20px) + gradient
+          sheen + top highlight. The Walrus variant adds a green glow
+          disc to mirror the UP button's accent. */}
       <div
-        className="px-3 py-2.5 border-t border-white/5 flex items-center justify-between gap-3 flex-wrap"
+        className="px-3 py-2.5 border-t border-white/5 flex items-center justify-end gap-3 flex-wrap"
       >
-        <span
-          className="text-[11px]"
-          style={{ color: textSecondary }}
-        >
-          {matches.length} {matches.length === 1 ? 'match' : 'matches'}
-        </span>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Analyse to Local — glass button, neutral (no glow) */}
           <button
             type="button"
             onClick={() => onClickLocalAnalyse(matches[0]?.key ?? '')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-opacity hover:opacity-90"
-            style={{
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              color: textPrimary,
-              fontSize: 11,
-              letterSpacing: '0.05em',
-              textTransform: 'uppercase',
-            }}
+            className="relative rounded-2xl px-4 py-2.5 overflow-hidden border border-white/10 transition-all hover:border-white/20 inline-flex items-center gap-1.5"
+            style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
             title="Run AI analysis and save to this browser's local storage. Free and instant, but temporary."
           >
-            <Database size={12} />
-            Run One-Time (Local) {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+            <span
+              className="relative z-10 text-sm font-semibold inline-flex items-center gap-1.5"
+              style={{ color: textPrimary }}
+            >
+              <Database size={13} />
+              Analyse to Local
+            </span>
           </button>
+
+          {/* Analyse to Walrus — glass button with green glow disc */}
           <button
             type="button"
             onClick={() => onClickAnalyse(matches[0]?.key ?? '')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-opacity hover:opacity-90"
-            style={{
-              background: green,
-              color: '#000',
-              fontSize: 11,
-              letterSpacing: '0.05em',
-              textTransform: 'uppercase',
-            }}
+            className="relative rounded-2xl px-4 py-2.5 overflow-hidden border border-white/10 transition-all hover:border-white/20 inline-flex items-center gap-1.5"
+            style={{ background: 'rgba(26, 29, 46, 0.6)', backdropFilter: 'blur(20px)' }}
             title="Run AI analysis on every visible match (first 3 free, rest Seal-encrypted) and upload to Walrus."
           >
-            <Sparkles size={12} />
-            Run Analyse {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+            <div
+              className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
+              style={{ background: green, filter: 'blur(30px)', opacity: 0.15 }}
+            />
+            <span
+              className="relative z-10 text-sm font-semibold inline-flex items-center gap-1.5"
+              style={{ color: green }}
+            >
+              <Sparkles size={13} />
+              Analyse to Walrus
+            </span>
           </button>
         </div>
       </div>

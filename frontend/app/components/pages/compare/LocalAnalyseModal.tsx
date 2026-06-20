@@ -193,11 +193,7 @@ export default function LocalAnalyseModal({ open, onClose }: LocalAnalyseModalPr
                 >
                   <X size={16} />
                 </button>
-              </div>
-
-              {/* Storage-target explainer — visible the whole time so the
-                  user is never in doubt about where the result lives. */}
-              <StorageBanner />
+              </div> 
 
               {/* Progress bar */}
               {!isIdle && !isReviewing && (
@@ -261,31 +257,7 @@ export default function LocalAnalyseModal({ open, onClose }: LocalAnalyseModalPr
     </AnimatePresence>
   );
 }
-
-// ─── Sub-components ────────────────────────────────────────────────────────
-
-function StorageBanner() {
-  return (
-    <div
-      className="flex items-start gap-2 rounded-md px-3 py-2 text-[11px] leading-relaxed"
-      style={{
-        background: 'rgba(245, 158, 11, 0.08)',
-        border: '1px solid rgba(245, 158, 11, 0.25)',
-        color: amber,
-      }}
-      role="status"
-    >
-      <Database size={12} className="shrink-0 mt-px" />
-      <div>
-        <strong style={{ color: textPrimary }}>Local storage:</strong>{' '}
-        results will be saved in this browser only. Free and instant,
-        but temporary — clearing browser data will delete your insights.
-        For durable, shareable storage, use the Walrus option on the
-        Compare table instead.
-      </div>
-    </div>
-  );
-}
+ 
 
 function ReviewPanel({
   matches,
@@ -345,7 +317,7 @@ function ReviewPanel({
           title="Fire the AI analysis. Results will be saved to localStorage."
         >
           <Play size={13} fill="#000" />
-          Start analysis (Local)
+          Start
         </button>
         <button
           type="button"

@@ -39,6 +39,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { GitCompareArrows } from 'lucide-react';
 import PageWrapper from '../../common/PageWrapper';
 import FilterBar, {
   applyHorizon,
@@ -71,6 +73,14 @@ import {
 import { findMatchesForDeepBook, type DeepBookMatch } from '@/app/lib/match';
 import type { CmcContext } from '@/app/lib/match-analyses';
 
+// Local color tokens — kept in sync with the rest of the dapp (see
+// `HowToTradeGuide.tsx`, `PredictAdvancedMode.tsx`). Inlined here
+// rather than imported from a shared module so this file stays
+// self-contained.
+const textPrimary = '#ffffff';
+const textSecondary = '#9ca3af';
+const green = '#00E68A';
+
 export default function ComparePageClient() {
   const {
     polyRows,
@@ -102,57 +112,23 @@ export default function ComparePageClient() {
    */
   const [activeAnalyseModal, setActiveAnalyseModal] = useState<'walrus' | 'local' | null>(null);
 
-  // ─── Local-source explainer (deprecation notice) ────────────────────
-  // Surfaces a must-dismiss modal the first time the user flips the
-  // source selector to Local on this browser. After dismissal, a
-  // persistent localStorage flag (`deepwatch:local-explainer-seen`)
-  // suppresses re-renders across page reloads.
-  //
-  // `seenFlag` follows the three-state pattern: `null` while we haven't
-  // read localStorage yet, `true` after the user has dismissed or the
-  // flag is already set, `false` only on first visit.
+  // ─── Local-source explainer (re-opens on every Local flip) ──────────
+  // Surfaces the explainer modal whenever the user flips the source
+  // selector to Local — no localStorage gate, no "seen once" memo.
+  // Dismissal only closes the current session's modal; the next flip
+  // (or the next page load) re-opens it.
   const [explainerOpen, setExplainerOpen] = useState(false);
-  const [seenFlag, setSeenFlag] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // setTimeout(0) defers the localStorage read into an event-handler
-    // context so React 19's set-state-in-effect rule stays happy.
-    const initialId = setTimeout(() => {
-      try {
-        setSeenFlag(
-          window.localStorage.getItem('deepwatch:local-explainer-seen') === '1',
-        );
-      } catch {
-        // Storage unavailable (private mode, quota, denial) → don't nag.
-        setSeenFlag(true);
-      }
-    }, 0);
-    return () => clearTimeout(initialId);
-  }, []);
-
-  // Open the explainer on a Local-source flip, gated by the seen flag.
-  // Sits alongside the source-flush effect below without interfering —
-  // this effect only sets state on `explainerOpen`, never calls
-  // `batchIndex.refresh()`.
-  useEffect(() => {
-    if (seenFlag !== false) return;
     if (insightSource !== 'local') return;
-    // Same setTimeout(0) wrap as above to avoid React 19's
-    // set-state-in-effect rule when a state setter is the entire body
-    // of an effect.
+    // setTimeout(0) defers the state update into an event-handler
+    // context so React 19's set-state-in-effect rule stays happy.
     const id = setTimeout(() => setExplainerOpen(true), 0);
     return () => clearTimeout(id);
-  }, [insightSource, seenFlag]);
+  }, [insightSource]);
 
   const closeExplainer = useCallback(() => {
     setExplainerOpen(false);
-    try {
-      window.localStorage.setItem('deepwatch:local-explainer-seen', '1');
-    } catch {
-      // Storage full or denied — in-memory `seenFlag=true` still
-      // suppresses re-open for this session.
-    }
-    setSeenFlag(true);
   }, []);
 
   // Group rows → match-ready groups. The groupers drop near-certain /
@@ -347,8 +323,74 @@ export default function ComparePageClient() {
   // ─── (auto-decrypt removed — see doc comment above) ─────────────────
 
   return (
-    <PageWrapper title="AI Insights">
+    <PageWrapper title="Compare">
       <div className="max-w-7xl mx-auto space-y-4">
+        {/* Subtitle — wrapped in a glass card matching the OverviewPage
+            style (WelcomeCard / Quick Actions). One paragraph: first
+            clause is the description, second clause is the access notice.
+            `pointer-events-none` on the two overlay divs keeps the inner
+            `<Link>` clickable. */}
+        <div
+          className="relative overflow-hidden rounded-2xl p-4 pr-16 border border-white/10"
+          style={{
+            background: 'rgba(26, 29, 46, 0.6)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+          }}
+        >
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+
+          {/* Glow icon on the right — mirrors the WelcomeCard pattern
+              (blurred accent disc + frosted inner square + icon). Sized
+              smaller (w-10) since this is a subtitle, not a hero card. */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none"
+            aria-hidden="true"
+          >
+            <div className="relative w-10 h-10 flex items-center justify-center">
+              <div
+                className="absolute inset-0 rounded-xl"
+                style={{
+                  background: green,
+                  filter: 'blur(14px)',
+                  opacity: 0.35,
+                }}
+              />
+              <div
+                className="absolute inset-0 rounded-xl border border-white/10"
+                style={{ background: 'rgba(26, 29, 46, 0.6)' }}
+              />
+              <GitCompareArrows
+                size={18}
+                className="relative z-10"
+                style={{ color: green }}
+              />
+            </div>
+          </div>
+
+          <p
+            className="relative text-sm max-w-3xl"
+            style={{ color: textSecondary }}
+          >
+            Compare prediction-market odds across{' '}
+            <span style={{ color: textPrimary }}>DeepBook</span>,{' '}
+            <span style={{ color: textPrimary }}>Polymarket</span>,{' '}
+            <span style={{ color: textPrimary }}>Kalshi</span>, and{' '}
+            <span style={{ color: textPrimary }}>CMC sentiment</span> in one table.{' '}
+            <span style={{ color: green }}>Free to compare</span>; AI insights and
+            the sentiment/odds read require a{' '}
+            <Link
+              href="/app/stake"
+              className="underline hover:no-underline"
+              style={{ color: textPrimary }}
+            >
+              DeepWatch
+            </Link>{' '}
+            subscription.
+          </p>
+        </div>
+
         <FilterBar
           asset={asset}
           onAssetChange={setAsset}
@@ -398,10 +440,9 @@ export default function ComparePageClient() {
       />
 
       {/*
-        Local-source deprecation explainer. Mounted at the page root so
-        its lifecycle is independent of which analyse modal is open. Only
-        renders when `explainerOpen` is true, which is only set on the
-        first-ever Local flip per browser.
+        Local-source explainer. Mounted at the page root so its
+        lifecycle is independent of which analyse modal is open.
+        Re-opens on every Local flip (no per-browser "seen" gate).
       */}
       <LocalSourceExplainerModal
         open={explainerOpen}

@@ -405,13 +405,7 @@ function ReviewPanel({
           style={{ color: textSecondary }}
         >
           Cancel
-        </button>
-        <span
-          className="ml-auto text-[10px] font-mono"
-          style={{ color: textSecondary }}
-        >
-          Closing this modal also cancels.
-        </span>
+        </button> 
       </div>
     </div>
   );
@@ -627,7 +621,7 @@ function DonePanel({
         <BlockedBanner reason={startBlockedReason} />
       )}
       <div className="flex items-center gap-2">
-        <button
+        {/* <button
           type="button"
           onClick={onReanalyse}
           disabled={!canStart}
@@ -645,7 +639,7 @@ function DonePanel({
         >
           <RefreshCcw size={12} />
           Re-analyse
-        </button>
+        </button> */}
         <button
           type="button"
           onClick={onClose}
