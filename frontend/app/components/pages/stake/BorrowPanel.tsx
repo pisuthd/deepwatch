@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * BorrowPanel — borrow PLP against SUI collateral, repay, and
  * liquidate-overdue debts.
@@ -29,6 +27,11 @@
  * (admin runs via CLI). For a wallet that ISN'T the pool admin, the
  * panel renders the borrow/repay flow only — that's the user-
  * facing surface.
+ *
+ * # Shared utilities
+ *
+ * `parseUnits` / `fmtUnits` / `CoinBalance` / `fetchCoinBalance` come
+ * from `lib/coin.ts`. SUI balances display with 4 dp; PLP with 2 dp.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -39,6 +42,7 @@ import GlassCard from '../../common/GlassCard';
 import { useNetworkConfig } from '../../../hooks/useNetworkConfig';
 import { useDeepWatchPool } from '../../../hooks/useDeepWatchPool';
 import { useToast } from '../../../context/ToastContext';
+import { fetchCoinBalance, fmtUnits, parseUnits, type CoinBalance } from '../../../lib/coin';
 import { buildBorrowTx, buildRepayTx } from '../../../lib/deepwatch-pool';
 
 const PLP_DECIMALS = 6;
@@ -46,49 +50,6 @@ const SUI_DECIMALS = 9;
 const MS_PER_YEAR = 31_536_000_000;
 
 type Mode = 'borrow' | 'repay';
-
-function parseUnits(amount: string, decimals: number): bigint {
-  const trimmed = (amount || '').trim();
-  if (!trimmed) return BigInt(0);
-  const [whole, frac = ''] = trimmed.split('.');
-  const fracPadded = (frac + '0'.repeat(decimals)).slice(0, decimals);
-  return BigInt(whole || '0') * BigInt(10 ** decimals) + BigInt(fracPadded || '0');
-}
-
-function fmtUnits(units: bigint, decimals: number): string {
-  const whole = units / BigInt(10 ** decimals);
-  const frac = units % BigInt(10 ** decimals);
-  return `${whole.toString()}.${frac.toString().padStart(decimals, '0').slice(0, 4)}`;
-}
-
-interface CoinBalance {
-  primaryCoinId: string | null;
-  totalBalance: bigint;
-}
-
-async function fetchCoinBalance(
-  client: ReturnType<typeof useCurrentClient>,
-  owner: string,
-  coinType: string,
-): Promise<CoinBalance> {
-  try {
-    const res = await client.core.listCoins({ owner, coinType, limit: 50 });
-    const coins = res.objects ?? [];
-    if (coins.length === 0) return { primaryCoinId: null, totalBalance: BigInt(0) };
-    const sorted = [...coins].sort((a, b) => {
-      const ab = BigInt(a.balance);
-      const bb = BigInt(b.balance);
-      return ab > bb ? -1 : ab < bb ? 1 : 0;
-    });
-    const totalBalance = coins.reduce(
-      (acc: bigint, c: { balance: string }) => acc + BigInt(c.balance),
-      BigInt(0),
-    );
-    return { primaryCoinId: sorted[0].objectId, totalBalance };
-  } catch {
-    return { primaryCoinId: null, totalBalance: BigInt(0) };
-  }
-}
 
 function estimateInterest(
   principal: bigint,
@@ -184,7 +145,7 @@ export default function BorrowPanel() {
       });
       tx.setGasBudget(50_000_000);
       await signAndExecute({ transaction: tx });
-      notify(`Borrowed ${fmtUnits(b, PLP_DECIMALS)} PLP against ${fmtUnits(c, SUI_DECIMALS)} SUI`, { variant: 'success' });
+      notify(`Borrowed ${fmtUnits(b, PLP_DECIMALS)} PLP against ${fmtUnits(c, SUI_DECIMALS, 4)} SUI`, { variant: 'success' });
       setCollateralSui('');
       setBorrowPlp('');
       await refresh();
@@ -249,7 +210,7 @@ export default function BorrowPanel() {
           <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
             <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
               <p className="text-[var(--color-text-muted)]">Wallet SUI</p>
-              <p className="font-mono">{fmtUnits(suiBal.totalBalance, SUI_DECIMALS)}</p>
+              <p className="font-mono">{fmtUnits(suiBal.totalBalance, SUI_DECIMALS, 4)}</p>
             </div>
             <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
               <p className="text-[var(--color-text-muted)]">Wallet PLP</p>
