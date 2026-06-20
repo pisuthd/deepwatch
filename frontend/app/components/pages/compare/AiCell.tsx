@@ -5,28 +5,32 @@
  *
  * Visibility is gated by `useStake`:
  *
- *   - **Staker** (`isStaker === true`) → full UI
- *       A. No analysis yet → right-aligned "Analyse" pill button.
- *          onClick → `onClickAnalyse(match.key)` so the parent can
- *          open the batch modal and analyse all visible matches at once.
- *       B. Analysis exists → four compact lines:
- *            1. signal pill (`▲ UP · 5%` / `▼ DOWN · 3%` / `▬ NEUTRAL · 0%`)
- *            2. confidence (e.g. `conf 72%`)
- *            3. price line (`DB 55¢ · Poly 51¢ · Kalshi 52%`)
- *            4. reasoning, truncated, full text in `title` tooltip
- *
  *   - **Non-staker** → locked by default
- *       C. Has an analysis (i.e. this match sits in the **free slice**
- *          of some batch — the first FREE_SLICE_SIZE entries are
- *          public, stored in `b.results[match.key]`) → show the
+ *       A. Has an analysis (i.e. this match sits in the **free slice**
+ *          of some batch — the first HEAD_SIZE + MIDDLE_SIZE entries
+ *          are public, stored in `b.results[match.key]`) → show the
  *          analysis. Otherwise show "Analysing…" while a batch is
  *          in-flight on this row.
- *       D. Otherwise → "Stake to unlock" pill that links to
+ *       B. Otherwise → "Stake to unlock" pill that links to
  *          `/app/stake`. Non-stakers can only see the public
  *          free-slice results; markets 4+ per batch are Seal-
  *          encrypted and require a valid Subscription NFT.
  *
- * The cell is read-only once populated (Branch B / C) — v1 doesn't
+ *   - **Staker** (`isStaker === true`)
+ *       C. Analysis exists (free-slice or recently-batched, OR
+ *          manually-decrypted from the encrypted slice) → same
+ *          compact `<AnalysisView>` rendered for non-stakers.
+ *       D. No analysis yet AND batch is in flight → "Analysing…"
+ *       E. Otherwise → "Decrypt" pill. Click to Seal-decrypt the
+ *          batch's encrypted slice on demand (the global bottom
+ *          "Analyse X matches" button kicks the AI run; the
+ *          per-cell "Decrypt" button recovers the encrypted-slice
+ *          analyses for THIS market's batch using the wallet's
+ *          Subscription NFT). On success the row flips to the
+ *          analysis view (Branch C); on `SealAccessError` a toast
+ *          surfaces the structured reason.
+ *
+ * The cell is read-only once populated (Branch C) — v1 doesn't
  * expose a re-analyse affordance. To force a refresh, clear
  * `localStorage` `deepwatch:match-analyses:v1` and click Analyse
  * again. The real fix (per-row refresh + staleness indicator) is a
@@ -36,11 +40,15 @@
  * consistently against the rest of the row.
  */
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Lock, Sparkles } from 'lucide-react';
 import { useStake } from '@/app/hooks/useStake';
+import { useSealDecrypt } from '@/app/hooks/useSealDecrypt';
 import { useMatchAnalyses } from '@/app/stores/match-analyses-store';
 import { useAiBatch } from '@/app/stores/ai-batch-store';
+import { useBatchIndex } from '@/app/stores/batch-index-store';
+import { useToast } from '@/app/context/ToastContext';
+import { SealAccessError } from '@/app/lib/seal';
 import type { DeepBookMatch } from '@/app/lib/match';
 import type { MatchAnalysis } from '@/app/lib/match-analyses';
 
@@ -51,12 +59,6 @@ const textSecondary = '#9ca3af';
 
 interface AiCellProps {
   match: DeepBookMatch;
-  /** Clicked "Analyse" — parent snapshots visible matches and hands
-   * them to `AiBatchProvider.startBatch()`. The cell reads its own
-   * `isAnalysing` state from the provider (this row is part of the
-   * in-flight batch iff the provider's `phase === 'analysing'` and
-   * this row is in `state.matches`). */
-  onClickAnalyse: (key: string) => void;
 }
 
 const SIGNAL_COLOR: Record<MatchAnalysis['signal'], string> = {
@@ -175,10 +177,18 @@ function AnalysisView({
   );
 }
 
-export default function AiCell({ match, onClickAnalyse }: AiCellProps) {
+export default function AiCell({ match }: AiCellProps) {
   const { isStaker } = useStake();
-  const { getByMatchKey, hydrated } = useMatchAnalyses();
+  const { getByMatchKey, hydrated, setMany: setManyAnalyses } = useMatchAnalyses();
   const { state } = useAiBatch();
+  const batchIndex = useBatchIndex();
+  const { decrypt: sealDecryptBatch, isSigning } = useSealDecrypt();
+  const { notify } = useToast();
+  // Per-cell decrypt-in-flight flag. Combined with `isSigning` (true
+  // while the wallet is prompting for `signPersonalMessage`) so the
+  // button reads "Decrypting…" from click through to either success
+  // or toast — prevents double-clicks racing the key-server call.
+  const [manualDecrypting, setManualDecrypting] = useState<boolean>(false);
 
   // "This row is part of the in-flight batch" = the provider is
   // currently analysing (or reviewing) AND this row is in the snapshot
@@ -205,6 +215,100 @@ export default function AiCell({ match, onClickAnalyse }: AiCellProps) {
     [state.phase, state.latestResults, match.key],
   );
   const analysis = inFlight ?? persisted;
+
+  // Per-cell manual decrypt handler. MUST be declared above the
+  // conditional returns below — calling a hook conditionally on
+  // some renders (staker + no analysis + no in-flight) but not
+  // others (staker + analysis present) breaks the Rules of Hooks.
+  // Stakers without an analysis will render the Decrypt pill at the
+  // bottom of this function; the handler runs `sealDecryptBatch`
+  // against the batch gating this market's matchKey, caches the
+  // decrypted slice, and pushes entries into the per-match store
+  // so the row flips into the analysis branch on the next render.
+  const handleManualDecrypt = useCallback(async (): Promise<void> => {
+    if (manualDecrypting || isSigning) return;
+    // Find the batch whose `encryptedMatchKeys` includes this market.
+    // `batchIndex.all` is the in-memory list — Walrus hydration runs
+    // on Compare-page mount, so by the time the user clicks this
+    // button the index is already populated.
+    const gated = batchIndex.all.find(
+      (b) => b.encryptedMatchKeys?.includes(match.key) ?? false,
+    );
+    if (!gated) {
+      notify(
+        'No encrypted batch covers this market yet — run Analyse first.',
+        { variant: 'warning', title: 'Nothing to decrypt' },
+      );
+      return;
+    }
+    if (!gated.wrappedKey || !gated.encryptedPayload || !gated.keyId) {
+      // Old v3 blob without inline encryption metadata — fallback to
+      // the Predict-page flow. Tell the user where to go.
+      notify(
+        'This batch was uploaded before the inline-encryption format. Open the market on Predict to read its analysis.',
+        { variant: 'info', title: 'Legacy batch', duration: 6000 },
+      );
+      return;
+    }
+    setManualDecrypting(true);
+    try {
+      const decrypted = await sealDecryptBatch({
+        wrappedKeyB64: gated.wrappedKey,
+        encryptedPayloadB64: gated.encryptedPayload,
+        keyIdHex: gated.keyId,
+      });
+      // Cache the decrypted slice on the batch (so other rows on
+      // Compare / Predict don't re-pay the key-server roundtrip) and
+      // push into the per-match store so the cell re-renders into
+      // the analysis branch immediately.
+      batchIndex.setEncryptedResults(gated.batchId, decrypted);
+      const entries: Array<[string, MatchAnalysis]> = Object.entries(decrypted);
+      setManyAnalyses(entries);
+      if (decrypted[match.key]) {
+        notify(
+          `Decrypted ${entries.length} analyses from batch ${gated.batchId}.`,
+          { variant: 'success', title: 'Decrypted', duration: 3000 },
+        );
+      } else {
+        // Decrypt succeeded but THIS matchKey wasn't in the slice —
+        // shouldn't happen if `encryptedMatchKeys.includes(match.key)`
+        // was true, but guard anyway.
+        notify(
+          `Decrypted batch ${gated.batchId}, but this market wasn't in the slice.`,
+          { variant: 'warning', title: 'Slice mismatch' },
+        );
+      }
+    } catch (e: unknown) {
+      if (e instanceof SealAccessError) {
+        const title =
+          e.reason === 'EXPIRED'
+            ? 'Subscription expired'
+            : e.reason === 'NAMESPACE_MISMATCH'
+              ? 'Wrong pool'
+              : 'Decrypt denied';
+        notify(e.message ?? 'Seal denied the decrypt', {
+          variant: 'error',
+          title,
+          duration: 8000,
+        });
+      } else {
+        const msg = e instanceof Error ? e.message : 'Decrypt failed';
+        notify(msg, { variant: 'error', title: 'Decrypt failed', duration: 8000 });
+      }
+    } finally {
+      setManualDecrypting(false);
+    }
+  }, [
+    batchIndex,
+    isSigning,
+    manualDecrypting,
+    match.key,
+    notify,
+    sealDecryptBatch,
+    setManyAnalyses,
+  ]);
+
+  const decrypting = manualDecrypting || isSigning;
 
   // --- Non-staker branches (locked-by-default) ---------------------
   // The 3 free-slice matches of each batch are public and land in the
@@ -263,7 +367,7 @@ export default function AiCell({ match, onClickAnalyse }: AiCellProps) {
     );
   }
 
-  // --- Staker branches (full UI) -----------------------------------
+  // --- Staker branches ----------------------------------------------
   if (analysis) {
     return (
       <div className="flex justify-end">
@@ -272,27 +376,58 @@ export default function AiCell({ match, onClickAnalyse }: AiCellProps) {
     );
   }
 
+  // Batch is in flight — show the same pill non-stakers see, so the
+  // staker knows the bottom click was registered even though no
+  // per-cell button exists anymore.
+  if (isAnalysing) {
+    return (
+      <div className="flex justify-end">
+        <button
+          type="button"
+          disabled
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded uppercase font-semibold transition-opacity disabled:opacity-50"
+          style={{
+            background: 'rgba(0, 230, 138, 0.12)',
+            border: '1px solid rgba(0, 230, 138, 0.3)',
+            color: green,
+            fontSize: 10,
+            letterSpacing: '0.05em',
+          }}
+          title="AI analysis in progress…"
+        >
+          <Sparkles size={10} />
+          Analysing…
+        </button>
+      </div>
+    );
+  }
+
+  // No analysis yet, no in-flight batch — for stakers, surface an
+  // explicit "Decrypt" pill. `handleManualDecrypt` + `decrypting` are
+  // declared above the early returns so the hook order stays stable
+  // across renders (Rules of Hooks). The bottom global Analyse
+  // button is for the AI run; this button is for the encrypted-slice
+  // read on demand.
   return (
     <div className="flex justify-end">
       <button
         type="button"
         onClick={(e) => {
-          e.stopPropagation(); // don't open the drilldown modal too
-          onClickAnalyse(match.key);
+          e.stopPropagation();
+          void handleManualDecrypt();
         }}
-        disabled={isAnalysing}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded uppercase font-semibold transition-opacity disabled:opacity-50"
+        disabled={decrypting}
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md uppercase font-bold transition-opacity disabled:opacity-50 hover:opacity-90"
         style={{
-          background: 'rgba(0, 230, 138, 0.12)',
-          border: '1px solid rgba(0, 230, 138, 0.3)',
-          color: green,
+          background: green,
+          color: '#000',
           fontSize: 10,
           letterSpacing: '0.05em',
         }}
-        title="Run AI analysis on this market."
+        title="Decrypt this batch's encrypted slice using your Subscription NFT. First click will prompt a wallet signature."
       >
-        <Sparkles size={10} />
-        {isAnalysing ? 'Analysing…' : 'Analyse'}
+        <Lock size={10} />
+        {decrypting ? 'Decrypting…' : 'Unlock'}
       </button>
     </div>
   );

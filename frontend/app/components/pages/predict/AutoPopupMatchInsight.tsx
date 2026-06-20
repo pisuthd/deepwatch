@@ -43,7 +43,7 @@ export default function AutoPopupMatchInsight() {
     () => (oracleId && expiryMs ? `${oracleId}::${expiryMs}` : null),
     [oracleId, expiryMs],
   );
-  const analysis = useMatchInsight(matchKey);
+  const { analysis } = useMatchInsight(matchKey);
   // Per-session set of `matchKey`s we've already auto-opened for. A
   // `useRef` (not `useState`) because the set never drives rendering
   // and shouldn't trigger a re-render when it grows.

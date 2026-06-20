@@ -38,15 +38,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronDown,
   Loader2,
   Play,
   RefreshCcw,
   Sparkles,
+  Wallet,
   X,
 } from 'lucide-react';
 import { useAiBatch } from '@/app/stores/ai-batch-store';
+import { useNetwork } from '@/app/context/NetworkContext';
+import { useWallet } from '@/app/hooks/useWallet';
 import type { CmcContext } from '@/app/lib/match-analyses';
 import type { DeepBookMatch } from '@/app/lib/match';
 
@@ -65,6 +69,32 @@ export default function AiAnalyseModal() {
     abortBatch,
     clearBatch,
   } = useAiBatch();
+  const { network } = useNetwork();
+  const { isConnected } = useWallet();
+
+  // AI batch analysis is gated on two runtime conditions:
+  //   1. Network — mainnet is disabled because the testnet Tatum
+  //      Walrus aggregator + the testnet Seal key server are the only
+  //      ones wired up; running on mainnet would either fail to upload
+  //      or burn real credits against a service we don't control.
+  //   2. Wallet — the Walrus upload is owner-scoped at the API-key
+  //      layer and the Seal-encrypted slice needs a sender for the
+  //      `seal_approve` simulation. Without a wallet there is nothing
+  //      to attach the upload to, so we block before any token spend.
+  //
+  // The reason is rendered as an inline banner above the action row
+  // so the user sees why the Start button is disabled instead of
+  // wondering whether the click failed silently.
+  const startBlockedReason: string | null = useMemo(() => {
+    if (!isConnected) {
+      return 'Connect a wallet to start the AI batch.';
+    }
+    if (network === 'mainnet') {
+      return 'AI batch analysis is disabled on mainnet — switch to testnet to run an analysis.';
+    }
+    return null;
+  }, [isConnected, network]);
+  const canStart = startBlockedReason === null;
 
   const totalCount = state.matches?.length ?? 0;
   const doneCount = useMemo(
@@ -215,6 +245,8 @@ export default function AiAnalyseModal() {
                     // show the match list without a macro card.
                     null
                   }
+                  canStart={canStart}
+                  startBlockedReason={startBlockedReason}
                   onStart={commitBatch}
                   onCancel={() => {
                     setModalOpen(false);
@@ -223,6 +255,8 @@ export default function AiAnalyseModal() {
               ) : isDone ? (
                 <DonePanel
                   count={doneCount}
+                  canStart={canStart}
+                  startBlockedReason={startBlockedReason}
                   onReanalyse={() => {
                     if (!state.matches) return;
                     // Re-stage from review, so the user sees the match
@@ -237,6 +271,8 @@ export default function AiAnalyseModal() {
               ) : isError ? (
                 <ErrorPanel
                   error={state.error}
+                  canStart={canStart}
+                  startBlockedReason={startBlockedReason}
                   onRetry={() => {
                     if (!state.matches) return;
                     prepareBatch(state.matches, null);
@@ -286,11 +322,15 @@ export default function AiAnalyseModal() {
 function ReviewPanel({
   matches,
   cmcContext,
+  canStart,
+  startBlockedReason,
   onStart,
   onCancel,
 }: {
   matches: DeepBookMatch[];
   cmcContext: CmcContext | null;
+  canStart: boolean;
+  startBlockedReason: string | null;
   onStart: () => void;
   onCancel: () => void;
 }) {
@@ -335,16 +375,25 @@ function ReviewPanel({
         ))}
       </ul>
 
+      {startBlockedReason && (
+        <BlockedBanner reason={startBlockedReason} />
+      )}
+
       <div className="pt-2 flex items-center gap-2">
         <button
           type="button"
           onClick={onStart}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-bold transition-opacity hover:opacity-90"
+          disabled={!canStart}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
           style={{
             background: green,
             color: '#000',
           }}
-          title="Fire the AI analysis. This is when tokens start getting spent."
+          title={
+            canStart
+              ? 'Fire the AI analysis. This is when tokens start getting spent.'
+              : startBlockedReason ?? 'Cannot start analysis.'
+          }
         >
           <Play size={13} fill="#000" />
           Start analysis
@@ -364,6 +413,36 @@ function ReviewPanel({
           Closing this modal also cancels.
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Inline banner shown above the action row when the AI batch cannot be
+ * started — either because no wallet is connected (the upload needs a
+ * sender) or because the user is on mainnet (testnet-only infra).
+ *
+ * The Start / Re-analyse / Retry buttons are also `disabled` while
+ * this is visible; the banner explains WHY so the disabled state is
+ * not ambiguous.
+ */
+function BlockedBanner({ reason }: { reason: string }) {
+  const isWallet = reason.toLowerCase().startsWith('connect a wallet');
+  return (
+    <div
+      className="flex items-start gap-2 rounded-md px-3 py-2 text-[11px]"
+      style={{
+        background: 'rgba(245, 158, 11, 0.08)',
+        border: '1px solid rgba(245, 158, 11, 0.25)',
+        color: '#fbbf24',
+      }}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="shrink-0 mt-px">
+        {isWallet ? <Wallet size={12} /> : <AlertTriangle size={12} />}
+      </span>
+      <span className="leading-relaxed">{reason}</span>
     </div>
   );
 }
@@ -525,10 +604,14 @@ function AnalysingPanel({
 
 function DonePanel({
   count,
+  canStart,
+  startBlockedReason,
   onReanalyse,
   onClose,
 }: {
   count: number;
+  canStart: boolean;
+  startBlockedReason: string | null;
   onReanalyse: () => void;
   onClose: () => void;
 }) {
@@ -540,16 +623,25 @@ function DonePanel({
           Saved ✓ — {count} {count === 1 ? 'analysis' : 'analyses'} written.
         </span>
       </div>
+      {startBlockedReason && (
+        <BlockedBanner reason={startBlockedReason} />
+      )}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onReanalyse}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+          disabled={!canStart}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             background: 'rgba(0, 230, 138, 0.12)',
             border: '1px solid rgba(0, 230, 138, 0.3)',
             color: green,
           }}
+          title={
+            canStart
+              ? 'Re-run the batch from review.'
+              : startBlockedReason ?? 'Cannot re-analyse.'
+          }
         >
           <RefreshCcw size={12} />
           Re-analyse
@@ -569,11 +661,15 @@ function DonePanel({
 
 function ErrorPanel({
   error,
+  canStart,
+  startBlockedReason,
   onRetry,
   onAbort,
   onClose,
 }: {
   error: string | null;
+  canStart: boolean;
+  startBlockedReason: string | null;
   onRetry: () => void;
   onAbort: () => void;
   onClose: () => void;
@@ -591,16 +687,25 @@ function ErrorPanel({
           {error}
         </div>
       )}
+      {startBlockedReason && (
+        <BlockedBanner reason={startBlockedReason} />
+      )}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onRetry}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+          disabled={!canStart}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             background: 'rgba(0, 230, 138, 0.12)',
             border: '1px solid rgba(0, 230, 138, 0.3)',
             color: green,
           }}
+          title={
+            canStart
+              ? 'Re-prepare the batch and start a fresh run.'
+              : startBlockedReason ?? 'Cannot retry.'
+          }
         >
           <RefreshCcw size={12} />
           Retry

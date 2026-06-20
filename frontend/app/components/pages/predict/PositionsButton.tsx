@@ -5,7 +5,7 @@ import { ListChecks } from 'lucide-react';
 import { usePredict } from '../../../hooks/usePredict';
 import PositionsPopover from './PositionsPopover';
 
-const cyan = '#3EC4C0';
+const green = '#00E68A';
 const textPrimary = '#ffffff';
 
 export default function PositionsButton() {
@@ -36,7 +36,7 @@ export default function PositionsButton() {
         style={{
           background: 'var(--color-bg-elevated)',
           borderColor: 'var(--color-border-default)',
-          color: open ? cyan : textPrimary,
+          color: open ? green : textPrimary,
         }}
         aria-label="Positions"
       >
@@ -46,9 +46,9 @@ export default function PositionsButton() {
           <span
             className="text-[10px] font-mono font-semibold rounded-full px-1.5 py-px min-w-[18px] text-center"
             style={{
-              background: 'rgba(62, 196, 192, 0.15)',
-              color: cyan,
-              border: '1px solid rgba(62, 196, 192, 0.4)',
+              background: 'rgba(0, 230, 138, 0.15)',
+              color: green,
+              border: '1px solid rgba(0, 230, 138, 0.4)',
             }}
           >
             {count}

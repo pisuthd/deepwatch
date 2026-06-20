@@ -13,7 +13,6 @@ import RangePositionsTab from './RangePositionsTab';
 
 const green = '#00E68A';
 const red = '#ef4444';
-const cyan = '#3EC4C0';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 
@@ -43,7 +42,7 @@ const STATUS_LABEL: Record<NonNullable<Position['status']>, string> = {
 };
 
 const STATUS_COLOR: Record<NonNullable<Position['status']>, string> = {
-  active: cyan,
+  active: green,
   redeemable: green,
   lost: red,
   awaiting_settlement: '#f59e0b',
@@ -338,11 +337,10 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
                         <button
                           onClick={() => handleRedeem(p)}
                           disabled={isSubmitting || !account || !dAppKit?.signAndExecuteTransaction}
-                          className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                           style={{
-                            background: 'rgba(62, 196, 192, 0.15)',
-                            border: '1px solid rgba(62, 196, 192, 0.4)',
-                            color: cyan,
+                            background: green,
+                            color: '#000',
                           }}
                         >
                           {isSubmitting && <Loader2 size={10} className="animate-spin" />}

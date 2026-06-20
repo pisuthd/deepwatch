@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * MatchInsightButton — 4th trailing button on the Predict page
- * (alongside `InsightButton`, `AccountOverviewButton`, `PositionsButton`).
+ * MatchInsightButton — trailing button on the Predict page (alongside
+ * `PositionsButton`).
  *
  * Surfaces the per-market AI analysis for the *currently selected*
  * market on Predict. Backed by `useMatchInsight`, which looks up
@@ -13,33 +13,37 @@
  *      Walrus batch blobs)
  *   3. Walrus (lazy fetch of the latest CERTIFIED batch blob)
  *
- * Three render branches:
+ * Visible to **every wallet**, not just stakers. The button label
+ * adapts:
  *
- *   - **Not a staker** → returns `null` (the button is gated behind
- *     the wallet connection, same as the Compare page's AI column).
- *   - **Staker, no analysis yet** → dimmed "AI" pill. The button is
- *     still clickable so the user gets the same popover experience
- *     ("no analysis available — run one on the Compare page"); the
- *     popover itself handles the empty state.
- *   - **Staker, analysis exists** → signal pill (`▲ UP · 5%` /
+ *   - **No analysis yet** → dimmed "AI" pill.
+ *   - **Analysis exists** → signal pill (`▲ UP · 5%` /
  *     `▼ DOWN · 3%` / `▬ NEUTRAL · 0%`), color-coded to match the
  *     `AiCell` Branch C on the Compare table.
+ *   - **Analysis is encrypted + no staker access** → popover shows
+ *     the `LockedCta` (subscription required) when opened. The
+ *     button itself still shows the same dimmed "AI" pill, since the
+ *     hit is unknown until the popover runs `useMatchInsight`.
  *
- * Outside-click closes (same pattern as `InsightButton` /
- * `PositionsButton`).
+ * The staker gate was previously here (returned `null` when
+ * `!isStaker`). It moved into the popover as the `accessError`
+ * branch, so the Predict page mirrors the Compare page's free-slice
+ * visibility: first 3 markets per batch are public, rest require a
+ * stake.
+ *
+ * Outside-click closes (same pattern as `PositionsButton`).
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useCurrentMarket } from './CurrentMarketContext';
 import { useMatchInsight } from '@/app/hooks/useMatchInsight';
-import { useStake } from '@/app/hooks/useStake';
 import MatchInsightPopover from './MatchInsightPopover';
 import type { MatchAnalysis } from '@/app/lib/match-analyses';
 
-const cyan = '#3EC4C0';
 const green = '#00E68A';
 const red = '#ef4444';
+const neutral = '#cbd5e1';
 const textPrimary = '#ffffff';
 const textSecondary = '#9ca3af';
 
@@ -56,21 +60,20 @@ const SIGNAL_LABEL: Record<MatchAnalysis['signal'], string> = {
 const SIGNAL_COLOR: Record<MatchAnalysis['signal'], string> = {
   UP: green,
   DOWN: red,
-  NEUTRAL: cyan,
+  NEUTRAL: neutral,
 };
 
 export default function MatchInsightButton() {
-  const { isStaker } = useStake();
   const { oracleId, expiryMs } = useCurrentMarket();
   const matchKey = useMemo<string | null>(
     () => (oracleId && expiryMs ? `${oracleId}::${expiryMs}` : null),
     [oracleId, expiryMs],
   );
-  const analysis = useMatchInsight(matchKey);
+  const { analysis, accessError } = useMatchInsight(matchKey);
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Outside-click closes. Mirrors `InsightButton` / `PositionsButton`.
+  // Outside-click closes. Mirrors `PositionsButton`.
   useEffect(() => {
     if (!open) return;
     const onMouseDown = (e: MouseEvent) => {
@@ -98,12 +101,11 @@ export default function MatchInsightButton() {
     return () => window.removeEventListener('deepwatch:open-match-insight', handler);
   }, [matchKey]);
 
-  // Gate: not a staker → don't render. Same gate as the AI column on
-  // the Compare page; the user has to connect a wallet to use AI.
-  if (!isStaker) return null;
-
   // Label + color for the button. With an analysis, show the signal
-  // pill; without, show a dimmed "AI" label.
+  // pill; without, show a dimmed "AI" label. The popover (opened on
+  // click) handles the `accessError` branch — locked CTA when the
+  // user lacks a subscription and the requested insight is in the
+  // encrypted slice.
   const hasAnalysis = analysis !== null;
   const signalColor = analysis ? SIGNAL_COLOR[analysis.signal] : textSecondary;
   const signalText = analysis
@@ -119,17 +121,17 @@ export default function MatchInsightButton() {
         style={{
           background: 'var(--color-bg-elevated)',
           borderColor: 'var(--color-border-default)',
-          color: open ? cyan : textPrimary,
+          color: open ? green : textPrimary,
           opacity: hasAnalysis ? 1 : 0.7,
         }}
         aria-label="AI insight for this market"
         title={
           hasAnalysis
             ? `${SIGNAL_LABEL[analysis.signal]} signal — ${Math.round(analysis.confidence * 100)}% confidence`
-            : 'No AI analysis for this market yet. Run one on the Compare page.'
+            : 'AI insight for this market. Open to view the analysis or unlock the encrypted slice.'
         }
       >
-        <Sparkles size={14} style={{ color: hasAnalysis ? cyan : textSecondary }} />
+        <Sparkles size={14} style={{ color: hasAnalysis ? green : textSecondary }} />
         <span
           className="text-xs font-mono font-semibold uppercase tracking-wider"
           style={{ color: hasAnalysis ? signalColor : textSecondary, fontSize: 11 }}
@@ -142,6 +144,7 @@ export default function MatchInsightButton() {
         <MatchInsightPopover
           matchKey={matchKey}
           analysis={analysis}
+          accessError={accessError}
           onClose={() => setOpen(false)}
         />
       )}

@@ -11,8 +11,10 @@
   "dependencies": {
     "@mysten/dapp-kit-react": "^2.0.3",
     "@mysten/deepbook-v3": "^1.4.1",
+    "@mysten/seal": "^1.1.0",
     "@mysten/sui": "^2.17.0",
     "framer-motion": "^12.40.0",
+    "idb-keyval": "^6.2.1",
     "lightweight-charts": "^5.0.8",
     "lucide-react": "^1.17.0",
     "next": "16.2.6",

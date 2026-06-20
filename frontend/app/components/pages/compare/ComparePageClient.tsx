@@ -197,10 +197,16 @@ export default function ComparePageClient() {
   // ─── Walrus hydration (Part 6) ────────────────────────────────────────
   // On mount, kick off the batch-index refresh. Once it resolves,
   // hydrate `match-analyses` with the latest batch's plaintext
-  // preview (first FREE_SLICE_SIZE markets) — this is what every
-  // visitor sees, regardless of wallet / stake state. The full set
-  // for stakers comes from the Seal-decrypted blob in the second
-  // effect below.
+  // preview (first HEAD_SIZE + MIDDLE_SIZE markets) — this is what every
+  // visitor sees, regardless of wallet / stake state.
+  //
+  // The encrypted slice is no longer auto-decrypted on this page (per
+  // user direction: it was confusing — sometimes worked, sometimes didn't,
+  // and the inconsistency between free-slice and encrypted-slice rows on
+  // the same batch was hard to explain). Stakers can read encrypted
+  // analyses on the Predict page via `useMatchInsight`. On Compare, the
+  // AI cell shows "Stake to unlock" for any row that isn't in the
+  // free slice — same UX for everyone, no surprises.
   //
   // After a successful batch upload, `AiBatchProvider.onBatchComplete`
   // already pushes the in-flight entries into `match-analyses-store`
@@ -231,13 +237,16 @@ export default function ComparePageClient() {
       matchAnalyses.hydrateFromWalrus(matchAnalyses.state.byKey, latest.batchId);
       return;
     }
-    // Preview = the plaintext blob's `results` (first FREE_SLICE_SIZE).
+    // Preview = the plaintext blob's `results` (first HEAD_SIZE +
+    // MIDDLE_SIZE markets — see `ai-batch-store.tsx`).
     matchAnalyses.hydrateFromWalrus(latest.results, latest.batchId);
   }, [
     batchIndex.hydrated,
     batchIndex.latest,
     matchAnalyses,
   ]);
+
+  // ─── (auto-decrypt removed — see doc comment above) ─────────────────
 
   return (
     <PageWrapper title="Compare">

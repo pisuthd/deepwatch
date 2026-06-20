@@ -26,8 +26,10 @@
  */
 
 import { useState } from 'react';
-import { ChevronDown, Sparkles, X } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronDown, Lock, Sparkles, X } from 'lucide-react';
 import type { MatchAnalysis } from '@/app/lib/match-analyses';
+import type { AccessError } from '@/app/hooks/useMatchInsight';
 
 const green = '#00E68A';
 const red = '#ef4444';
@@ -45,6 +47,7 @@ const SIGNAL_COLOR: Record<MatchAnalysis['signal'], string> = {
 interface MatchInsightPopoverProps {
   matchKey: string | null;
   analysis: MatchAnalysis | null;
+  accessError: AccessError | null;
   onClose: () => void;
 }
 
@@ -63,6 +66,7 @@ function fmtRelative(ts: number): string {
 export default function MatchInsightPopover({
   matchKey,
   analysis,
+  accessError,
   onClose,
 }: MatchInsightPopoverProps) {
   return (
@@ -99,12 +103,60 @@ export default function MatchInsightPopover({
 
         {!matchKey ? (
           <EmptyState message="No market selected. Pick a market on the chart to see its AI insight." />
+        ) : accessError ? (
+          <LockedCta reason={accessError} />
         ) : !analysis ? (
           <EmptyState message="No AI analysis for this market yet. Run one on the Compare page to populate." />
         ) : (
           <AnalysisBody analysis={analysis} />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Render the locked placeholder inside the popover when the requested
+ * analysis lives behind the Seal gate and the connected wallet doesn't
+ * hold a valid Subscription NFT. Includes a clear CTA to the stake
+ * page so the user has a one-click path to unlock.
+ */
+function LockedCta({ reason }: { reason: AccessError }) {
+  const title =
+    reason === 'EXPIRED'
+      ? 'Subscription expired'
+      : 'Subscription required';
+  const blurb =
+    reason === 'EXPIRED'
+      ? 'Your DeepWatch subscription has lapsed. Restake PLP to renew access to encrypted AI insights.'
+      : 'This AI insight is encrypted behind the DeepWatch stake gate. Stake PLP to unlock it — first 3 markets per batch stay free.';
+  return (
+    <div className="space-y-3 py-1">
+      <div className="flex items-center gap-2">
+        <Lock size={14} style={{ color: amber }} />
+        <div
+          className="text-xs font-bold uppercase tracking-wider"
+          style={{ color: amber }}
+        >
+          {title}
+        </div>
+      </div>
+      <p
+        className="text-[11px] leading-relaxed"
+        style={{ color: textSecondary }}
+      >
+        {blurb}
+      </p>
+      <Link
+        href="/app/stake"
+        className="inline-flex items-center justify-center w-full px-3 py-2 rounded-lg text-xs font-semibold transition-colors hover:opacity-90"
+        style={{
+          background: green,
+          color: '#0a0e1a',
+        }}
+      >
+        Stake PLP to unlock
+      </Link>
     </div>
   );
 }

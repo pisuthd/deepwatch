@@ -60,10 +60,7 @@ export default function PriceChart({
   lowerRef.current = lower ?? 0;
   const upperRef = useRef<number>(upper ?? 0);
   upperRef.current = upper ?? 0;
-
-  console.log("lower:", lower)
-  console.log("upper:", upper)
-  console.log("strike:", strike)
+ 
 
   const { history, loading } = useMarketPrices(oracleId, 60, 15_000);
   const isRangeMode = typeof lower === 'number' && typeof upper === 'number';

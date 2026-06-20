@@ -320,12 +320,10 @@ export default function MatchTable({
                     />
                   </td>
 
-                  {/* AI — per-row surface (lock / Analyse / signal+conf+prices+reasoning). */}
+                  {/* AI — per-row surface (locked / signal+conf+prices+reasoning /
+                      em-dash). */}
                   <td className="px-3 py-2.5 text-right">
-                    <AiCell
-                      match={m}
-                      onClickAnalyse={onClickAnalyse}
-                    />
+                    <AiCell match={m} />
                   </td>
                 </tr>
               );
@@ -360,7 +358,7 @@ export default function MatchTable({
           title="Run AI analysis on every visible match (first 3 free, rest Seal-encrypted)."
         >
           <Sparkles size={12} />
-          Analyse {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+          Run Analyse {matches.length} {matches.length === 1 ? 'match' : 'matches'}
         </button>
       </div>
     </GlassCard>
