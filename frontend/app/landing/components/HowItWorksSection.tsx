@@ -7,21 +7,21 @@ export default function HowItWorksSection() {
   const steps = [
     {
       step: '01',
-      title: 'Compare live odds across venues',
+      title: 'Compare Live Odds',
       description:
-        'Polymarket, Kalshi, and DeepBook Predict polled every 90 seconds and rendered side by side. Spot the mispricings before the market does.',
+        'Predict, Polymarket, Kalshi in one terminal. AI generates directional signals and scores encrypted and stored on Walrus with Seal.',
     },
     {
       step: '02',
-      title: '(Optional) Ask the AI for context',
+      title: 'Trade or Auto-Execute',
       description:
-        'Generate a structured summary from live odds and on-chain SVI surface data — kept on your device, never uploaded.',
+        'Trade UP / DOWN / RANGE positions on DeepBook Predict or let Auto Trade allocate capital to high-conviction AI signals.',
     },
     {
       step: '03',
-      title: 'Trade on DeepBook Predict',
+      title: 'Stake for Access & Yield',
       description:
-        'Mint, range, or redeem binary positions against the DeepBook Predict oracle, all from the same terminal.',
+        'Deposit into the Predict Vault to mint PLP, then stake PLP for a Subscription NFT that unlocks encrypted AI insights and accrues yield.',
     },
   ]
 
@@ -38,7 +38,8 @@ export default function HowItWorksSection() {
             How DeepWatch Works
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            <span className="text-accent-primary font-semibold">DeepBook Predict</span> provides powerful market infrastructure, but traders often need additional context before taking a position.
+            Three steps from market signals to{' '}
+            <span className="text-accent-primary font-semibold">AI-driven execution and stake-based access to encrypted insights</span>.
           </p>
         </motion.div>
 

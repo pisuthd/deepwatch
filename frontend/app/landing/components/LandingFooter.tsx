@@ -16,7 +16,7 @@ export default function LandingFooter() {
           </span>
         </div>
         <p className="text-gray-500 text-sm">
-          Powered by DeepBook • Polymarket • Kalshi • Sui
+          Powered by DeepBook • Sui • Walrus • Seal
         </p>
       </div>
     </footer>

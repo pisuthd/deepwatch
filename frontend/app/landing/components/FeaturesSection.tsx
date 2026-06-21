@@ -13,13 +13,13 @@ export default function FeaturesSection() {
     },
     {
       icon: Sparkles,
-      title: 'On-chain SVI surface',
-      description: 'See the full implied-volatility curve straight from the DeepBook Predict oracle, not a stale index.',
+      title: 'Verifiable AI signal pipeline',
+      description: 'Market data is processed by frontier AI models, then published as structured batches to Walrus encrypted with Seal.',
     },
     {
       icon: Table,
-      title: 'Local-first AI summaries',
-      description: 'One-click structured analysis from live odds and SVI. Stored on your device — nothing uploaded.',
+      title: 'AI Copilot for Predict',
+      description: 'A unified trading terminal with AI that suggests trades, ranks, and can optionally auto-execute strategies.',
     },
   ];
 

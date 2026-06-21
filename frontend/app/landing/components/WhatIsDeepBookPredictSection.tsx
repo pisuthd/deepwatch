@@ -57,7 +57,7 @@ export default function WhatIsDeepBookPredictSection() {
               </li>
             </ul>
             <p className="text-gray-400">
-              <span className="text-accent-primary font-semibold">DeepWatch</span> surfaces DeepBook Predict alongside Polymarket and Kalshi, so you see every venue&apos;s price for the same event in one place.
+              <span className="text-accent-primary font-semibold">DeepWatch</span>{` `}surfaces Predict alongside Polymarket, Kalshi, so you see every venue&apos;s price for the same event in one place.
             </p>
           </div>
         </motion.div>

@@ -28,23 +28,28 @@ export default function HeroSection() {
               <br />
               <span className="text-white">Predict</span>
             </motion.h1>
+            {/* Eyebrow — the punchy two-sentence setup */}
             <motion.p
               initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.15 }}
               className="text-base sm:text-lg text-gray-400 mb-3 lg:mb-4 max-w-lg mx-auto lg:mx-0 leading-relaxed"
             >
-              Compare live odds. Trade with conviction.
+              Markets generate signals. AI generates opinions.
             </motion.p>
 
-            {/* Subheadline */}
+            {/* Subheadline — DeepWatch value prop, with green highlights on the
+                5 impact words (product, differentiators, persistence). */}
             <motion.p
               initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
               className="text-sm sm:text-base text-gray-400 mb-6 lg:mb-8 max-w-lg mx-auto lg:mx-0 leading-relaxed"
             >
-              Live Polymarket, Kalshi, and DeepBook Predict odds side by side in one terminal. Run an AI summary when you want context; skip it when you don&apos;t.
+              <span className="text-accent-primary font-bold">DeepWatch</span> turns cross-venue market data from{` `}
+              <span className="text-accent-primary">DeepBook Predict</span>,<span> Polymarket, Kalshi, CoinMarketCap</span> into encrypted insights secured by{' '}
+              <span className="text-accent-primary">Seal</span> and preserved on{' '}
+              <span className="text-accent-primary">Walrus</span> via Tatum.
             </motion.p>
 
             {/* CTA Buttons */}
@@ -58,14 +63,15 @@ export default function HeroSection() {
                 href="/app"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-accent-primary text-black font-semibold hover:bg-accent-primary-hover transition-all"
               >
-                Get Started
+                Launch App
                 <ArrowRight size={16} />
               </Link>
               <Link
                 href="https://github.com/pisuthd/deepwatch"
+                target='_blank'
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-white/20 text-white font-medium hover:bg-white/5 transition-all"
               >
-                Learn More
+                View GitHub
               </Link>
             </motion.div>
           </div>
