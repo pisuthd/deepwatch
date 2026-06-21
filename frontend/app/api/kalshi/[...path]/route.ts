@@ -65,9 +65,13 @@ const cache = new Map<string, CacheEntry>();
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { path: string[] } },
+  // Next.js 15+: dynamic-segment `params` is now a Promise — must be
+  // awaited before destructuring. (Vercel build typechecks against the
+  // latest Next types, even if local dev is on a slightly older one.)
+  ctx: { params: Promise<{ path: string[] }> },
 ): Promise<Response> {
-  const rest = (params.path ?? []).join('/');
+  const { path } = await ctx.params;
+  const rest = (path ?? []).join('/');
   if (!rest) {
     return new Response('Missing path', { status: 400 });
   }
