@@ -24,7 +24,17 @@
 import type { BinaryMarket, Category, MarketType, Outcome } from "./types";
 import { binaryMarketId } from "./id"
 
-const BASE = "https://external-api.kalshi.com/trade-api/v2";
+/**
+ * Same-origin proxy route. The browser hits `/api/kalshi/...` which
+ * forwards to `https://external-api.kalshi.com/trade-api/v2/...` on
+ * the server. Kalshi's public REST API does not send
+ * `Access-Control-Allow-Origin`, so the browser would otherwise block
+ * the call from any non-Kalshi origin (CORS). Server-side proxy is the
+ * cleanest fix — no auth, no per-origin allowlist, no bundling of the
+ * upstream host into the client. See
+ * `frontend/app/api/kalshi/[...path]/route.ts`.
+ */
+const BASE = "/api/kalshi";
 const BTC_SERIES = ["KXBTC", "KXBTCD"] as const;
 
 /**
@@ -202,12 +212,18 @@ async function fetchSeriesMarkets(
   let cursor: string | undefined;
   let pages = 0;
   do {
-    const url = new URL(`${BASE}/markets`);
-    url.searchParams.set("series_ticker", seriesTicker);
-    url.searchParams.set("status", "open");
-    url.searchParams.set("limit", "200");
-    if (cursor) url.searchParams.set("cursor", cursor);
-    const data = await fetchJSON<RawMarketsResponse>(url.toString(), signal);
+    // `BASE` is now a same-origin relative URL (`/api/kalshi`), so
+    // we build the query with `URLSearchParams` and concat the
+    // string. `new URL()` would throw without a base, and even with
+    // `window.location.origin` we'd just be hand-rolling what
+    // `URLSearchParams.toString()` already does cleanly.
+    const params = new URLSearchParams();
+    params.set("series_ticker", seriesTicker);
+    params.set("status", "open");
+    params.set("limit", "200");
+    if (cursor) params.set("cursor", cursor);
+    const url = `${BASE}/markets?${params.toString()}`;
+    const data = await fetchJSON<RawMarketsResponse>(url, signal);
     pages += 1;
     out.push(...data.markets);
     cursor = data.cursor || undefined;
