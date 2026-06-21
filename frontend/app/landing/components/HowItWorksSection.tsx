@@ -7,7 +7,7 @@ export default function HowItWorksSection() {
   const steps = [
     {
       step: '01',
-      title: 'Compare Live Odds',
+      title: 'Generate Signals',
       description:
         'Predict, Polymarket, Kalshi in one terminal. AI generates directional signals and scores encrypted and stored on Walrus with Seal.',
     },

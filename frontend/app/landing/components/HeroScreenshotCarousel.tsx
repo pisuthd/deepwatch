@@ -12,14 +12,14 @@ const screenshots = [
         caption: 'DeepBook Terminal — Trade spot, margin, and predict in one place',
     },
     {
-        src: '/hero-2.png',
+        src: '/hero-5.png',
+        alt: 'Cross-Venue Compare',
+        caption: 'Cross-Venue Compare — Polymarket, Kalshi, and Predict side by side',
+    }, 
+    {
+        src: '/hero-7.png',
         alt: 'AI Insights',
         caption: 'AI Insights — SVI + Polymarket + Kalshi distilled into plain English',
-    },
-    {
-        src: '/hero-3-new.png',
-        alt: 'Cross-Venue Compare',
-        caption: 'Cross-Venue Compare — Polymarket, Kalshi, and DeepBook Predict side by side',
     },
 ];
 

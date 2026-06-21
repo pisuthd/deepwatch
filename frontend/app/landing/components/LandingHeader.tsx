@@ -28,6 +28,7 @@ export default function LandingHeader() {
                 {/* Desktop Nav */}
                 <nav className="hidden md:flex items-center gap-8">
                     <a href="/app" className="text-gray-400 hover:text-white transition-colors">Trade</a>
+                    <a href="/app/compare" className="text-gray-400 hover:text-white transition-colors">Compare</a>
                     <a href="#how-it-works" className="text-gray-400 hover:text-white transition-colors">How It Works</a>
                     <a href="https://github.com/pisuthd/deepwatch" target='_blank' className="text-gray-400 hover:text-white transition-colors">GitHub</a>
                 </nav>
@@ -61,6 +62,7 @@ export default function LandingHeader() {
                 >
                     <nav className="flex flex-col gap-4">
                         <a href="/app" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Trade</a>
+                        <a href="/app/compare" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">Compare</a>
                         <a href="#how-it-works" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">How It Works</a>
                         <a href="https://github.com/pisuthd/deepwatch" target='_blank' onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-white transition-colors py-2">GitHub</a>
                         <Link
