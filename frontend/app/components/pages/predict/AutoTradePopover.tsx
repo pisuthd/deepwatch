@@ -32,6 +32,7 @@ import { useMarkets } from '@/app/hooks/useMarkets';
 import { useStake } from '@/app/hooks/useStake';
 import { usePredict } from '@/app/hooks/usePredict';
 import { useAutoTrade } from '@/app/hooks/useAutoTrade';
+import { useInsightSource } from '@/app/context/InsightSourceContext';
 import { formatDusdc } from '@/app/lib/auto-trade';
 import AutoTradeModal from './AutoTradeModal';
 
@@ -51,6 +52,7 @@ export default function AutoTradePopover({ onClose }: AutoTradePopoverProps) {
   const { markets } = useMarkets();
   const { isStaker, isReady: stakeReady } = useStake();
   const { walletDusdcBalance, manager } = usePredict();
+  const { source } = useInsightSource();
 
   const [thresholdPct, setThresholdPct] = useState<number>(50);
   const [budget, setBudget] = useState<number>(10);
@@ -70,7 +72,12 @@ export default function AutoTradePopover({ onClose }: AutoTradePopoverProps) {
 
   const overBudget = budget > walletBalanceHuman;
   const canPreview = orders.length > 0 && !overBudget && !!manager;
-  const showStakerGate = stakeReady && !isStaker;
+  // Staker gate only applies in walrus mode — local batches are
+  // plaintext (no Seal), so there's no subscription to gate. Without
+  // this guard, a user who ran "Run One-Time Analyse (Local)" on the
+  // Compare page would be locked out of Auto Trade despite having a
+  // perfectly usable local batch.
+  const showStakerGate = stakeReady && !isStaker && source === 'walrus';
 
   return (
     <>

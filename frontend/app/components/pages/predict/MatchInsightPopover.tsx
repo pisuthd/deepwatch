@@ -129,7 +129,7 @@ function LockedCta({ reason }: { reason: AccessError }) {
   const blurb =
     reason === 'EXPIRED'
       ? 'Your DeepWatch subscription has lapsed. Restake PLP to renew access to encrypted AI insights.'
-      : 'This AI insight is encrypted behind the DeepWatch stake gate. Stake PLP to unlock it — first 3 markets per batch stay free.';
+      : 'This AI insight is encrypted behind the DeepWatch stake gate. Stake PLP to unlock it — random 3 markets per batch stay free.';
   return (
     <div className="space-y-3 py-1">
       <div className="flex items-center gap-2">
