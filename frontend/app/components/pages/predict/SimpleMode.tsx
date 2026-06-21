@@ -15,7 +15,7 @@ import RangeTradeModal from './RangeTradeModal';
 import { useSetCurrentMarket } from './CurrentMarketContext';
 import {
   DISPLAY_TICK_USD,
-  assetFullName,
+  formatExpiryDate,
   formatExpiryDayTime,
   formatPrice,
   generateStrikes,
@@ -237,7 +237,7 @@ export default function PredictSimpleMode() {
                 >
                   {expiryMs > 0 ? (
                     <>
-                      Expires in <Countdown expiryMs={expiryMs} />
+                     <Countdown expiryMs={expiryMs} />
                     </>
                   ) : (
                     '—'
@@ -248,6 +248,24 @@ export default function PredictSimpleMode() {
               <h2 className="text-lg font-bold  leading-snug" style={{ color: textPrimary }}>
                 {showSkeleton ? '…' : question}
               </h2>
+              <div className="flex items-end justify-between gap-2">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: textSecondary }}>
+                    Spot
+                  </div>
+                  <div className="text-2xl font-bold" style={{ color: green }}>
+                    {showSkeleton ? '—' : formatPrice(spotUsd)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: textSecondary }}>
+                    Expires
+                  </div>
+                  <div className="text-xs font-mono" style={{ color: textSecondary }}>
+                    {showSkeleton ? '—' : formatExpiryDate(expiryMs)}
+                  </div>
+                </div>
+              </div>
               <p className="text-[11px] mt-1" style={{ color: textSecondary }}>
                 Prices below are estimated · click to display actual rates
               </p>
