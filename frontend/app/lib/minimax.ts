@@ -62,6 +62,11 @@ export interface GenerateBatchMatchInput {
   kalshiQuestion?: string;
   polyUrl?: string;
   kalshiUrl?: string;
+  // ── SVI inputs (optional; pre-existing clients keep working) ─────────
+  spotUsd?: number | null;
+  forwardUsd?: number | null;
+  svi?: { a: number; b: number; rho: number; m: number; sigma: number } | null;
+  atmStrikeUsd?: number | null;
 }
 
 export interface GenerateBatchInput {
@@ -92,6 +97,14 @@ function safeParseResult(t: unknown): MatchAnalysisToolInput | null {
   if (typeof r.positionSizePct !== 'number' || !Number.isFinite(r.positionSizePct)) return null;
   if (r.positionSizePct < 0 || r.positionSizePct > 100) return null;
   if (typeof r.reasoning !== 'string') return null;
+  const sviTake =
+    typeof r.sviTake === 'string' && r.sviTake.length > 0
+      ? r.sviTake.slice(0, 200)
+      : undefined;
+  const crossVenueTake =
+    typeof r.crossVenueTake === 'string' && r.crossVenueTake.length > 0
+      ? r.crossVenueTake.slice(0, 200)
+      : undefined;
   const macroTake =
     typeof r.macroTake === 'string' && r.macroTake.length > 0
       ? r.macroTake.slice(0, 120)
@@ -102,6 +115,8 @@ function safeParseResult(t: unknown): MatchAnalysisToolInput | null {
     confidence: r.confidence,
     positionSizePct: r.positionSizePct,
     reasoning: r.reasoning.slice(0, 200),
+    ...(sviTake ? { sviTake } : {}),
+    ...(crossVenueTake ? { crossVenueTake } : {}),
     ...(macroTake ? { macroTake } : {}),
   };
 }

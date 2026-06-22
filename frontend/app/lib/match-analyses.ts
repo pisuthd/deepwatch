@@ -24,12 +24,26 @@ export interface MatchAnalysis {
   /** `${oracleId}::${expiryMs}` — matches `DeepBookMatch.key`. */
   matchKey: string;
   signal: MatchSignal;
-  /** 0.0–1.0. How strong the cross-venue disagreement + data quality. */
+  /** 0.0–1.0. How strong the read is. SVI-driven in the new framework. */
   confidence: number;
   /** 0–100. Suggested allocation of bankroll on this market. NEUTRAL = 0. */
   positionSizePct: number;
-  /** One-sentence reasoning, ≤ 160 chars. Cites the dominant spread. */
+  /** One-sentence reasoning, ≤ 200 chars. The final action sentence. */
   reasoning: string;
+  /**
+   * One short line citing the SVI inputs and the direction they imply,
+   * e.g. "SVI basis −0.6% + put_skew + SVI-vs-DB gap −7pp → DOWN".
+   * ≤ 200 chars. Required for batches produced after the SVI-led
+   * re-architecture; older batches won't have it.
+   */
+  sviTake?: string;
+  /**
+   * One short line describing what cross-venue (Polymarket / Kalshi)
+   * said about this market, e.g. "Poly 28 / Kalshi 30 contradict SVI
+   * by 4pp → downgraded". ≤ 200 chars. Required for batches produced
+   * after the SVI-led re-architecture; older batches won't have it.
+   */
+  crossVenueTake?: string;
   /**
    * One short line citing the macro context that drove the call, e.g.
    * "Fear & Greed 22 (extreme fear) → leaning aggressive on UP". ≤ 120
@@ -80,6 +94,15 @@ export interface MatchAnalysisToolInput {
   confidence: number;
   positionSizePct: number;
   reasoning: string;
+  /** SVI-axis citation. ≤ 200 chars. Optional — the model is encouraged
+   *  to include it but a missing value is accepted (older model
+   *  checkpoints drop these and we don't want to lose an entire batch).
+   *  The SVI inputs are already in the per-market prompt block, so the
+   *  model's direction/confidence/size are still SVI-driven even if
+   *  this field is absent. */
+  sviTake?: string;
+  /** Cross-venue citation. ≤ 200 chars. Optional — same rationale. */
+  crossVenueTake?: string;
   /** Optional macro-context citation. ≤ 120 chars. */
   macroTake?: string;
 }
@@ -101,6 +124,14 @@ export function validateMatchAnalysisToolInput(
   if (typeof r.positionSizePct !== 'number' || !Number.isFinite(r.positionSizePct)) return null;
   if (r.positionSizePct < 0 || r.positionSizePct > 100) return null;
   if (typeof r.reasoning !== 'string') return null;
+  const sviTake =
+    typeof r.sviTake === 'string' && r.sviTake.length > 0
+      ? r.sviTake.slice(0, 200)
+      : undefined;
+  const crossVenueTake =
+    typeof r.crossVenueTake === 'string' && r.crossVenueTake.length > 0
+      ? r.crossVenueTake.slice(0, 200)
+      : undefined;
   const macroTake =
     typeof r.macroTake === 'string' && r.macroTake.length > 0
       ? r.macroTake.slice(0, 120)
@@ -111,6 +142,8 @@ export function validateMatchAnalysisToolInput(
     confidence: r.confidence,
     positionSizePct: r.positionSizePct,
     reasoning: r.reasoning.slice(0, 200),
+    ...(sviTake ? { sviTake } : {}),
+    ...(crossVenueTake ? { crossVenueTake } : {}),
     ...(macroTake ? { macroTake } : {}),
   };
 }
@@ -237,8 +270,17 @@ export function validateBatchInsight(raw: unknown): BatchInsight | null {
     ) {
       continue;
     }
-    // `macroTake` is optional (older batches won't have it) — keep it
-    // only if it's a non-empty string.
+    // `sviTake` / `crossVenueTake` / `macroTake` are all optional
+    // (older batches won't have them) — keep each only if it's a
+    // non-empty string.
+    const sviTake =
+      typeof e.sviTake === 'string' && e.sviTake.length > 0
+        ? e.sviTake.slice(0, 200)
+        : undefined;
+    const crossVenueTake =
+      typeof e.crossVenueTake === 'string' && e.crossVenueTake.length > 0
+        ? e.crossVenueTake.slice(0, 200)
+        : undefined;
     const macroTake =
       typeof e.macroTake === 'string' && e.macroTake.length > 0
         ? e.macroTake.slice(0, 120)
@@ -251,6 +293,8 @@ export function validateBatchInsight(raw: unknown): BatchInsight | null {
       reasoning: e.reasoning,
       cmcContext: (e.cmcContext as CmcContext | null | undefined) ?? null,
       createdAt: e.createdAt,
+      ...(sviTake ? { sviTake } : {}),
+      ...(crossVenueTake ? { crossVenueTake } : {}),
       ...(macroTake ? { macroTake } : {}),
     };
   }

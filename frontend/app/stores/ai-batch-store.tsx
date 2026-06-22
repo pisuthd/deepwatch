@@ -582,20 +582,56 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const input = matches.map((m) => ({
-      key: m.key,
-      dbQuestion: m.dbQuestion,
-      asset: m.asset,
-      expiryMs: m.expiryMs,
-      dbProb: m.dbProb,
-      polyProb: m.polyProb,
-      kalshiProb: m.kalshiProb,
-      spread: m.spread,
-      polyQuestion: m.polyQuestion,
-      kalshiQuestion: m.kalshiQuestion,
-      polyUrl: m.polyUrl,
-      kalshiUrl: m.kalshiUrl,
-    }));
+    const input = matches.map((m) => {
+      // Pull the SVI 5 params from the first upDown row (they live on
+      // DeepBookMarket, not the group). spotUsd / forwardUsd live on
+      // the match (and on the group as a backup). The ATM strike is
+      // the upDown row closest to spot — same rule as
+      // `headlineProbForGroup` in lib/match.ts.
+      const sample = m.deepBook?.upDown?.[0];
+      const svi =
+        sample &&
+        sample.sviA != null &&
+        sample.sviB != null &&
+        sample.sviRho != null &&
+        sample.sviM != null &&
+        sample.sviSigma != null
+          ? {
+              a: sample.sviA,
+              b: sample.sviB,
+              rho: sample.sviRho,
+              m: sample.sviM,
+              sigma: sample.sviSigma,
+            }
+          : null;
+      const spot = m.spotUsd ?? 0;
+      const atmStrike = m.deepBook?.upDown?.length
+        ? m.deepBook.upDown.reduce(
+            (best, r) =>
+              Math.abs(r.strikeUsd - spot) < Math.abs(best.strikeUsd - spot)
+                ? r
+                : best,
+          ).strikeUsd
+        : 0;
+      return {
+        key: m.key,
+        dbQuestion: m.dbQuestion,
+        asset: m.asset,
+        expiryMs: m.expiryMs,
+        dbProb: m.dbProb,
+        polyProb: m.polyProb,
+        kalshiProb: m.kalshiProb,
+        spread: m.spread,
+        polyQuestion: m.polyQuestion,
+        kalshiQuestion: m.kalshiQuestion,
+        polyUrl: m.polyUrl,
+        kalshiUrl: m.kalshiUrl,
+        spotUsd: m.spotUsd,
+        forwardUsd: m.forwardUsd,
+        svi,
+        atmStrikeUsd: atmStrike,
+      };
+    });
 
     const cmcContext = cmcContextRef.current;
 
@@ -641,6 +677,10 @@ export function AiBatchProvider({ children }: { children: ReactNode }) {
           confidence: chunk.payload.confidence,
           positionSizePct: chunk.payload.positionSizePct,
           reasoning: chunk.payload.reasoning,
+          ...(chunk.payload.sviTake ? { sviTake: chunk.payload.sviTake } : {}),
+          ...(chunk.payload.crossVenueTake
+            ? { crossVenueTake: chunk.payload.crossVenueTake }
+            : {}),
           ...(chunk.payload.macroTake ? { macroTake: chunk.payload.macroTake } : {}),
           cmcContext: cmcContextRef.current,
           createdAt: now,

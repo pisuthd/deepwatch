@@ -74,6 +74,12 @@ import {
   validateMatchAnalysisToolInput,
   type MatchAnalysisToolInput,
 } from '@/app/lib/match-analyses';
+import {
+  computeSviSignals,
+  formatSviInputs,
+  sviDirectionConsistentWithSignal,
+  type SviSignals,
+} from '@/app/lib/svi-signals';
 
 const MINIMAX_BASE_URL = process.env.MINIMAX_BASE_URL ?? '';
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY ?? '';
@@ -115,6 +121,11 @@ interface BatchGenerateMatchInput {
   kalshiQuestion?: string;
   polyUrl?: string;
   kalshiUrl?: string;
+  // ── SVI inputs (optional; pre-existing clients keep working) ─────────
+  spotUsd?: number | null;
+  forwardUsd?: number | null;
+  svi?: { a: number; b: number; rho: number; m: number; sigma: number } | null;
+  atmStrikeUsd?: number | null;
 }
 
 interface BatchGenerateRequest {
@@ -167,17 +178,16 @@ const LEGACY_SYSTEM_PROMPT = [
 // ─── Batch SYSTEM_PROMPT ────────────────────────────────────────────────
 
 const BATCH_SYSTEM_PROMPT = [
-  'You are a cross-venue prediction-market analyst for the **DeepBook Predict** platform.',
+  'You are a prediction-market analyst for the **DeepBook Predict** platform.',
   '',
-  '**DeepBook Predict is the TRADING VENUE** — the only place the user actually places bets. Polymarket and Kalshi are REFERENCE DATA — they show what other venues think, so you can spot when DeepBook Predict\'s price disagrees with the rest of the market.',
+  '**DeepBook Predict is the TRADING VENUE** — the only place the user actually places bets. The SVI surface (DeepBook Predict\'s own vol model) is the PRIMARY directional signal. Polymarket and Kalshi are a SECONDARY sanity check that can adjust confidence and size, never the primary driver.',
   '',
   '**You DO recommend trades on DeepBook Predict** (UP / DOWN + position size). **You do NOT trade Polymarket or Kalshi** — they are inputs to the analysis, not trade targets.',
   '',
   '# Input',
-  'For each market, you receive implied probabilities of the UP outcome from up to three venues:',
-  '- `dbProb` — DeepBook Predict (the venue the user trades on). Always present.',
-  '- `polyProb` — Polymarket (reference). May be null if no match at this expiry.',
-  '- `kalshiProb` — Kalshi (reference). May be null if no match at this expiry.',
+  'For each market, you receive:',
+  '- SVI surface inputs: `spot`, `forward`, the 5 SVI params (a, b, rho, m, sigma), the SVI-implied UP prob at the ATM strike, and the orderbook DB UP prob.',
+  '- Polymarket and Kalshi UP probs (may be `no match` when the venue has no quote at this expiry).',
   '- `cmcContext` — macro snapshot (Fear & Greed index, 24h sector trend, total market cap).',
   '',
   '# Your job',
@@ -186,31 +196,71 @@ const BATCH_SYSTEM_PROMPT = [
   '# Tool',
   'You MUST use the `record_market_signal` tool exactly once per market, in the order they appear. Do not produce any other text. Do not skip markets. Do not call the tool twice for the same market.',
   '',
-  '# Decision framework (mechanical — apply in order)',
-  '1. `consensus` = median of the present venue probs (whatever is present among DB / Poly / Kalshi).',
-  '2. `dbVsConsensusPp` = (dbProb − consensus) × 100. This is the ONLY directional input.',
-  '3. Direction rule:',
-  '   - `|dbVsConsensusPp| < 2` → IN_LINE → signal = NEUTRAL, positionSizePct = 0 (no edge).',
-  '   - `dbVsConsensusPp < −2` (negative) → DB is CHEAP (DB undervalues UP) → bet UP on DeepBook Predict.',
-  '   - `dbVsConsensusPp > +2` (positive) → DB is RICH (DB overvalues UP) → bet DOWN on DeepBook Predict.',
-  '4. Position size scales with `|dbVsConsensusPp|` and inversely with how many venues are missing:',
-  '   - All 3 venues + |pp| ≥ 15 → up to 8% bankroll',
-  '   - All 3 venues + |pp| 5–15 → 3–6% bankroll',
-  '   - All 3 venues + |pp| 2–5 → 1–2% bankroll',
-  '   - 2 venues present (one missing) → halve the position size',
-  '   - 1 venue present → NEUTRAL, positionSizePct = 0 (no cross-venue comparison possible)',
-  '5. `confidence` (0–1) reflects how strong the divergence is AND how clean the data is. All 3 venues + large |pp| = high confidence. Missing venues = lower confidence. Don\'t predict direction; rate the data quality.',
+  '# Decision framework — SVI primary, cross-venue secondary',
+  '',
+  'The DeepBook Predict SVI surface (forward, spot, a/b/rho/m/sigma) is the PRIMARY directional signal. Polymarket and Kalshi are SECONDARY — a sanity check that can adjust confidence and size, never the primary driver. Apply A → B → C → D → E in order.',
+  '',
+  '## A. SVI primary axis (compute first)',
+  '1. `forwardSpotBasisPct = (forward − spot) / spot × 100`.',
+  '   > +0.5 → drift favors UP. < −0.5 → drift favors DOWN. Else neutral.',
+  '2. Skew direction is set by `b * rho`:',
+  '   - `b * rho < −0.05` → put_skew (downside-protection priced in).',
+  '   - `b * rho > +0.05` → call_skew.',
+  '   - else → flat.',
+  '3. `sviVsDbPp = (sviUpProbAtm − dbProb) × 100`.',
+  '   - `> +5pp` → DB is CHEAP (UP underpriced) → UP-biased.',
+  '   - `< −5pp` → DB is RICH (UP overpriced) → DOWN-biased.',
+  '   - else → no SVI-vs-DB divergence.',
+  '4. SVI directional read:',
+  '   - sviVsDbPp < −5 AND skew=put_skew AND basis < 0 → DOWN (strong)',
+  '   - sviVsDbPp > +5 AND skew=call_skew AND basis > 0 → UP (strong)',
+  '   - sviVsDbPp > +5 AND basis > 0 → UP (weaker)',
+  '   - sviVsDbPp < −5 AND basis < 0 → DOWN (weaker)',
+  '   - else → UNCERTAIN (fall through to B/C).',
+  '',
+  '## B. NEUTRAL trigger',
+  'If `|forwardSpotBasisPct| < 0.2%` AND `|sviVsDbPp| < 2pp` → signal MUST be NEUTRAL, positionSizePct = 0. (Skipped if A already produced a direction.)',
+  '',
+  '## C. Cross-venue secondary axis (does NOT flip direction)',
+  '`consensus = median(db, poly, kalshi)` over present venues. `dbVsConsensusPp = (db − consensus) × 100`.',
+  '- If `dbVsConsensusPp` strongly CONTRADICTS the SVI direction (|x| > 5pp AND consensus on the opposite side of 50% from the SVI direction):',
+  '  - confidence −= 0.1',
+  '  - size halved',
+  '  - note the contradiction in `crossVenueTake`.',
+  '- If both cross-venue venues agree with the SVI direction: confidence += 0.1 (cap at 0.95).',
+  '- If Poly AND Kalshi are both `no match`: cross-venue is silent. Baseline confidence; no size penalty beyond the regime adjustment.',
+  '',
+  '## D. Position size ladder',
+  '- SVI directional + cross-venue confirms        → 6–8% bankroll',
+  '- SVI directional + cross-venue silent         → 3–5% bankroll',
+  '- SVI directional + cross-venue contradicts    → 1–2% bankroll',
+  '- NEUTRAL                                       → 0% bankroll',
+  '- Vol regime extreme → halve (floor 1%).',
+  '',
+  '## E. Confidence (0–1)',
+  'Start 0.5 if SVI is present and a direction was found, else 0.4. Apply:',
+  '- `|sviVsDbPp| ≥ 10pp`                         → +0.15',
+  '- `|sviVsDbPp| 5–10pp`                          → +0.10',
+  '- All 3 venues present                          → +0.10',
+  '- Cross-venue confirms SVI direction            → +0.10',
+  '- Cross-venue contradicts SVI direction         → −0.10',
+  '- Vol regime extreme                            → −0.10',
+  '- SVI null (cross-venue only)                   → −0.20',
+  'Clamp to [0.0, 0.95].',
   '',
   '# Worked examples',
-  '- DB 18.6%, Poly 11.5%, Kalshi 59% → consensus = 18.6 (median). dbVsConsensusPp = 0. IN_LINE → NEUTRAL. Spread is large but DB sits at median.',
-  '- DB 55%, Poly 51%, Kalshi 48% → consensus = 51. dbVsConsensusPp = +4. DB rich by 4pp → bet DOWN on DB. positionSizePct = 2.',
-  '- DB 12%, Poly 28%, Kalshi 30% → consensus = 28. dbVsConsensusPp = −16. DB cheap by 16pp → bet UP on DB. positionSizePct = 7.',
-  '- DB 75%, Poly 28% (Kalshi null) → only 2 venues, consensus = 28 (median of 28, 75). dbVsConsensusPp = +47. DB rich, bet DOWN on DB. Halve the size because Kalshi is missing → positionSizePct = 6.',
-  '- DB 30% (Poly null, Kalshi null) → 1 venue only. NEUTRAL, positionSizePct = 0.',
+  '- DB 18.6%, Poly 11.5%, Kalshi 59%, SVI: put_skew, basis +0.8%, sviVsDbPp −1.2pp → SVI basis neutral-positive, gap small, UNCERTAIN → fallback to cross-venue. consensus = 18.6, dbVsConsensusPp = 0 → NEUTRAL. Spread is large but DB sits at median.',
+  '- DB 55%, Poly 51%, Kalshi 48%, SVI: call_skew, basis +1.2%, sviVsDbPp +8pp → SVI says UP. Cross-venue: consensus 51, DB rich by 4pp on UP — but SVI says UP is cheap. No contradiction. signal = UP, size 5%.',
+  '- DB 30%, Poly 28%, Kalshi 30%, SVI: put_skew, basis −0.6%, sviVsDbPp −7pp → SVI says DOWN (DB rich + put skew + negative drift). Cross-venue: consensus 30, DB in line. No contradiction. signal = DOWN, size 6%.',
+  '- DB 12%, Poly 28%, Kalshi 30%, SVI n/a → A returns UNCERTAIN. Cross-venue: consensus 28, dbVsConsensusPp −16 → cross-venue says UP. Treat as degraded (SVI null). signal = UP, size 3%, confidence 0.4.',
+  '- DB 30% only, SVI: flat, basis 0.1%, sviVsDbPp +1pp → A UNCERTAIN, B triggers NEUTRAL.',
+  '- DB 32%, Poly 26%, Kalshi 28%, SVI: put_skew, basis −0.8%, sviVsDbPp −9pp → SVI says DOWN. Cross-venue: consensus 28, DB rich by 4pp on UP — also says DOWN. Cross-venue confirms. signal = DOWN, size 7%, confidence high.',
   '',
   '# Per-market rules',
   '- Use ONLY numbers from the input. Never invent strikes or implied probs.',
-  '- `reasoning` (≤ 200 chars): one sentence citing DB\'s price, the consensus, and the action on DeepBook Predict, e.g. "DB 18% vs consensus 35% — DB cheap by 17pp, bet UP on DB" or "DB 55% vs consensus 51% — DB rich by 4pp, bet DOWN on DB".',
+  '- `sviTake` (≤ 200 chars, REQUIRED): one sentence citing the SVI inputs and the direction they imply. Format: "SVI basis {x}% + {put_skew|call_skew|flat} skew + SVI-vs-DB gap {y}pp → {UP|DOWN|uncertain}". If SVI is null: "SVI n/a — cross-venue only".',
+  '- `crossVenueTake` (≤ 200 chars, REQUIRED): one sentence describing what cross-venue said. Examples: "Poly/Kalshi missing — silent", "Poly 51 / Kalshi 49 agree with SVI direction", "Poly 28 / Kalshi 30 contradict SVI by 4pp → downgraded".',
+  '- `reasoning` (≤ 200 chars, REQUIRED): the FINAL action sentence in plain language, citing both the SVI inputs and the cross-venue check, e.g. "DB 18% vs SVI 26% — DB cheap on UP, bet UP on DB" or "SVI put_skew + basis −0.6% — DB rich on UP, bet DOWN on DB".',
   '- `macroTake` (≤ 120 chars): REQUIRED when `cmcContext` is present. One short line citing the macro backdrop. Examples:',
   '  - "Fear 19 (extreme fear) + DeFi −7% — washed out, no override"',
   '  - "Fear 50, sector flat — no macro override"',
@@ -219,7 +269,7 @@ const BATCH_SYSTEM_PROMPT = [
   '  - Omit `macroTake` ONLY when `cmcContext` is null (no upstream data at all).',
   '',
   '# Macro context rules',
-  '- Macro is BACKDROP only. Never override the cross-venue numbers with macro opinion.',
+  '- Macro is BACKDROP only. Never override the SVI / cross-venue numbers with macro opinion.',
   '- `macroTake` should DESCRIBE the macro state, not recommend a direction.',
   '- Macro can slightly adjust position sizing (extreme fear = lean aggressive on UP, extreme greed = lean conservative) but NEVER flips the direction.',
 ].join('\n');
@@ -263,7 +313,17 @@ const RECORD_MARKET_SIGNAL_TOOL = {
       reasoning: {
         type: 'string',
         description:
-          'One sentence explaining the call. ≤ 200 chars. Cite DB\'s price vs the cross-venue consensus and the action on DeepBook Predict, e.g. "DB 18% vs consensus 35% — DB cheap by 17pp, bet UP on DB" or "DB 55% vs consensus 51% — DB rich by 4pp, bet DOWN on DB".',
+          'The FINAL action sentence in plain language, citing both the SVI inputs and the cross-venue check. ≤ 200 chars. e.g. "DB 18% vs SVI 26% — DB cheap on UP, bet UP on DB" or "SVI put_skew + basis −0.6% — DB rich on UP, bet DOWN on DB".',
+      },
+      sviTake: {
+        type: 'string',
+        description:
+          'One sentence citing the SVI inputs and the direction they imply. ≤ 200 chars. RECOMMENDED (a missing value is accepted — older model checkpoints drop these and we don\'t want to lose an entire batch). Format: "SVI basis {x}% + {put_skew|call_skew|flat} skew + SVI-vs-DB gap {y}pp → {UP|DOWN|uncertain}". If SVI is null: "SVI n/a — cross-venue only".',
+      },
+      crossVenueTake: {
+        type: 'string',
+        description:
+          'One sentence describing what cross-venue said. ≤ 200 chars. RECOMMENDED. Examples: "Poly/Kalshi missing — silent", "Poly 51 / Kalshi 49 agree with SVI direction", "Poly 28 / Kalshi 30 contradict SVI by 4pp → downgraded".',
       },
       macroTake: {
         type: 'string',
@@ -271,7 +331,13 @@ const RECORD_MARKET_SIGNAL_TOOL = {
           'One short line citing the macro backdrop (Fear & Greed + 24h sector trend) that drove (or didn\'t drive) this call. ≤ 120 chars. REQUIRED when macro context is present, optional otherwise. Examples: "Fear 22 + DeFi −7% — washed out, no override", "Fear 50, sector flat — no macro override", "Macro data n/a".',
       },
     },
-    required: ['matchKey', 'signal', 'confidence', 'positionSizePct', 'reasoning'],
+    required: [
+      'matchKey',
+      'signal',
+      'confidence',
+      'positionSizePct',
+      'reasoning',
+    ],
   },
 } as const;
 
@@ -581,11 +647,19 @@ function buildBatchUserPrompt(
     lines.push(`## ${i + 1}. matchKey=${m.key}`);
     lines.push(`Question: ${m.dbQuestion}`);
     lines.push(`Expiry: ${fmtIso(m.expiryMs)}`);
-    lines.push(`DB YES (ATM): ${fmtPctOrNa(m.dbProb)}`);
-    lines.push(`Polymarket YES: ${fmtPctOrNa(m.polyProb)}`);
-    lines.push(`Kalshi YES: ${fmtPctOrNa(m.kalshiProb)}`);
+    lines.push('');
     lines.push(
-      `Spread: ${typeof m.spread === 'number' ? `${(m.spread * 100).toFixed(1)}%` : 'n/a'}`,
+      formatSviInputs({
+        spotUsd: m.spotUsd ?? 0,
+        forwardUsd: m.forwardUsd ?? 0,
+        expiryMs: m.expiryMs,
+        svi: m.svi ?? null,
+        atmStrikeUsd: m.atmStrikeUsd ?? 0,
+        dbProb: m.dbProb,
+        polyProb: m.polyProb,
+        kalshiProb: m.kalshiProb,
+        spread: m.spread,
+      }),
     );
     if (m.polyQuestion) lines.push(`Polymarket question: ${m.polyQuestion}`);
     if (m.kalshiQuestion) lines.push(`Kalshi question: ${m.kalshiQuestion}`);
@@ -844,6 +918,22 @@ function streamBatchCompletion(
         const knownKeys = new Set(matches.map((m) => m.key));
         const seenKeys = new Set<string>();
 
+        // Precompute the SVI signals per market once, so the flushTool
+        // consistency guard can look them up by matchKey without
+        // re-running the (pure) compute per tool call.
+        const signalMap = new Map<string, SviSignals>();
+        for (const m of matches) {
+          const s = computeSviSignals({
+            spotUsd: m.spotUsd ?? 0,
+            forwardUsd: m.forwardUsd ?? 0,
+            expiryMs: m.expiryMs,
+            svi: m.svi ?? null,
+            atmStrikeUsd: m.atmStrikeUsd ?? 0,
+            dbProb: m.dbProb,
+          });
+          signalMap.set(m.key, s);
+        }
+
         const flushTool = (tool: PendingTool) => {
           let parsed: unknown = null;
           try {
@@ -875,6 +965,31 @@ function streamBatchCompletion(
             return;
           }
           seenKeys.add(validated.matchKey);
+
+          // Defensive SVI consistency guard. If the model's directional
+          // call contradicts a hard SVI invariant, downgrade to
+          // NEUTRAL with a visible `[SVI guard: ...]` suffix and log a
+          // warn for ops visibility. The guard never FLIPS direction
+          // — it only neutralises — because flipping mid-stream
+          // creates downstream trust issues.
+          const signals = signalMap.get(validated.matchKey);
+          if (signals) {
+            const check = sviDirectionConsistentWithSignal({
+              signal: validated.signal,
+              signals,
+            });
+            if (!check.consistent) {
+              console.warn(
+                `[insights] SVI/signal inconsistency on ${validated.matchKey}: ${check.reason}. Demoting to NEUTRAL.`,
+              );
+              validated.signal = 'NEUTRAL';
+              validated.positionSizePct = 0;
+              const original = validated.reasoning;
+              const guarded = `${original} [SVI guard: ${check.reason}]`;
+              validated.reasoning = guarded.slice(0, 200);
+            }
+          }
+
           const payload = JSON.stringify({ k: 'result', t: validated });
           controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
         };

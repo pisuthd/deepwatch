@@ -27,11 +27,12 @@ export default function CTASection() {
           }}
         >
           {/* AI signal — same Sparkles + animate-pulse vocabulary as the
-              hero's "AI Insight" indicator and the in-app InsightButton. */}
+              hero's "AI Insight" indicator and the in-app InsightButton.
+              Order reads SVI first because that's the primary signal. */}
           <div className="flex items-center justify-center gap-1.5 mb-4">
             <Sparkles size={12} className="text-accent-primary" />
             <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-primary">
-              Odds + SVI + AI
+              SVI + Odds + AI
             </span>
             <span
               className="w-1.5 h-1.5 rounded-full animate-pulse"
@@ -43,7 +44,7 @@ export default function CTASection() {
             Skip the noise. See the signal.
           </h2>
           <p className="text-gray-400 mb-8">
-            Polymarket, Kalshi, and DeepBook Predict live odds side by side. One-click AI summaries when you want context.
+            Every DeepBook Predict oracle&apos;s SVI vol surface, sanity-checked against Polymarket &amp; Kalshi, distilled into one-click AI summaries.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link

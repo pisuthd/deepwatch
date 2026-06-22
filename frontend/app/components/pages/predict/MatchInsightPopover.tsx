@@ -179,11 +179,11 @@ const DIRECTION_TEXT: Record<MatchAnalysis['signal'], string> = {
 };
 const DIRECTION_BLURB: Record<MatchAnalysis['signal'], string> = {
   UP:
-    'Win if the price finishes above the strike. Recommended because DeepBook Predict looks "cheap" relative to Polymarket and Kalshi — DB undervalues the UP outcome.',
+    'Win if the price finishes above the strike. Recommended because the SVI surface (forward vs spot basis, skew, SVI-vs-DB gap) indicates UP is underpriced on DeepBook Predict.',
   DOWN:
-    'Win if the price finishes below the strike. Recommended because DeepBook Predict looks "rich" relative to Polymarket and Kalshi — DB overvalues the UP outcome.',
+    'Win if the price finishes below the strike. Recommended because the SVI surface indicates UP is overpriced on DeepBook Predict.',
   NEUTRAL:
-    'No meaningful edge. The cross-venue spread is too small to justify a trade.',
+    'No meaningful edge. The SVI surface and cross-venue check are both silent or contradicting.',
 };
 
 function positionText(pct: number): { value: string; conviction: string } {
@@ -223,7 +223,11 @@ function AnalysisBody({ analysis }: { analysis: MatchAnalysis }) {
   const pct = Math.round(analysis.confidence * 100);
   const conf = confidenceLevel(pct);
   const pos = positionText(analysis.positionSizePct);
-  const hasDetails = !!analysis.reasoning || !!analysis.macroTake;
+  const hasDetails =
+    !!analysis.reasoning ||
+    !!analysis.sviTake ||
+    !!analysis.crossVenueTake ||
+    !!analysis.macroTake;
 
   return (
     <>
@@ -325,6 +329,46 @@ function AnalysisBody({ analysis }: { analysis: MatchAnalysis }) {
 
             {showDetails && (
               <div className="mt-2 space-y-2 pt-2 border-t border-white/5">
+                {analysis.sviTake && (
+                  <div
+                    className="text-[11px] leading-relaxed"
+                    style={{ color: textPrimary }}
+                  >
+                    <span
+                      className="text-[9px] uppercase tracking-wider font-semibold block mb-1"
+                      style={{ color: textSecondary }}
+                    >
+                      SVI analysis
+                    </span>
+                    {analysis.sviTake}
+                    <div
+                      className="mt-1 text-[10px]"
+                      style={{ color: textSecondary }}
+                    >
+                      Forward vs spot basis · vol regime · skew · SVI vs DB gap
+                    </div>
+                  </div>
+                )}
+                {analysis.crossVenueTake && (
+                  <div
+                    className="text-[11px] leading-relaxed"
+                    style={{ color: textPrimary }}
+                  >
+                    <span
+                      className="text-[9px] uppercase tracking-wider font-semibold block mb-1"
+                      style={{ color: textSecondary }}
+                    >
+                      Cross-venue check
+                    </span>
+                    {analysis.crossVenueTake}
+                    <div
+                      className="mt-1 text-[10px]"
+                      style={{ color: textSecondary }}
+                    >
+                      Polymarket &amp; Kalshi sanity check
+                    </div>
+                  </div>
+                )}
                 {analysis.reasoning && (
                   <div
                     className="text-[11px] leading-relaxed"
@@ -334,14 +378,14 @@ function AnalysisBody({ analysis }: { analysis: MatchAnalysis }) {
                       className="text-[9px] uppercase tracking-wider font-semibold block mb-1"
                       style={{ color: textSecondary }}
                     >
-                      Prediction Market Comparison
+                      Final reasoning
                     </span>
                     {analysis.reasoning}
                     <div
                       className="mt-1 text-[10px]"
                       style={{ color: textSecondary }}
                     >
-                      Compared with Kalshi &amp; Polymarket prices
+                      SVI + cross-venue synthesis
                     </div>
                   </div>
                 )}

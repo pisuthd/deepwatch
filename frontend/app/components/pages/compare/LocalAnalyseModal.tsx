@@ -26,7 +26,7 @@
  * differ.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -250,6 +250,15 @@ export default function LocalAnalyseModal({ open, onClose }: LocalAnalyseModalPr
                   onAbort={abortBatch}
                 />
               ) : null}
+
+              {/* Collapsible thinking / text (mirrors the Walrus modal
+                  so the user can watch the model work in real time). */}
+              {(state.thinkingBuf.length > 0 || state.textBuf.length > 0) && (
+                <ReasoningPanel
+                  thinkingBuf={state.thinkingBuf}
+                  textBuf={state.textBuf}
+                />
+              )}
             </div>
           </motion.div>
         </motion.div>
@@ -412,6 +421,70 @@ function AnalysingPanel({
           Abort batch
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Collapsible view of the live SSE stream — thinking tokens (mint
+ * coloured, monospace) and text tokens (plain). Hidden until the
+ * buffers are non-empty; user expands to watch the model work.
+ */
+function ReasoningPanel({
+  thinkingBuf,
+  textBuf,
+}: {
+  thinkingBuf: string;
+  textBuf: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className="rounded-lg overflow-hidden"
+      style={{
+        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'rgba(0,0,0,0.2)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+        style={{ color: textSecondary, fontSize: 11 }}
+      >
+        <span className="uppercase tracking-wider font-semibold">
+          Model reasoning
+          {thinkingBuf.length > 0
+            ? ` (thinking ${thinkingBuf.length} chars)`
+            : ''}
+          {textBuf.length > 0 ? ` (text ${textBuf.length} chars)` : ''}
+        </span>
+        <ChevronDown
+          size={12}
+          style={{
+            transition: 'transform 0.15s',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}
+        />
+      </button>
+      {open && (
+        <div
+          className="px-3 pb-3 pt-1 space-y-2"
+          style={{ fontSize: 11, color: textSecondary }}
+        >
+          {thinkingBuf.length > 0 && (
+            <pre
+              className="whitespace-pre-wrap font-mono"
+              style={{ color: green, opacity: 0.7 }}
+            >
+              {thinkingBuf}
+            </pre>
+          )}
+          {textBuf.length > 0 && (
+            <pre className="whitespace-pre-wrap font-sans">{textBuf}</pre>
+          )}
+        </div>
+      )}
     </div>
   );
 }
