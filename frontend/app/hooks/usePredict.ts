@@ -33,12 +33,32 @@ export interface Position {
   expiry: number
   strike: string
   is_up: boolean
+  /** DUSDC_SCALE = 1e6 scaled. Open (still claimable) face quantity. */
   open_quantity: string
-  average_entry_price: string
-  mark_price: string | null
+  /** DUSDC_SCALE = 1e6 scaled. Lifetime minted face quantity. */
+  minted_quantity?: string
+  /** DUSDC_SCALE = 1e6 scaled. Lifetime redeemed face quantity. */
+  redeemed_quantity?: string
+  /** DUSDC_SCALE = 1e6 scaled. Total cost basis over the lifetime of the position. */
+  total_cost?: string
+  /** DUSDC_SCALE = 1e6 scaled. Total payout received so far (settled portion only). */
+  total_payout?: string
+  /** DUSDC_SCALE = 1e6 scaled. Realised P&L = total_payout - total_cost (closed leg). */
+  realized_pnl?: string
+  /** DUSDC_SCALE = 1e6 scaled. Unrealised P&L on the still-open quantity. */
   unrealized_pnl: string
+  /** DUSDC_SCALE = 1e6 scaled. Cost basis attributable to the still-open quantity. */
+  open_cost_basis?: string
+  average_entry_price: string
+  /** PRICE_SCALE = 1e9 scaled. Average exit price on the redeemed leg, null if none redeemed yet. */
+  average_exit_price?: string | null
+  mark_price: string | null
+  /** DUSDC_SCALE = 1e6 scaled. Mark-to-market value of the open quantity. */
+  mark_value?: string | null
   underlying_asset: string
   first_minted_at?: number
+  /** Epoch ms of the most recent mint/redeem touching this position. */
+  last_activity_at?: number
   status?: 'active' | 'redeemable' | 'lost' | 'awaiting_settlement'
 }
 
@@ -55,6 +75,8 @@ export interface RangePosition {
   average_entry_price?: string
   mark_price?: string | null
   unrealized_pnl?: string
+  /** DUSDC_SCALE = 1e6 scaled. Realised P&L on the redeemed leg of the range. */
+  realized_pnl?: string
   status?: 'active' | 'redeemable' | 'lost' | 'awaiting_settlement'
   first_minted_at?: number
 }
@@ -318,7 +340,30 @@ export function usePredict(): UsePredictReturn {
         //    (`redeemable`), zero payout is a loss (`lost`). Already-claimed
         //    rows (open_quantity === 0) are kept so the user can still see
         //    their history in the popover.
-        type RawPosition = Omit<Position, 'status'> & { status?: string; total_payout?: string | number }
+        //
+        //    The indexer returns ALL numeric fields as JSON numbers (not
+        //    strings) — `total_cost`, `realized_pnl`, `minted_quantity`,
+        //    etc. Our `Position` interface declares them as strings to match
+        //    the u6-scaled-string convention, so we coerce them at the
+        //    boundary with `numToStr`. `null` (e.g. `average_exit_price` on
+        //    a still-open position) is preserved.
+        type RawPosition = Omit<Position, 'status'> & {
+          status?: string
+          // Indexer may emit numbers OR strings for these fields; allow both.
+          total_payout?: string | number | null
+          realized_pnl?: string | number | null
+          total_cost?: string | number | null
+          minted_quantity?: string | number | null
+          redeemed_quantity?: string | number | null
+          open_quantity?: string | number | null
+          open_cost_basis?: string | number | null
+          mark_value?: string | number | null
+          unrealized_pnl?: string | number | null
+        }
+        const numToStr = (v: string | number | null | undefined): string | undefined => {
+          if (v === null || v === undefined) return undefined
+          return String(v)
+        }
         const posData = await safeJsonGet<RawPosition[]>(
           `${SERVER}/managers/${userManager.manager_id}/positions/summary`,
           'GET /positions/summary',
@@ -331,7 +376,21 @@ export function usePredict(): UsePredictReturn {
             } else {
               status = (p.status ?? 'active') as Position['status']
             }
-            return { ...p, status }
+            // Normalise the indexer's mixed (number | string | null) fields
+            // to the string shape our Position interface promises.
+            return {
+              ...p,
+              open_quantity: numToStr(p.open_quantity) ?? '0',
+              minted_quantity: numToStr(p.minted_quantity),
+              redeemed_quantity: numToStr(p.redeemed_quantity),
+              total_cost: numToStr(p.total_cost),
+              total_payout: numToStr(p.total_payout),
+              realized_pnl: numToStr(p.realized_pnl),
+              unrealized_pnl: numToStr(p.unrealized_pnl) ?? '0',
+              open_cost_basis: numToStr(p.open_cost_basis),
+              mark_value: numToStr(p.mark_value),
+              status,
+            }
           })
           setPositions(normalized)
         } else {

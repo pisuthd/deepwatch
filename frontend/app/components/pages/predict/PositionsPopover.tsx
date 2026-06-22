@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Loader2, X } from 'lucide-react';
 import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
 import { usePredict, type Position, type RangePosition } from '../../../hooks/usePredict';
+import { useDismissedPositions } from '../../../hooks/useDismissedPositions';
 import { useCurrentMarket } from './CurrentMarketContext';
 import { useToast } from '../../../context/ToastContext';
 import { getCoinIcon } from '../../../lib/coinIcons';
@@ -76,12 +77,56 @@ function isRedeemAllEligible(
   }
 }
 
+/**
+ * Per-row predicate: can the user redeem anything on this position?
+ * Looser than `isRedeemAllEligible` — we deliberately keep the
+ * active-market path enabled because `predict::redeem` (the
+ * non-permissionless variant) is the user's early-exit mechanism.
+ * We only grey out when there is genuinely nothing left to claim
+ * (`open_quantity === 0`), since submitting a `qty=0` moveCall
+ * aborts with `MoveAbort code 3`.
+ */
+function hasRedeemableQty(p: { open_quantity?: string }): boolean {
+  if (!p.open_quantity) return false;
+  try {
+    return BigInt(p.open_quantity) > BigInt(0);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A position is "fully settled" when the oracle has run and there is
+ * nothing left to claim on-chain (`open_quantity === 0` on a non-active
+ * status). These rows still appear in the indexer's response so the user
+ * can see their historical P&L, but the per-row REDEEM button is a
+ * no-op against them — the funds are already in the manager balance,
+ * available via `predict_manager::withdraw` in the Withdraw tab.
+ */
+function isFullySettled(p: {
+  status?: Position['status'];
+  open_quantity?: string;
+}): boolean {
+  if (!p.status || p.status === 'active' || p.status === 'awaiting_settlement') {
+    return false;
+  }
+  if (!p.open_quantity) return true;
+  try {
+    return BigInt(p.open_quantity) === BigInt(0);
+  } catch {
+    return false;
+  }
+}
+
 export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
   const account = useCurrentAccount();
   const dAppKit = useDAppKit();
   const { positions, ranges, redeem, redeemRange, redeemAll } = usePredict();
   const { oracleId: currentOracleId, asset: currentAsset } = useCurrentMarket();
   const { notify } = useToast();
+  // Track which fully-settled rows the user has hidden. Persisted to
+  // localStorage so the cleanup survives refresh.
+  const { dismissed, dismiss, restoreAll, count: dismissedCount } = useDismissedPositions();
 
   const [tab, setTab] = useState<Tab>('binary');
   const [marketFilter, setMarketFilter] = useState<string>(
@@ -93,6 +138,9 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
   // Redeem All state — single button per tab, one PTB, one signature.
   const [submittingAll, setSubmittingAll] = useState<boolean>(false);
   const [allError, setAllError] = useState<string | null>(null);
+  // When false, dismissed rows are hidden. Toggle to recover them
+  // (e.g. to audit an old win) without losing the dismiss list.
+  const [showDismissed, setShowDismissed] = useState<boolean>(false);
 
   const sorted = useMemo(() => {
     return [...positions].sort((a, b) => {
@@ -106,9 +154,13 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
     return sorted.filter((p) => {
       if (marketFilter !== 'all' && p.oracle_id !== marketFilter) return false;
       if (statusFilter !== 'all' && (p.status ?? 'active') !== statusFilter) return false;
+      // Hide fully-settled rows the user has dismissed, unless
+      // `showDismissed` is on (lets them re-audit a win later).
+      const rowKey = `${p.oracle_id}|${p.strike}|${p.is_up}`;
+      if (!showDismissed && dismissed.has(rowKey)) return false;
       return true;
     });
-  }, [sorted, marketFilter, statusFilter]);
+  }, [sorted, marketFilter, statusFilter, dismissed, showDismissed]);
 
   // Range positions honour the same market filter but ignore the binary
   // status filter — the indexer has its own range status vocabulary.
@@ -287,6 +339,38 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
             </select>
           )}
 
+          {/* Dismissed toggle + restore-all — only renders if there are
+              any dismissed keys for the active tab (binary only for
+              now; range dismissals could be added later). */}
+          {tab === 'binary' && dismissedCount > 0 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowDismissed((v) => !v)}
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors hover:bg-white/10"
+                style={{ color: textSecondary }}
+                title={
+                  showDismissed
+                    ? 'Hide settled rows you previously dismissed'
+                    : 'Show settled rows you previously dismissed'
+                }
+              >
+                {showDismissed ? 'hide dismissed' : `+${dismissedCount} dismissed`}
+              </button>
+              {showDismissed && (
+                <button
+                  type="button"
+                  onClick={restoreAll}
+                  className="text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors hover:bg-white/10"
+                  style={{ color: textSecondary }}
+                  title="Restore every dismissed row (the × button on each row lets you re-dismiss individually)"
+                >
+                  restore all
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Redeem All — one button, scoped to the active tab and the
               active market filter. Disabled when count is 0. */}
           <button
@@ -346,7 +430,7 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
                 <th className="px-3 py-2 font-medium text-right">Qty</th>
                 <th className="px-3 py-2 font-medium text-right">Entry</th>
                 <th className="px-3 py-2 font-medium text-right">Mark</th>
-                <th className="px-3 py-2 font-medium text-right">uPnL</th>
+                <th className="px-3 py-2 font-medium text-right">PnL</th>
                 <th className="px-3 py-2 font-medium text-right">Status</th>
                 <th className="px-3 py-2 font-medium text-right"></th>
               </tr>
@@ -355,11 +439,16 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
               {filtered.map((p) => {
                 const key = `${p.oracle_id}|${p.strike}|${p.is_up}`;
                 const status = p.status ?? 'active';
+                const isDismissed = dismissed.has(key);
+                const settled = isFullySettled(p);
                 const strikeUsd = Number(p.strike) / PRICE_SCALE_NUM;
                 const qty = Number(p.open_quantity) / DUSDC_SCALE_NUM;
                 const entry = Number(p.average_entry_price) / PRICE_SCALE_NUM;
                 const mark = p.mark_price !== null ? Number(p.mark_price) / PRICE_SCALE_NUM : null;
-                const upnl = Number(p.unrealized_pnl) / DUSDC_SCALE_NUM;
+                const upnl = Number(p.unrealized_pnl ?? 0) / DUSDC_SCALE_NUM;
+                const realized = Number(p.realized_pnl ?? 0) / DUSDC_SCALE_NUM;
+                // Total P&L = realised (already-closed leg) + unrealised (open leg).
+                const totalPnl = realized + upnl;
                 const asset = p.underlying_asset || 'BTC';
                 const isSubmitting = submittingId === key;
                 const err = rowError[key];
@@ -367,6 +456,7 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
                 return (
                   <tr
                     key={key}
+                    style={isDismissed ? { opacity: 0.55 } : undefined}
                     className="border-t border-white/5 hover:bg-white/[0.02]"
                   >
                     <td className="px-3 py-2.5">
@@ -409,38 +499,103 @@ export default function PositionsPopover({ onClose }: PositionsPopoverProps) {
                     <td className="px-3 py-2.5 text-right font-mono" style={{ color: textSecondary }}>
                       {mark !== null ? `$${mark.toFixed(4)}` : '—'}
                     </td>
-                    <td
-                      className="px-3 py-2.5 text-right font-mono"
-                      style={{ color: upnl >= 0 ? green : red }}
-                    >
-                      {upnl >= 0 ? '+' : ''}
-                      {fmtUsd(upnl)}
+                    <td className="px-3 py-2.5 text-right font-mono">
+                      {/* Total P&L = realised (closed leg) + unrealised (open leg). */}
+                      {/* For active positions this collapses to just uPnL. */}
+                      {/* For fully-settled positions this is the final realised amount. */}
+                      <div
+                        className="font-semibold leading-tight"
+                        style={{ color: totalPnl >= 0 ? green : red }}
+                        title={`Realised ${realized >= 0 ? '+' : ''}${fmtUsd(realized)} · Unrealised ${upnl >= 0 ? '+' : ''}${fmtUsd(upnl)}`}
+                      >
+                        {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
+                      </div>
+                      {Math.abs(realized) >= 0.005 && (
+                        <div
+                          className="text-[9px] font-mono leading-tight mt-0.5"
+                          style={{ color: realized >= 0 ? green : red, opacity: 0.75 }}
+                          title="Closed-leg P&L (already locked in by prior redemptions)"
+                        >
+                          closed {realized >= 0 ? '+' : ''}{fmtUsd(realized)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      <span
-                        className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
-                        style={{
-                          background: `${STATUS_COLOR[status]}1A`,
-                          color: STATUS_COLOR[status],
-                        }}
-                      >
-                        {STATUS_LABEL[status]}
-                      </span>
+                      {isDismissed ? (
+                        <span
+                          className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                          style={{
+                            background: 'rgba(255,255,255,0.06)',
+                            color: textSecondary,
+                          }}
+                          title="You've hidden this row. Click the ↺ button to restore."
+                        >
+                          Claimed · hidden
+                        </span>
+                      ) : (
+                        <span
+                          className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                          style={{
+                            background: `${STATUS_COLOR[status]}1A`,
+                            color: STATUS_COLOR[status],
+                          }}
+                          title={
+                            settled
+                              ? 'Position fully settled. The REDEEM button is a no-op — funds are already in your Predict account.'
+                              : undefined
+                          }
+                        >
+                          {settled
+                            ? `${STATUS_LABEL[status]} · settled`
+                            : STATUS_LABEL[status]}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex flex-col items-end gap-1">
-                        <button
-                          onClick={() => handleRedeem(p)}
-                          disabled={isSubmitting || !account || !dAppKit?.signAndExecuteTransaction}
-                          className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-                          style={{
-                            background: green,
-                            color: '#000',
-                          }}
-                        >
-                          {isSubmitting && <Loader2 size={10} className="animate-spin" />}
-                          {isSubmitting ? 'Redeeming…' : 'REDEEM'}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {/* Settled rows get a × dismiss action next to the
+                              (no-op) REDEEM button — keeps the popover from
+                              piling up historical rows. */}
+                          {settled && !isDismissed && (
+                            <button
+                              type="button"
+                              onClick={() => dismiss(key)}
+                              className="text-[10px] font-mono px-1.5 py-1 rounded transition-colors hover:bg-white/10"
+                              style={{ color: textSecondary }}
+                              title="Hide this settled row (you can restore it from the +N dismissed chip in the header)"
+                            >
+                              ×
+                            </button>
+                          )}
+                          {isDismissed && (
+                            <button
+                              type="button"
+                              onClick={() => {/* no per-row restore — use header chip */}}
+                              className="text-[10px] font-mono px-1.5 py-1 rounded transition-colors hover:bg-white/10"
+                              style={{ color: textSecondary, cursor: 'default' }}
+                              title="Use the '+N dismissed' chip in the header to restore"
+                            >
+                              ↺
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleRedeem(p)}
+                            disabled={
+                              isSubmitting ||
+                              !account ||
+                              !dAppKit?.signAndExecuteTransaction
+                            }
+                            className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                            style={{
+                              background: green,
+                              color: '#000',
+                            }}
+                          >
+                            {isSubmitting && <Loader2 size={10} className="animate-spin" />}
+                            {isSubmitting ? 'Redeeming…' : 'REDEEM'}
+                          </button>
+                        </div>
                         {err && (
                           <span className="text-[10px] max-w-[160px] truncate" style={{ color: red }} title={err}>
                             {err}

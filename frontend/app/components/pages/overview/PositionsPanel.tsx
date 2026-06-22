@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
 import { usePredict, type Position, type RangePosition } from '../../../hooks/usePredict';
+import { useDismissedPositions } from '../../../hooks/useDismissedPositions';
 import { getCoinIcon } from '../../../lib/coinIcons';
 import Countdown from '../../common/Countdown';
 import { useToast } from '../../../context/ToastContext';
@@ -79,6 +80,44 @@ function isRedeemAllEligible(
 }
 
 /**
+ * Per-row predicate: can the user redeem anything on this position?
+ * Looser than `isRedeemAllEligible` — we deliberately keep the
+ * active-market path enabled because `predict::redeem` /
+ * `predict::redeem_range` (the non-permissionless variants) are the
+ * user's early-exit mechanisms. We only grey out when there is
+ * genuinely nothing left to claim (`open_quantity === 0`), since
+ * submitting a `qty=0` moveCall aborts with `MoveAbort code 3`.
+ */
+function hasRedeemableQty(p: { open_quantity?: string }): boolean {
+  if (!p.open_quantity) return false;
+  try {
+    return BigInt(p.open_quantity) > BigInt(0);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A position is "fully settled" when the oracle has run and there is
+ * nothing left to claim on-chain. Mirrors PositionsPopover's predicate
+ * so the two panels agree on which rows are historical vs. actionable.
+ */
+function isFullySettled(p: {
+  status?: Position['status'];
+  open_quantity?: string;
+}): boolean {
+  if (!p.status || p.status === 'active' || p.status === 'awaiting_settlement') {
+    return false;
+  }
+  if (!p.open_quantity) return true;
+  try {
+    return BigInt(p.open_quantity) === BigInt(0);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Overview-page positions panel. Renders a glass card with a Binary | Range
  * tab toggle and the corresponding table, fed by `usePredict`. Compact
  * counterpart of `PositionsPopover` — designed to sit on the Overview page
@@ -90,6 +129,10 @@ export default function PositionsPanel() {
   const dAppKit = useDAppKit();
   const { positions, ranges, redeem, redeemRange, redeemAll } = usePredict();
   const { notify } = useToast();
+  // Shared dismiss state with PositionsPopover — both panels consult
+  // the same localStorage-backed set so dismissing in one hides it in
+  // the other.
+  const { dismissed, dismiss } = useDismissedPositions();
 
   const [tab, setTab] = useState<Tab>('binary');
   const [marketFilter, setMarketFilter] = useState<string>('all');
@@ -350,7 +393,7 @@ export default function PositionsPanel() {
                   <th className="px-3 py-2 font-medium">Side</th>
                   <th className="px-3 py-2 font-medium text-right">Strike</th>
                   <th className="px-3 py-2 font-medium text-right">Qty</th>
-                  <th className="px-3 py-2 font-medium text-right">uPnL</th>
+                  <th className="px-3 py-2 font-medium text-right">PnL</th>
                   <th className="px-3 py-2 font-medium text-right">Status</th>
                   <th className="px-3 py-2 font-medium text-right"></th>
                 </tr>
@@ -359,15 +402,23 @@ export default function PositionsPanel() {
                 {filteredBinary.map((p) => {
                   const key = `${p.oracle_id}|${p.strike}|${p.is_up}`;
                   const status: Status = p.status ?? 'active';
+                  const isDismissed = dismissed.has(key);
+                  const settled = isFullySettled(p);
                   const strikeUsd = Number(p.strike) / PRICE_SCALE_NUM;
                   const qty = Number(p.open_quantity) / DUSDC_SCALE_NUM;
-                  const upnl = Number(p.unrealized_pnl) / DUSDC_SCALE_NUM;
+                  const upnl = Number(p.unrealized_pnl ?? 0) / DUSDC_SCALE_NUM;
+                  const realized = Number(p.realized_pnl ?? 0) / DUSDC_SCALE_NUM;
+                  const totalPnl = realized + upnl;
                   const asset = p.underlying_asset || 'BTC';
                   const isSubmitting = submittingId === key;
                   const err = rowError[key];
 
                   return (
-                    <tr key={key} className="border-t border-white/5 hover:bg-white/[0.02]">
+                    <tr
+                      key={key}
+                      style={isDismissed ? { opacity: 0.55 } : undefined}
+                      className="border-t border-white/5 hover:bg-white/[0.02]"
+                    >
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <Image
@@ -411,41 +462,88 @@ export default function PositionsPanel() {
                       >
                         {fmtQty(qty)}
                       </td>
-                      <td
-                        className="px-3 py-2.5 text-right font-mono"
-                        style={{ color: upnl >= 0 ? green : red }}
-                      >
-                        {upnl >= 0 ? '+' : ''}
-                        {fmtUsd(upnl)}
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {/* Total P&L = realised (closed leg) + unrealised (open leg). */}
+                        <div
+                          className="font-semibold leading-tight"
+                          style={{ color: totalPnl >= 0 ? green : red }}
+                          title={`Realised ${realized >= 0 ? '+' : ''}${fmtUsd(realized)} · Unrealised ${upnl >= 0 ? '+' : ''}${fmtUsd(upnl)}`}
+                        >
+                          {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
+                        </div>
+                        {Math.abs(realized) >= 0.005 && (
+                          <div
+                            className="text-[9px] font-mono leading-tight mt-0.5"
+                            style={{ color: realized >= 0 ? green : red, opacity: 0.75 }}
+                            title="Closed-leg P&L (already locked in by prior redemptions)"
+                          >
+                            closed {realized >= 0 ? '+' : ''}{fmtUsd(realized)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <span
-                          className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
-                          style={{
-                            background: `${STATUS_COLOR[status]}1A`,
-                            color: STATUS_COLOR[status],
-                          }}
-                        >
-                          {STATUS_LABEL[status]}
-                        </span>
+                        {isDismissed ? (
+                          <span
+                            className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                            style={{
+                              background: 'rgba(255,255,255,0.06)',
+                              color: textSecondary,
+                            }}
+                            title="You've hidden this row from the popover. Use the +N dismissed chip to restore."
+                          >
+                            Claimed · hidden
+                          </span>
+                        ) : (
+                          <span
+                            className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                            style={{
+                              background: `${STATUS_COLOR[status]}1A`,
+                              color: STATUS_COLOR[status],
+                            }}
+                            title={
+                              settled
+                                ? 'Position fully settled — REDEEM is a no-op (funds are already in your Predict account).'
+                                : undefined
+                            }
+                          >
+                            {settled
+                              ? `${STATUS_LABEL[status]} · settled`
+                              : STATUS_LABEL[status]}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex flex-col items-end gap-1">
-                          <button
-                            onClick={() => handleRedeem(p)}
-                            disabled={
-                              isSubmitting || !account || !dAppKit?.signAndExecuteTransaction
-                            }
-                            className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{
-                              background: 'rgba(62, 196, 192, 0.15)',
-                              border: '1px solid rgba(62, 196, 192, 0.4)',
-                              color: cyan,
-                            }}
-                          >
-                            {isSubmitting && <Loader2 size={10} className="animate-spin" />}
-                            {isSubmitting ? 'Redeeming…' : 'REDEEM'}
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {settled && !isDismissed && (
+                              <button
+                                type="button"
+                                onClick={() => dismiss(key)}
+                                className="text-[10px] font-mono px-1.5 py-1 rounded transition-colors hover:bg-white/10"
+                                style={{ color: textSecondary }}
+                                title="Hide this settled row"
+                              >
+                                ×
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleRedeem(p)}
+                              disabled={
+                                isSubmitting ||
+                                !account ||
+                                !dAppKit?.signAndExecuteTransaction
+                              }
+                              className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                              style={{
+                                background: 'rgba(62, 196, 192, 0.15)',
+                                border: '1px solid rgba(62, 196, 192, 0.4)',
+                                color: cyan,
+                              }}
+                            >
+                              {isSubmitting && <Loader2 size={10} className="animate-spin" />}
+                              {isSubmitting ? 'Redeeming…' : 'REDEEM'}
+                            </button>
+                          </div>
                           {err && (
                             <span
                               className="text-[10px] max-w-[160px] truncate"
@@ -561,7 +659,9 @@ export default function PositionsPanel() {
                         <button
                           onClick={() => handleRedeemRange(r)}
                           disabled={
-                            isSubmitting || !account || !dAppKit?.signAndExecuteTransaction
+                            isSubmitting ||
+                            !account ||
+                            !dAppKit?.signAndExecuteTransaction
                           }
                           className="text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{

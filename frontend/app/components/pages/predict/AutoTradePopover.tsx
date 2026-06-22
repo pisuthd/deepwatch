@@ -345,8 +345,7 @@ function LockedCta() {
         style={{ color: textSecondary }}
       >
         Auto Trade reads the AI batch insights — encrypted behind the
-        DeepWatch stake gate. Stake PLP to unlock it (first 3 markets
-        per batch stay free).
+        DeepWatch stake gate. Stake PLP to unlock it.
       </p>
       <Link
         href="/app/stake"
